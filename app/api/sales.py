@@ -40,7 +40,7 @@ def parse_csv(content: str) -> Tuple[List[dict], List[str]]:
 					"revenue": revenue,
 				}
 			)
-		} except Exception as exc:
+		except Exception as exc:
 			errors.append(f"Line {idx}: {exc}")
 	return rows, errors
 
@@ -79,7 +79,7 @@ async def upload_sales(file: UploadFile = File(...), db: Session = Depends(get_d
 			)
 			db.add(record)
 			inserted += 1
-		} except Exception as exc:
+		except Exception as exc:
 			row_errors.append(f"Line {idx}: {exc}")
 			db.rollback()
 
