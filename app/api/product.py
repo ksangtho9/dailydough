@@ -1,41 +1,28 @@
-# app/api/product.py
-
-from typing import List
-
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-from ..db import get_db
-from ..user_models import Product, Bakery, User
-from ..user_schemas import ProductCreate, ProductOut
-from .auth import get_current_user
+from app.database.database import get_db
+from app.models import Product, Bakery
+from app.user_schemas import ProductCreate, ProductOut
 
-router = APIRouter(tags=["products"])
-
-
-def _get_owned_bakery(db: Session, bakery_id: int, user_id: int) -> Bakery:
-    bakery = db.query(Bakery).filter(Bakery.id == bakery_id).first()
-    if bakery is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Bakery not found",
-        )
-    if bakery.owner_id != user_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not own this bakery",
-        )
-    return bakery
+router = APIRouter(
+    prefix="/api/products",
+    tags=["products"],
+)
 
 
 @router.post("/", response_model=ProductOut, status_code=status.HTTP_201_CREATED)
 def create_product(
     product_in: ProductCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ):
-    # Confirm bakery belongs to current user
-    _get_owned_bakery(db, product_in.bakery_id, current_user.id)
+    # Make sure the bakery exists
+    bakery = db.query(Bakery).filter(Bakery.id == product_in.bakery_id).first()
+    if not bakery:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bakery not found",
+        )
 
     product = Product(
         bakery_id=product_in.bakery_id,
@@ -49,19 +36,12 @@ def create_product(
     return product
 
 
-@router.get("/by-bakery/{bakery_id}", response_model=List[ProductOut])
-def list_products_for_bakery(
-    bakery_id: int,
+@router.get("/", response_model=list[ProductOut])
+def list_products(
+    bakery_id: int | None = None,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ):
-    # Confirm bakery belongs to current user
-    _get_owned_bakery(db, bakery_id, current_user.id)
-
-    products = (
-        db.query(Product)
-        .filter(Product.bakery_id == bakery_id, Product.is_active == 1)
-        .order_by(Product.name.asc())
-        .all()
-    )
-    return products
+    query = db.query(Product)
+    if bakery_id is not None:
+        query = query.filter(Product.bakery_id == bakery_id)
+    return query.all()

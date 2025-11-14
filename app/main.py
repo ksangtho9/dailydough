@@ -3,7 +3,6 @@ from fastapi import FastAPI
 from .api.router import api_router
 from .core.config import settings
 from .db import Base, engine
-from . import user_models
 
 app = FastAPI(title=settings.app_name)
 

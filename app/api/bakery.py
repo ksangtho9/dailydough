@@ -1,44 +1,41 @@
-# app/api/bakery.py
-
-from typing import List
-
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 
-from ..db import get_db
-from ..user_models import Bakery, User
-from ..user_schemas import BakeryCreate, BakeryOut
-from .auth import get_current_user
+from app.database.database import get_db
+from app.models import Bakery
+from app.user_schemas import BakeryCreate, BakeryOut
 
-router = APIRouter(tags=["bakeries"])
+router = APIRouter(
+    prefix="/api/bakeries",
+    tags=["bakeries"],
+)
 
 
 @router.post("/", response_model=BakeryOut, status_code=status.HTTP_201_CREATED)
 def create_bakery(
     bakery_in: BakeryCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
 ):
     bakery = Bakery(
         name=bakery_in.name,
         location=bakery_in.location,
-        owner_id=current_user.id,
     )
     db.add(bakery)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        db.rollback()
+        # name is UNIQUE, so this happens if the name already exists
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="A bakery with this name already exists",
+        )
     db.refresh(bakery)
     return bakery
 
 
-@router.get("/", response_model=List[BakeryOut])
-def list_my_bakeries(
-    db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
-):
-    bakeries = (
-        db.query(Bakery)
-        .filter(Bakery.owner_id == current_user.id)
-        .order_by(Bakery.created_at.desc())
-        .all()
-    )
-    return bakeries
+
+@router.get("/", response_model=list[BakeryOut])
+def list_bakeries(db: Session = Depends(get_db)):
+    return db.query(Bakery).all()

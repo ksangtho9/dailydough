@@ -7,94 +7,175 @@ from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.database.database import get_db
-from app.models.bakery import DailySales, Product
+from app.models import SalesRecord, Product, Bakery
+from app.user_schemas import SalesRecordCreate, SalesRecordOut
+
+router = APIRouter(
+    prefix="/sales",
+    tags=["sales"],
+)
 
 
-router = APIRouter()
+# ---------- JSON sales endpoints ----------
 
+@router.post("/", response_model=SalesRecordOut, status_code=status.HTTP_201_CREATED)
+def create_sales_record(
+    sales_in: SalesRecordCreate,
+    db: Session = Depends(get_db),
+):
+    # Ensure bakery exists
+    bakery = db.query(Bakery).filter(Bakery.id == sales_in.bakery_id).first()
+    if not bakery:
+        raise HTTPException(status_code=404, detail="Bakery not found")
+
+    # Ensure product exists and belongs to that bakery
+    product = db.query(Product).filter(Product.id == sales_in.product_id).first()
+    if not product:
+        raise HTTPException(status_code=404, detail="Product not found")
+    if product.bakery_id != sales_in.bakery_id:
+        raise HTTPException(
+            status_code=400,
+            detail="Product does not belong to the given bakery",
+        )
+
+    record = SalesRecord(
+        bakery_id=sales_in.bakery_id,
+        product_id=sales_in.product_id,
+        date=sales_in.date,
+        quantity_sold=sales_in.quantity_sold,
+    )
+    db.add(record)
+    db.commit()
+    db.refresh(record)
+    return record
+
+
+@router.get("/", response_model=List[SalesRecordOut])
+def list_sales(
+    bakery_id: int | None = None,
+    product_id: int | None = None,
+    db: Session = Depends(get_db),
+):
+    query = db.query(SalesRecord)
+    if bakery_id is not None:
+        query = query.filter(SalesRecord.bakery_id == bakery_id)
+    if product_id is not None:
+        query = query.filter(SalesRecord.product_id == product_id)
+    return query.order_by(SalesRecord.date).all()
+
+
+# ---------- CSV upload helpers + endpoint ----------
 
 def parse_csv(content: str) -> Tuple[List[dict], List[str]]:
-	reader = csv.DictReader(StringIO(content))
-	required_fields = {"product_id", "sale_date", "units_sold", "revenue"}
-	rows = []
-	errors = []
+    """
+    Parse CSV with columns:
+      product_id,sale_date,units_sold,revenue
 
-	# Validate headers
-	missing = required_fields - set((reader.fieldnames or []))
-	if missing:
-		errors.append(f"Missing required columns: {', '.join(sorted(missing))}")
-		return [], errors
+    We map:
+      sale_date   -> date
+      units_sold  -> quantity_sold
+      revenue     -> ignored in DB for now
+    """
+    reader = csv.DictReader(StringIO(content))
+    required_fields = {"product_id", "sale_date", "units_sold", "revenue"}
+    rows: List[dict] = []
+    errors: List[str] = []
 
-	for idx, raw in enumerate(reader, start=2):  # start=2 accounts for header being line 1
-		try:
-			product_id = int(raw["product_id"])
-			# Expect ISO date (YYYY-MM-DD)
-			sale_date = datetime.strptime(raw["sale_date"], "%Y-%m-%d").date()
-			units_sold = int(raw["units_sold"])
-			revenue = float(raw["revenue"])
-			rows.append(
-				{
-					"product_id": product_id,
-					"sale_date": sale_date,
-					"units_sold": units_sold,
-					"revenue": revenue,
-				}
-			)
-		except Exception as exc:
-			errors.append(f"Line {idx}: {exc}")
-	return rows, errors
+    # Validate headers
+    missing = required_fields - set((reader.fieldnames or []))
+    if missing:
+        errors.append(f"Missing required columns: {', '.join(sorted(missing))}")
+        return [], errors
+
+    for idx, raw in enumerate(reader, start=2):  # start=2 accounts for header line
+        try:
+            product_id = int(raw["product_id"])
+            sale_date = datetime.strptime(raw["sale_date"], "%Y-%m-%d").date()
+            quantity_sold = float(raw["units_sold"])
+            # revenue is parsed but not stored in SalesRecord
+            _ = float(raw["revenue"])
+
+            rows.append(
+                {
+                    "product_id": product_id,
+                    "date": sale_date,
+                    "quantity_sold": quantity_sold,
+                }
+            )
+        except Exception as exc:
+            errors.append(f"Line {idx}: {exc}")
+    return rows, errors
 
 
-@router.post("/upload-sales", status_code=status.HTTP_201_CREATED)
-async def upload_sales(file: UploadFile = File(...), db: Session = Depends(get_db)):
-	if not file.filename.endswith(".csv"):
-		raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only .csv files are accepted")
+@router.post("/upload-csv", status_code=status.HTTP_201_CREATED)
+async def upload_sales(
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+):
+    if not file.filename.endswith(".csv"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Only .csv files are accepted",
+        )
 
-	content_bytes = await file.read()
-	try:
-		content = content_bytes.decode("utf-8")
-	except UnicodeDecodeError:
-		raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="CSV must be UTF-8 encoded")
+    content_bytes = await file.read()
+    try:
+        content = content_bytes.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="CSV must be UTF-8 encoded",
+        )
 
-	rows, parse_errors = parse_csv(content)
-	if not rows and parse_errors:
-		raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="; ".join(parse_errors))
+    rows, parse_errors = parse_csv(content)
+    if not rows and parse_errors:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="; ".join(parse_errors),
+        )
 
-	inserted = 0
-	skipped_missing_product = 0
-	row_errors: List[str] = []
+    inserted = 0
+    skipped_missing_product = 0
+    row_errors: List[str] = []
 
-	for idx, row in enumerate(rows, start=2):
-		product = db.query(Product).filter(Product.id == row["product_id"]).first()
-		if not product:
-			skipped_missing_product += 1
-			row_errors.append(f"Line {idx}: product_id {row['product_id']} not found")
-			continue
-		try:
-			record = DailySales(
-				product_id=row["product_id"],
-				sale_date=row["sale_date"],
-				units_sold=row["units_sold"],
-				revenue=row["revenue"],
-			)
-			db.add(record)
-			inserted += 1
-		except Exception as exc:
-			row_errors.append(f"Line {idx}: {exc}")
-			db.rollback()
+    for idx, row in enumerate(rows, start=2):
+        product = db.query(Product).filter(Product.id == row["product_id"]).first()
+        if not product:
+            skipped_missing_product += 1
+            row_errors.append(
+                f"Line {idx}: product_id {row['product_id']} not found"
+            )
+            continue
 
-	try:
-		db.commit()
-	except Exception as exc:
-		db.rollback()
-		raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(exc))
+        try:
+            record = SalesRecord(
+                bakery_id=product.bakery_id,
+                product_id=row["product_id"],
+                date=row["date"],
+                quantity_sold=row["quantity_sold"],
+            )
+            db.add(record)
+            inserted += 1
+        except Exception as exc:
+            row_errors.append(f"Line {idx}: {exc}")
+            db.rollback()
 
-	return {
-		"filename": file.filename,
-		"inserted": inserted,
-		"skipped_missing_product": skipped_missing_product,
-		"parse_errors": parse_errors,
-		"row_errors": row_errors,
-	}
+    try:
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(exc),
+        )
+
+    return {
+        "filename": file.filename,
+        "inserted": inserted,
+        "skipped_missing_product": skipped_missing_product,
+        "parse_errors": parse_errors,
+        "row_errors": row_errors,
+    }
+
 
 

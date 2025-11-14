@@ -7,9 +7,10 @@ from jose import JWTError, jwt
 from passlib.context import CryptContext
 from sqlalchemy.orm import Session
 
-from ..db import get_db
-from ..user_models import User
-from ..user_schemas import UserCreate, UserOut, Token
+from app.database.database import get_db
+from app.models import User
+from app.user_schemas import UserCreate, UserOut, Token
+
 
 # ---- CONFIG ----
 SECRET_KEY = "CHANGE_ME_TO_A_LONG_RANDOM_STRING"  # TODO: move to env later
@@ -22,7 +23,11 @@ pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/api/auth/token")
 
 # 🔥 THIS is the thing router.py is trying to import
-router = APIRouter(tags=["auth"])
+router = APIRouter(
+    prefix="/auth",
+    tags=["auth"],
+)
+
 
 
 # ---------- Utility functions ----------
@@ -84,8 +89,9 @@ async def get_current_user(
 
 # ---------- Routes ----------
 
-@router.post("/signup", response_model=UserOut)
+@router.post("/signup", response_model=UserOut, status_code=status.HTTP_201_CREATED)
 def signup(user_in: UserCreate, db: Session = Depends(get_db)):
+    # Check if email already exists
     existing = db.query(User).filter(User.email == user_in.email).first()
     if existing:
         raise HTTPException(
@@ -93,12 +99,15 @@ def signup(user_in: UserCreate, db: Session = Depends(get_db)):
             detail="Email already registered",
         )
 
+    # Hash password
     hashed_pw = get_password_hash(user_in.password)
+
+    # Create user WITHOUT full_name
     user = User(
         email=user_in.email,
-        full_name=user_in.full_name,
         hashed_password=hashed_pw,
     )
+
     db.add(user)
     db.commit()
     db.refresh(user)

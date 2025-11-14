@@ -1,6 +1,6 @@
 from .user import User
-from .bakery import Bakery, Product, DailySales
+from .bakery import Bakery
+from .product import Product
+from .sales_record import SalesRecord
 
-__all__ = ["User", "Bakery", "Product", "DailySales"]
-
-
+__all__ = ["User", "Bakery", "Product", "SalesRecord"]
