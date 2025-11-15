@@ -17,4 +17,3 @@ async def read_root() -> dict:
 
 # Mount all API routes under /api
 app.include_router(api_router, prefix="/api")
-

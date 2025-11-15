@@ -18,3 +18,21 @@ class SalesRecord(SalesRecordBase):
 
     class Config:
         from_attributes = True
+
+from datetime import date
+from typing import List, Optional
+from pydantic import BaseModel
+
+
+class ProductSalesPoint(BaseModel):
+    date: date
+    quantity: float
+
+    class Config:
+        orm_mode = True
+
+
+class ProductSalesSeries(BaseModel):
+    product_id: int
+    product_name: Optional[str] = None
+    sales: List[ProductSalesPoint]

@@ -9,9 +9,12 @@ from sqlalchemy.orm import Session
 from app.database.database import get_db
 from app.models import SalesRecord, Product, Bakery
 from app.user_schemas import SalesRecordCreate, SalesRecordOut
+from app.api.auth import get_current_user          # ✅ import from auth.py
+from app.schemas import sales_record               # ✅ our sales-series schemas
+
 
 router = APIRouter(
-    prefix="/sales",
+    prefix="/sales",        # combined with /api prefix from router.py → /api/sales
     tags=["sales"],
 )
 
@@ -177,5 +180,53 @@ async def upload_sales(
         "row_errors": row_errors,
     }
 
+
+# ---------- NEW: product-level timeseries endpoint ----------
+
+@router.get("/product/{product_id}", response_model=sales_record.ProductSalesSeries)
+def get_product_sales_for_product(
+    product_id: int,
+    db: Session = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    """
+    Return time-series sales data for a single product.
+    Backed by SalesRecord rows.
+    """
+
+    # Ensure product exists
+    product = (
+        db.query(Product)
+        .filter(Product.id == product_id)
+        .first()
+    )
+
+    if product is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product not found.",
+        )
+
+    # Fetch sales records for that product
+    sales_rows = (
+        db.query(SalesRecord)
+        .filter(SalesRecord.product_id == product_id)
+        .order_by(SalesRecord.date.asc())
+        .all()
+    )
+
+    sales_points = [
+        sales_record.ProductSalesPoint(
+            date=row.date,
+            quantity=row.quantity_sold,    # 👈 map quantity_sold → quantity
+        )
+        for row in sales_rows
+    ]
+
+    return sales_record.ProductSalesSeries(
+        product_id=product.id,
+        product_name=product.name,
+        sales=sales_points,
+    )
 
 
