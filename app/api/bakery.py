@@ -7,7 +7,7 @@ from app.models import Bakery
 from app.user_schemas import BakeryCreate, BakeryOut
 
 router = APIRouter(
-    prefix="/api/bakeries",
+    prefix="/bakeries",
     tags=["bakeries"],
 )
 

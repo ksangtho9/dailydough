@@ -7,3 +7,15 @@
 2025-11-16 08:00:44 - INFO - bakezy.forecast - Starting forecast: product_id=3 horizon_days=14
 2025-11-16 08:00:44 - WARNING - bakezy.forecast - Forecast failed: no sales data for product_id=3
 2025-11-16 08:00:44 - WARNING - bakezy.forecast.api - Forecast API: no sales data (product_id=3)
+2025-11-16 09:41:58 - INFO - bakezy.forecast - Starting forecast: product_id=1 horizon_days=14
+2025-11-16 09:41:58 - INFO - bakezy.forecast - Loaded 3 sales records for product_id=1 (from 2025-11-01 to 2025-11-03)
+2025-11-16 09:41:58 - INFO - bakezy.forecast - Starting forecast: product_id=1 horizon_days=14
+2025-11-16 09:41:58 - INFO - bakezy.forecast - Loaded 3 sales records for product_id=1 (from 2025-11-01 to 2025-11-03)
+2025-11-16 09:41:58 - INFO - bakezy.forecast - Forecast complete: product_id=1 horizon_days=14 points=14
+2025-11-16 09:41:58 - INFO - bakezy.forecast - Forecast complete: product_id=1 horizon_days=14 points=14
+2025-11-16 09:42:06 - INFO - bakezy.forecast - Starting forecast: product_id=1 horizon_days=14
+2025-11-16 09:42:06 - INFO - bakezy.forecast - Loaded 3 sales records for product_id=1 (from 2025-11-01 to 2025-11-03)
+2025-11-16 09:42:06 - INFO - bakezy.forecast - Forecast complete: product_id=1 horizon_days=14 points=14
+2025-11-16 09:42:12 - INFO - bakezy.forecast - Starting forecast: product_id=1 horizon_days=14
+2025-11-16 09:42:12 - INFO - bakezy.forecast - Loaded 3 sales records for product_id=1 (from 2025-11-01 to 2025-11-03)
+2025-11-16 09:42:12 - INFO - bakezy.forecast - Forecast complete: product_id=1 horizon_days=14 points=14

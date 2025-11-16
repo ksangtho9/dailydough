@@ -6,7 +6,7 @@ from app.models import Product, Bakery
 from app.user_schemas import ProductCreate, ProductOut
 
 router = APIRouter(
-    prefix="/api/products",
+    prefix="/products",
     tags=["products"],
 )
 
