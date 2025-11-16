@@ -1,3 +1,4 @@
+import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
@@ -6,6 +7,7 @@ from app.api.auth import get_current_user
 from app.ml.forecast_service import ForecastService
 from app.schemas import sales_record
 
+logger = logging.getLogger("bakezy.forecast.api")
 
 router = APIRouter(
     prefix="/forecast",
@@ -47,6 +49,7 @@ def forecast_product_sales(
             horizon_days=horizon_days,
         )
     except ImportError as e:
+        logger.exception("Prophet import error during forecast: product_id=%d", product_id)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Prophet is not installed. Install it with `pip install prophet`.",
@@ -54,16 +57,25 @@ def forecast_product_sales(
     except ValueError as e:
         msg = str(e)
         if "Product not found" in msg:
+            logger.warning(
+                "Forecast API: product not found (product_id=%d)", product_id
+            )
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Product not found.",
             ) from e
         if "No sales data" in msg:
+            logger.warning(
+                "Forecast API: no sales data (product_id=%d)", product_id
+            )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="No sales data available for this product.",
             ) from e
-        # Unknown ValueError
+
+        logger.exception(
+            "Forecast API: unexpected ValueError for product_id=%d", product_id
+        )
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=msg,

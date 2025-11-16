@@ -1,5 +1,10 @@
 from __future__ import annotations
 
+import logging
+import os
+from pathlib import Path
+
+
 from dataclasses import dataclass
 from typing import List
 
@@ -8,6 +13,25 @@ from sqlalchemy.orm import Session
 from app.models import SalesRecord, Product
 from .preprocessing import SalesPreprocessor, RawSalesRecord
 from .forecaster import ProductForecaster, ForecastResult
+
+# ---------- Logging setup for forecasting ----------
+
+LOG_DIR = Path("logs")
+LOG_DIR.mkdir(parents=True, exist_ok=True)  # ensure logs/ exists
+
+LOG_FILE = LOG_DIR / "forecast.log"
+
+logger = logging.getLogger("bakezy.forecast")
+
+if not logger.handlers:
+    logger.setLevel(logging.INFO)
+    file_handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
+    formatter = logging.Formatter(
+        "%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    file_handler.setFormatter(formatter)
+    logger.addHandler(file_handler)
 
 
 @dataclass
@@ -50,6 +74,7 @@ class ForecastService:
         """
         product = db.query(Product).filter(Product.id == product_id).first()
         if product is None:
+            logger.warning(f"Forecast failed: product_id={product_id} not found")
             raise ValueError("Product not found")
 
         sales_rows = (
@@ -60,6 +85,9 @@ class ForecastService:
         )
 
         if not sales_rows:
+            logger.warning(
+                f"Forecast failed: no sales data for product_id={product_id}"
+            )
             raise ValueError("No sales data for this product")
 
         raw_records: list[RawSalesRecord] = [
@@ -71,6 +99,14 @@ class ForecastService:
             for row in sales_rows
         ]
 
+        logger.info(
+            "Loaded %d sales records for product_id=%d (from %s to %s)",
+            len(raw_records),
+            product_id,
+            raw_records[0].date.isoformat(),
+            raw_records[-1].date.isoformat(),
+        )
+
         return product, raw_records
 
     def generate_prophet_forecast_for_product(
@@ -80,12 +116,14 @@ class ForecastService:
         horizon_days: int = 14,
     ) -> ProductForecast:
         """
-        Main entrypoint for Step 2.3 & 2.4.
-
-        Usage:
-            service = ForecastService()
-            forecast = service.generate_prophet_forecast_for_product(db, product_id=1)
+        Main entrypoint for forecasting.
         """
+        logger.info(
+            "Starting forecast: product_id=%d horizon_days=%d",
+            product_id,
+            horizon_days,
+        )
+
         # 1) Load raw sales from DB
         product, raw_records = self._load_sales_for_product(db, product_id)
 
@@ -109,11 +147,10 @@ class ForecastService:
 
         df_future = df.copy()
         if "ds" not in df_future.columns:
+            logger.error("Forecast failed: 'ds' column missing in Prophet output")
             raise RuntimeError("Prophet forecast missing 'ds' column")
 
-        # Expect columns: ds, yhat, yhat_lower, yhat_upper
         for _, row in df_future.iterrows():
-            # ds is a Timestamp/ datetime; convert to ISO date string
             ds_value = row["ds"]
             date_str = ds_value.date().isoformat()
 
@@ -122,12 +159,12 @@ class ForecastService:
             yhat_lower = float(row["yhat_lower"])
             yhat_upper = float(row["yhat_upper"])
 
-            # 🔒 Clamp to non-negative (no negative sales)
+            # Clamp non-negative
             yhat = max(0.0, yhat)
             yhat_lower = max(0.0, yhat_lower)
             yhat_upper = max(0.0, yhat_upper)
 
-            # 💅 Optional: round to 2 decimals for cleaner JSON
+            # Round nicely
             yhat = round(yhat, 2)
             yhat_lower = round(yhat_lower, 2)
             yhat_upper = round(yhat_upper, 2)
@@ -140,6 +177,13 @@ class ForecastService:
                     yhat_upper=yhat_upper,
                 )
             )
+
+        logger.info(
+            "Forecast complete: product_id=%d horizon_days=%d points=%d",
+            product_id,
+            horizon_days,
+            len(points),
+        )
 
         return ProductForecast(
             product_id=product.id,
