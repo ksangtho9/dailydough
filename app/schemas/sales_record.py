@@ -36,3 +36,19 @@ class ProductSalesSeries(BaseModel):
     product_id: int
     product_name: Optional[str] = None
     sales: List[ProductSalesPoint]
+
+class ForecastPointOut(BaseModel):
+    date: date          # forecast date
+    yhat: float         # point forecast
+    yhat_lower: float   # lower bound (P10-ish)
+    yhat_upper: float   # upper bound (P90-ish)
+
+    class Config:
+        from_attributes = True  # Pydantic v2 (replaces orm_mode)
+
+
+class ProductForecastOut(BaseModel):
+    product_id: int
+    product_name: str
+    horizon_days: int
+    points: List[ForecastPointOut]

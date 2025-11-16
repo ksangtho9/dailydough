@@ -80,7 +80,7 @@ class ForecastService:
         horizon_days: int = 14,
     ) -> ProductForecast:
         """
-        Main entrypoint for Step 2.3.
+        Main entrypoint for Step 2.3 & 2.4.
 
         Usage:
             service = ForecastService()
@@ -107,8 +107,6 @@ class ForecastService:
         # 4) Convert Prophet output → list of ForecastPoint
         points: list[ForecastPoint] = []
 
-        # Keep only future horizon rows (the ProductForecaster already does this,
-        # but we'll be explicit and ignore any training period rows just in case)
         df_future = df.copy()
         if "ds" not in df_future.columns:
             raise RuntimeError("Prophet forecast missing 'ds' column")
@@ -119,12 +117,27 @@ class ForecastService:
             ds_value = row["ds"]
             date_str = ds_value.date().isoformat()
 
+            # Raw Prophet outputs
+            yhat = float(row["yhat"])
+            yhat_lower = float(row["yhat_lower"])
+            yhat_upper = float(row["yhat_upper"])
+
+            # 🔒 Clamp to non-negative (no negative sales)
+            yhat = max(0.0, yhat)
+            yhat_lower = max(0.0, yhat_lower)
+            yhat_upper = max(0.0, yhat_upper)
+
+            # 💅 Optional: round to 2 decimals for cleaner JSON
+            yhat = round(yhat, 2)
+            yhat_lower = round(yhat_lower, 2)
+            yhat_upper = round(yhat_upper, 2)
+
             points.append(
                 ForecastPoint(
                     date=date_str,
-                    yhat=float(row["yhat"]),
-                    yhat_lower=float(row["yhat_lower"]),
-                    yhat_upper=float(row["yhat_upper"]),
+                    yhat=yhat,
+                    yhat_lower=yhat_lower,
+                    yhat_upper=yhat_upper,
                 )
             )
 

@@ -7,3 +7,12 @@ python-jose[cryptography]
 python-multipart
 uvicorn[standard]
 pydantic-settings
+prophet
+xgboost
+pandas
+numpy
+scikit-learn
+matplotlib
+seaborn
+scipy
+statsmodels
