@@ -49,24 +49,42 @@ class SalesPreprocessor:
                 for r in records
             ]
         )
-        df = df.sort_values("ds").reset_index(drop=True)
+
+        # 🔹 IMPORTANT: aggregate duplicates (same product_id + ds)
+        df = (
+            df.groupby(["product_id", "ds"], as_index=False)["y"]
+              .sum()
+              .sort_values(["product_id", "ds"])
+              .reset_index(drop=True)
+        )
+
         return df
 
     def fill_missing_dates(self, df: pd.DataFrame, product_id: int) -> pd.DataFrame:
         """
         Ensure a continuous daily index with 0 quantity for missing days.
         Prophet likes continuous timelines.
+
+        Also guarantees ONE row per day per product.
         """
         if df.empty:
             return df
 
+        # Filter to this product
         df_prod = df[df["product_id"] == product_id].copy()
+        if df_prod.empty:
+            # nothing for this product
+            return pd.DataFrame(columns=["ds", "y", "product_id"])
+
+        # 🔹 ds is already unique per product_id thanks to to_dataframe(),
+        # but we sort to be safe.
         df_prod = df_prod.sort_values("ds")
 
         start = self.min_date or df_prod["ds"].min()
         end = df_prod["ds"].max()
 
         all_days = pd.date_range(start=start, end=end, freq="D", name="ds")
+
         df_full = (
             df_prod.set_index("ds")
             .reindex(all_days)
@@ -90,3 +108,4 @@ class SalesPreprocessor:
         df_full = self.fill_missing_dates(df, product_id)
         # Hook for future steps (outlier removal, smoothing, etc.)
         return CleanedTimeSeries(product_id=product_id, df=df_full[["ds", "y"]])
+

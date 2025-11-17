@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { apiFetch } from "@/lib/api";
 import {
   ResponsiveContainer,
@@ -13,6 +14,12 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
+
+type Product = {
+  id: number;
+  name: string;
+  sku?: string | null;
+};
 
 type SalesPoint = {
   date: string;
@@ -36,10 +43,12 @@ type ChartPoint = {
 
 export default function ProductDetailPage() {
   const params = useParams<{ id: string }>();
+  const router = useRouter();
   const productId = params?.id;
 
-  const [sales, setSales] = useState<SalesPoint[]>([]);
-  const [forecast, setForecast] = useState<ForecastPoint[]>([]);
+  const [product, setProduct] = useState<Product | null>(null);
+  const [salesRaw, setSalesRaw] = useState<any>([]);
+  const [forecastRaw, setForecastRaw] = useState<any>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -48,18 +57,33 @@ export default function ProductDetailPage() {
   const [recommendedHigh, setRecommendedHigh] = useState<number | null>(null);
 
   useEffect(() => {
-    if (!productId) return; // don't call API until we have an id
+    if (!productId) return;
+    if (typeof window === "undefined") return;
+
+    const token = localStorage.getItem("access_token");
+    if (!token) {
+      router.push("/login");
+      return;
+    }
 
     async function loadData() {
       try {
         setLoading(true);
         setError(null);
 
-        const salesData = await apiFetch<SalesPoint[]>(
+        // Product name for header
+        const productsData = await apiFetch<Product[]>("/api/products/");
+        const found = productsData.find(
+          (p) => String(p.id) === String(productId)
+        );
+        if (found) setProduct(found);
+
+        // Sales + forecast
+        const salesData = await apiFetch<any>(
           `/api/sales/product/${productId}`
         );
 
-        const forecastData = await apiFetch<ForecastPoint[]>(
+        const forecastData = await apiFetch<any>(
           `/api/forecast/product/${productId}`,
           {
             method: "POST",
@@ -67,43 +91,56 @@ export default function ProductDetailPage() {
           }
         );
 
-        setSales(salesData);
-        setForecast(forecastData);
+        setSalesRaw(salesData);
+        setForecastRaw(forecastData);
 
-        if (forecastData.length > 0) {
-          const first = forecastData[0];
+        const normalizedForecast = normalizeForecast(forecastData);
+        if (normalizedForecast.length > 0) {
+          const first = normalizedForecast[0];
           setRecommendedP50(first.yhat);
           setRecommendedLow(first.yhat_lower);
           setRecommendedHigh(first.yhat_upper);
         }
       } catch (err: any) {
         console.error(err);
-        setError(err.message || "Failed to load sales/forecast");
+        setError(err.message || "Failed to load product data");
       } finally {
         setLoading(false);
       }
     }
 
     loadData();
-  }, [productId]);
+  }, [productId, router]);
 
-  const chartData = buildChartData(sales, forecast);
+  const chartData = buildChartData(salesRaw, forecastRaw);
+  const title = product ? product.name : `Product #${productId ?? ""}`;
+
+  const salesTable = normalizeSales(salesRaw);
+  const forecastTable = normalizeForecast(forecastRaw);
 
   return (
     <div className="space-y-6">
-      <header>
-        <h2 className="text-2xl font-semibold tracking-tight">
-          Product #{productId ?? ""}
-        </h2>
-        <p className="text-sm text-slate-600">
-          Sales history and demand forecast.
-        </p>
+      {/* Header */}
+      <header className="flex items-center justify-between">
+        <div>
+          <h2 className="text-2xl font-semibold tracking-tight">{title}</h2>
+          <p className="text-sm text-slate-600">
+            Sales history and demand forecast.
+          </p>
+        </div>
+
+        <Link
+          href="/products"
+          className="text-sm text-blue-600 hover:underline"
+        >
+          ← Back to products
+        </Link>
       </header>
 
       {/* How many to bake */}
       <section className="grid gap-4 md:grid-cols-3">
         <div className="rounded-xl border bg-white p-4">
-          <p className="text-xs uppercase text-slate-500">Recommended bake</p>
+          <p className="text-xs uppercase text-slate-500">RECOMMENDED BAKE</p>
           <p className="mt-2 text-2xl font-semibold">
             {recommendedP50 !== null ? Math.round(recommendedP50) : "—"}
           </p>
@@ -113,7 +150,7 @@ export default function ProductDetailPage() {
         </div>
 
         <div className="rounded-xl border bg-white p-4">
-          <p className="text-xs uppercase text-slate-500">Safe low</p>
+          <p className="text-xs uppercase text-slate-500">SAFE LOW</p>
           <p className="mt-2 text-2xl font-semibold">
             {recommendedLow !== null ? Math.round(recommendedLow) : "—"}
           </p>
@@ -123,7 +160,7 @@ export default function ProductDetailPage() {
         </div>
 
         <div className="rounded-xl border bg-white p-4">
-          <p className="text-xs uppercase text-slate-500">Safe high</p>
+          <p className="text-xs uppercase text-slate-500">SAFE HIGH</p>
           <p className="mt-2 text-2xl font-semibold">
             {recommendedHigh !== null ? Math.round(recommendedHigh) : "—"}
           </p>
@@ -157,7 +194,6 @@ export default function ProductDetailPage() {
                 <YAxis />
                 <Tooltip />
                 <Legend />
-
                 <Line
                   type="monotone"
                   dataKey="actual"
@@ -188,78 +224,158 @@ export default function ProductDetailPage() {
           </div>
         )}
       </section>
+
+      {/* Tables */}
+      <section className="grid gap-4 md:grid-cols-2">
+        {/* Sales table */}
+        <div className="rounded-xl border bg-white p-4">
+          <h3 className="mb-3 text-sm font-semibold text-slate-700">
+            Sales table
+          </h3>
+          {salesTable.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              No sales data yet for this product.
+            </p>
+          ) : (
+            <div className="max-h-64 overflow-auto">
+              <table className="min-w-full text-xs">
+                <thead className="bg-slate-50 border-b text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Date</th>
+                    <th className="px-3 py-2 text-right">Units sold</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {salesTable.map((row, idx) => (
+                    <tr
+                      key={`${row.date}-${idx}`}
+                      className="border-b last:border-b-0"
+                    >
+                      <td className="px-3 py-1.5">{row.date}</td>
+                      <td className="px-3 py-1.5 text-right">
+                        {row.quantity}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+
+        {/* Forecast table */}
+        <div className="rounded-xl border bg-white p-4">
+          <h3 className="mb-3 text-sm font-semibold text-slate-700">
+            Forecast table
+          </h3>
+          {forecastTable.length === 0 ? (
+            <p className="text-sm text-slate-500">
+              No forecast data yet for this product.
+            </p>
+          ) : (
+            <div className="max-h-64 overflow-auto">
+              <table className="min-w-full text-xs">
+                <thead className="bg-slate-50 border-b text-slate-500">
+                  <tr>
+                    <th className="px-3 py-2 text-left">Date</th>
+                    <th className="px-3 py-2 text-right">P50</th>
+                    <th className="px-3 py-2 text-right">P10</th>
+                    <th className="px-3 py-2 text-right">P90</th>
+                  </tr>
+                </thead>
+                <tbody>
+  {forecastTable.map((row, idx) => (
+    <tr
+      key={`${row.ds}-${idx}`}
+      className="border-b last:border-b-0"
+    >
+      <td className="px-3 py-1.5">{row.ds}</td>
+      <td className="px-3 py-1.5 text-right">
+        {Math.round(row.yhat)}
+      </td>
+      <td className="px-3 py-1.5 text-right">
+        {Math.round(row.yhat_lower)}
+      </td>
+      <td className="px-3 py-1.5 text-right">
+        {Math.round(row.yhat_upper)}
+      </td>
+    </tr>
+  ))}
+</tbody>
+
+              </table>
+            </div>
+          )}
+        </div>
+      </section>
     </div>
   );
 }
 
-function buildChartData(
-    rawSales: any,
-    rawForecast: any
-  ): ChartPoint[] {
-    // Normalize sales → always an array
-    const sales: any[] = Array.isArray(rawSales)
-      ? rawSales
-      : rawSales?.sales || rawSales?.data || [];
-  
-    // Normalize forecast → always an array
-    const forecast: any[] = Array.isArray(rawForecast)
-      ? rawForecast
-      : rawForecast?.forecast || rawForecast?.data || [];
-  
-    const map = new Map<string, ChartPoint>();
-  
-    // --- SALES ---
-    for (const s of sales) {
-      if (!s) continue;
-  
-      // Support backends using date or ds
-      const key: string = s.date || s.ds;
-      if (!key) continue;
-  
-      const existing = map.get(key) || { date: key };
-  
-      // Normalize quantity fields
-      const qty =
-        s.quantity ??
-        s.qty ??
-        s.y ??
-        0;
-  
-      existing.actual = qty;
-      map.set(key, existing);
-    }
-  
-    // --- FORECAST ---
-    for (const f of forecast) {
-      if (!f) continue;
-  
-      // Support ds or date
-      const key: string = f.ds || f.date;
-      if (!key) continue;
-  
-      const existing = map.get(key) || { date: key };
-  
-      existing.forecast =
-        f.yhat ??
-        f.forecast ??
-        0;
-  
-      existing.lower =
-        f.yhat_lower ??
-        f.lower ??
-        undefined;
-  
-      existing.upper =
-        f.yhat_upper ??
-        f.upper ??
-        undefined;
-  
-      map.set(key, existing);
-    }
-  
-    // Sort chronologically
-    return Array.from(map.values()).sort((a, b) =>
-        a.date.localeCompare(b.date)
-    );
+function normalizeSales(rawSales: any): SalesPoint[] {
+  const sales: any[] = Array.isArray(rawSales)
+    ? rawSales
+    : rawSales?.sales || rawSales?.data || [];
+
+  const totals = new Map<string, number>();
+
+  for (const s of sales) {
+    if (!s) continue;
+    const date = s.date || s.ds;
+    if (!date) continue;
+
+    const qty =
+      s.quantity ?? s.units_sold ?? s.qty ?? s.y ?? 0;
+
+    const current = totals.get(date) ?? 0;
+    totals.set(date, current + Number(qty));
+  }
+
+  return Array.from(totals.entries())
+    .map(([date, quantity]) => ({ date, quantity }))
+    .sort((a, b) => a.date.localeCompare(b.date));
 }
-  
+
+
+// Normalize forecast into a consistent array
+function normalizeForecast(rawForecast: any): ForecastPoint[] {
+  const forecast: any[] = Array.isArray(rawForecast)
+    ? rawForecast
+    : rawForecast?.forecast || rawForecast?.data || [];
+
+  return forecast
+    .map((f) => ({
+      ds: f.ds || f.date,
+      yhat: f.yhat ?? f.forecast ?? 0,
+      yhat_lower: f.yhat_lower ?? f.lower ?? 0,
+      yhat_upper: f.yhat_upper ?? f.upper ?? 0,
+    }))
+    .filter((f) => !!f.ds);
+}
+
+function buildChartData(rawSales: any, rawForecast: any): ChartPoint[] {
+  const sales = normalizeSales(rawSales);
+  const forecast = normalizeForecast(rawForecast);
+
+  const map = new Map<string, ChartPoint>();
+
+  // Sales
+  for (const s of sales) {
+    const key = s.date;
+    const existing = map.get(key) || { date: key };
+    existing.actual = s.quantity;
+    map.set(key, existing);
+  }
+
+  // Forecast
+  for (const f of forecast) {
+    const key = f.ds;
+    const existing = map.get(key) || { date: key };
+    existing.forecast = f.yhat;
+    existing.lower = f.yhat_lower;
+    existing.upper = f.yhat_upper;
+    map.set(key, existing);
+  }
+
+  return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
+}
