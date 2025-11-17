@@ -2,6 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api.router import api_router
+from app.api.v1.routes import analytics
 from .core.config import settings
 from .db import Base, engine
 
@@ -31,3 +32,4 @@ async def read_root() -> dict:
 
 # Mount all API routes under /api
 app.include_router(api_router, prefix="/api")
+app.include_router(analytics.router, prefix="/api/v1")

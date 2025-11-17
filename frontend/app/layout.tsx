@@ -2,6 +2,8 @@ import { LogoutButton } from "@/components/LogoutButton";
 import type { Metadata } from "next";
 import "./globals.css";
 import Link from "next/link";
+import { BakerySelector } from "@/components/BakerySelector";
+
 
 export const metadata: Metadata = {
   title: "BAKEZY Dashboard",
@@ -26,27 +28,36 @@ export default function RootLayout({
               </p>
             </div>
 
+            <BakerySelector />
+
             <nav className="px-4 py-4 space-y-2 text-sm flex-1">
               <Link
                 href="/products"
                 className="block rounded-lg px-3 py-2 hover:bg-slate-100"
               >
                 Products
-                </Link>
+              </Link>
 
-                <Link
-                  href="/upload"
-                  className="block rounded-lg px-3 py-2 hover:bg-slate-100"
-                >
-                  Upload sales CSV
-                </Link>
-              </nav>
+              <Link
+                href="/upload"
+                className="block rounded-lg px-3 py-2 hover:bg-slate-100"
+              >
+                Upload sales CSV
+              </Link>
+
+              {/* 👇 NEW: Dashboard link */}
+              <Link
+                href="/dashboard"
+                className="block rounded-lg px-3 py-2 hover:bg-slate-100"
+              >
+                Dashboard
+              </Link>
+            </nav>
 
             <div className="px-4 py-4 border-t">
               <LogoutButton />
             </div>
           </aside>
-
 
           {/* Main content */}
           <main className="flex-1 px-8 py-6">{children}</main>
@@ -55,3 +66,4 @@ export default function RootLayout({
     </html>
   );
 }
+

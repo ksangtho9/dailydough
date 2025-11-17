@@ -1,8 +1,8 @@
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
-from app.db.session import get_db          # adjust if your path is different
-from app.api.deps import get_current_user  # adjust to whatever you use
+from app.database.database import get_db
+from app.api.auth import get_current_user
 from app.forecasting.service import ForecastService
 from app.schemas.forecast import ProductForecastResponse, ProductForecastPoint
 from app.crud import product as crud_product

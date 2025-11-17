@@ -9,6 +9,11 @@ function getAuthToken(): string | null {
   return localStorage.getItem("access_token");
 }
 
+function clearAuthToken() {
+  if (typeof window === "undefined") return;
+  localStorage.removeItem("access_token");
+}
+
 export async function apiFetch<T>(
   path: string,
   options: RequestInit = {}
@@ -31,10 +36,17 @@ export async function apiFetch<T>(
   });
 
   if (!res.ok) {
+    // 👇 handle 401 specially
+    if (res.status === 401 && typeof window !== "undefined") {
+      clearAuthToken();
+      // store a flag so we can show a message on the login page
+      window.localStorage.setItem("session_expired", "1");
+      window.location.href = "/login";
+    }
+
     const text = await res.text();
     throw new Error(`API error ${res.status}: ${text}`);
   }
 
   return res.json() as Promise<T>;
 }
-

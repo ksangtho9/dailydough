@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { API_BASE_URL } from "@/lib/api";
 
@@ -10,6 +10,16 @@ export default function LoginPage() {
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [sessionExpired, setSessionExpired] = useState(false);
+
+  // 👇 Check if we were redirected here because the session expired
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    if (localStorage.getItem("session_expired") === "1") {
+      setSessionExpired(true);
+      localStorage.removeItem("session_expired");
+    }
+  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -55,6 +65,12 @@ export default function LoginPage() {
         <p className="mt-1 text-sm text-slate-600">
           Sign in to view products and forecasts.
         </p>
+
+        {sessionExpired && (
+          <p className="mt-3 text-xs text-orange-600">
+            Your session expired. Please sign in again.
+          </p>
+        )}
 
         <form onSubmit={handleSubmit} className="mt-6 space-y-4">
           <div>
@@ -103,3 +119,4 @@ export default function LoginPage() {
     </div>
   );
 }
+

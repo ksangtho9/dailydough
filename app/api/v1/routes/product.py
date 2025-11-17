@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 from typing import List
 
-from app.db.session import get_db
-from app.api.deps import get_current_user  # adjust to your deps path
+from app.database.database import get_db
+from app.api.auth import get_current_user
 from app.schemas.product import Product, ProductCreate, ProductUpdate
 from app.crud import product as crud_product
 
