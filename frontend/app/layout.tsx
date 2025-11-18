@@ -15,7 +15,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-[#fdf7f2] text-slate-900">
+      <body className="min-h-screen bg-[#F7F3EE] text-slate-900">
         <div className="flex min-h-screen">
           {/* Sidebar */}
           <Sidebar />

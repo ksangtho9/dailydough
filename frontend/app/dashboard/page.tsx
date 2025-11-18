@@ -20,7 +20,8 @@ import {
   CartesianGrid,
 } from "recharts";
 
-// Make sure we never crash if backend sends strings / undefined
+// ---- helpers ---------------------------------------------------
+
 function safeNumber(value: unknown): number {
   if (typeof value === "number") return value;
   if (typeof value === "string") {
@@ -39,7 +40,6 @@ function computeRollingTotals(trend: BakeryDailyPoint[]) {
     return { total7: 0, total30: 0 };
   }
 
-  // Assume trend is sorted ascending by date
   const last = trend[trend.length - 1];
   const lastDate = new Date(last.date);
   if (isNaN(lastDate.getTime())) {
@@ -48,10 +48,10 @@ function computeRollingTotals(trend: BakeryDailyPoint[]) {
   }
 
   const cutoff7 = new Date(lastDate);
-  cutoff7.setDate(lastDate.getDate() - 6); // last 7 days inclusive
+  cutoff7.setDate(lastDate.getDate() - 6);
 
   const cutoff30 = new Date(lastDate);
-  cutoff30.setDate(lastDate.getDate() - 29); // last 30 days inclusive
+  cutoff30.setDate(lastDate.getDate() - 29);
 
   let total7 = 0;
   let total30 = 0;
@@ -71,6 +71,52 @@ function computeRollingTotals(trend: BakeryDailyPoint[]) {
   return { total7, total30 };
 }
 
+function formatAsOf(asOf?: string | null): string | null {
+  if (!asOf) return null;
+  const parts = asOf.split("-");
+  if (parts.length < 3) return asOf;
+
+  const [yearStr, monthStr, dayStr] = parts;
+  const year = Number(yearStr);
+  const month = Number(monthStr);
+  const day = Number(dayStr);
+  if (!year || !month || !day) return asOf;
+
+  const date = new Date(year, month - 1, day);
+  if (isNaN(date.getTime())) return asOf;
+
+  const weekdays = [
+    "Sunday",
+    "Monday",
+    "Tuesday",
+    "Wednesday",
+    "Thursday",
+    "Friday",
+    "Saturday",
+  ];
+  const months = [
+    "January",
+    "February",
+    "March",
+    "April",
+    "May",
+    "June",
+    "July",
+    "August",
+    "September",
+    "October",
+    "November",
+    "December",
+  ];
+
+  const weekday = weekdays[date.getDay()];
+  const monthName = months[month - 1];
+
+  return `${weekday}, ${monthName} ${day}, ${year}`;
+}
+
+// ---- page ------------------------------------------------------
+
 export default function DashboardPage() {
   const [bakeryId, setBakeryId] = useState<number | null>(null);
   const [summary, setSummary] = useState<BakerySummary | null>(null);
@@ -79,14 +125,6 @@ export default function DashboardPage() {
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  // Stable date label for header (fixed locale → no hydration error)
-  const todayLabel = new Date().toLocaleDateString("en-US", {
-    weekday: "long",
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-  });
 
   // Read selected bakery from localStorage
   useEffect(() => {
@@ -145,6 +183,7 @@ export default function DashboardPage() {
     windowDays === 30 ? "last 30 days" : "last 90 days";
 
   const topProducts = summary?.top_products_last_30_days ?? [];
+  const topProduct = topProducts[0];
 
   // derive totals from trend, fall back to summary fields
   const { total7: derived7, total30: derived30 } = computeRollingTotals(trend);
@@ -157,40 +196,44 @@ export default function DashboardPage() {
       ? derived30
       : safeNumber(summary?.total_units_last_30_days ?? 0);
 
-  return (
-    <div className="space-y-6">
-      {/* Page header */}
-      <header className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">
-            {summary ? summary.bakery_name : "Bakery dashboard"}
-          </h1>
-          <p className="text-sm text-slate-600">
-            Sales & demand overview •{" "}
-            <span className="font-medium text-slate-700">{todayLabel}</span>
-          </p>
-          {bakeryId != null && (
-            <p className="text-xs text-slate-500">
-              Showing data for bakery ID{" "}
-              <span className="font-semibold">{bakeryId}</span> over the{" "}
-              {windowLabel}.
-            </p>
-          )}
-        </div>
+  const formattedAsOf = formatAsOf(summary?.as_of ?? null);
 
-        {/* Window toggle */}
-        <div className="flex flex-col items-end gap-2">
-          <div className="inline-flex items-center rounded-full bg-amber-50 px-1 py-0.5 text-xs border border-amber-100">
-            <span className="px-3 py-1 text-[11px] uppercase tracking-wide text-amber-700">
-              Window
-            </span>
+  return (
+    <div className="w-full">
+      <div className="mx-auto max-w-6xl px-4 py-6 space-y-6">
+        {/* Header row */}
+        <div className="flex items-start justify-between gap-4">
+          <div>
+            <h1 className="flex items-center gap-2 text-2xl font-semibold text-slate-900">
+              <span className="inline-flex h-8 w-8 items-center justify-center rounded-full bg-amber-200 text-lg">
+                🥐
+              </span>
+              <span>Today&apos;s Forecast</span>
+            </h1>
+
+            <p className="mt-1 text-sm text-slate-600">
+              Store:{" "}
+              <span className="font-medium">
+                {summary?.bakery_name ?? "Selected bakery"}
+              </span>
+              {formattedAsOf && (
+                <>
+                  <span className="mx-1">•</span>
+                  {formattedAsOf}
+                </>
+              )}
+            </p>
+          </div>
+
+          {/* Window toggle */}
+          <div className="inline-flex items-center rounded-full bg-white/70 px-1 py-1 text-xs shadow-sm border border-amber-100">
             <button
               type="button"
               onClick={() => setWindowDays(30)}
-              className={`px-3 py-1 rounded-full text-xs ${
+              className={`px-3 py-1 rounded-full transition ${
                 windowDays === 30
-                  ? "bg-white shadow-sm text-slate-900"
-                  : "text-slate-600"
+                  ? "bg-amber-500 text-white shadow-sm"
+                  : "text-slate-700 hover:bg-amber-50"
               }`}
             >
               30d
@@ -198,200 +241,242 @@ export default function DashboardPage() {
             <button
               type="button"
               onClick={() => setWindowDays(90)}
-              className={`px-3 py-1 rounded-full text-xs ${
+              className={`px-3 py-1 rounded-full transition ${
                 windowDays === 90
-                  ? "bg-white shadow-sm text-slate-900"
-                  : "text-slate-600"
+                  ? "bg-amber-500 text-white shadow-sm"
+                  : "text-slate-700 hover:bg-amber-50"
               }`}
             >
               90d
             </button>
           </div>
-
-          {/* Tab-ish row like Daily Dough (only Overview is real for now) */}
-          <div className="inline-flex rounded-full bg-white border border-slate-200 text-xs shadow-sm">
-            <button className="px-4 py-1.5 rounded-full bg-slate-900 text-white font-medium">
-              Overview
-            </button>
-            <button className="px-4 py-1.5 rounded-full text-slate-500">
-              Accuracy
-            </button>
-            <button className="px-4 py-1.5 rounded-full text-slate-500">
-              Insights
-            </button>
-          </div>
         </div>
-      </header>
 
-      {bakeryId == null && (
-        <p className="text-sm text-slate-600">
-          Select a bakery in the sidebar to see its dashboard.
-        </p>
-      )}
+        {/* Tabs row (visual only for now) */}
+        <div className="flex gap-2 rounded-3xl bg-white/70 px-2 py-2 shadow-sm border border-amber-100">
+          {["Bake plan", "Accuracy", "Insights", "Ask AI"].map((label, idx) => (
+            <button
+              key={label}
+              type="button"
+              className={`rounded-full px-4 py-1.5 text-sm transition ${
+                idx === 0
+                  ? "bg-amber-500 text-white shadow-sm"
+                  : "text-slate-700 hover:bg-amber-50"
+              }`}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
 
-      {loading && <p className="text-sm text-slate-500">Loading…</p>}
-      {error && <p className="text-sm text-red-600">{error}</p>}
+        {bakeryId == null && (
+          <p className="text-sm text-slate-600">
+            Select a bakery in the sidebar to see its dashboard.
+          </p>
+        )}
 
-      {summary && !loading && (
-        <>
-          {/* KPI row */}
-          <section className="grid gap-4 md:grid-cols-3 mt-2">
-            {/* Card 1 */}
-            <div className="rounded-2xl border border-amber-100 bg-white/80 p-4 shadow-sm flex flex-col gap-3">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-amber-700">
-                    Total units
-                  </p>
-                  <p className="text-[11px] text-slate-500">
-                    Last 7 days
-                  </p>
-                </div>
-                <div className="h-9 w-9 rounded-full bg-amber-50 flex items-center justify-center text-lg">
-                  🥐
-                </div>
-              </div>
-              <p className="text-3xl font-semibold">
-                {total7.toLocaleString()}
-              </p>
-              <p className="text-xs text-slate-500">
-                Rolling total over the last week.
-              </p>
-            </div>
+        {bakeryId != null && (
+          <p className="text-xs text-slate-500">
+            Showing data for bakery ID{" "}
+            <span className="font-semibold">{bakeryId}</span> over the{" "}
+            {windowLabel}.
+          </p>
+        )}
 
-            {/* Card 2 */}
-            <div className="rounded-2xl border border-amber-100 bg-white/80 p-4 shadow-sm flex flex-col gap-3">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-amber-700">
-                    Total units
-                  </p>
-                  <p className="text-[11px] text-slate-500">
-                    Last 30 days
-                  </p>
-                </div>
-                <div className="h-9 w-9 rounded-full bg-emerald-50 flex items-center justify-center text-lg">
-                  📈
-                </div>
-              </div>
-              <p className="text-3xl font-semibold">
-                {total30.toLocaleString()}
-              </p>
-              <p className="text-xs text-slate-500">
-                Sum of all recorded units in this window.
-              </p>
-            </div>
+        {loading && <p className="text-sm text-slate-600">Loading…</p>}
+        {error && <p className="text-sm text-red-600">{error}</p>}
 
-            {/* Card 3 */}
-            <div className="rounded-2xl border border-amber-100 bg-white/80 p-4 shadow-sm flex flex-col gap-3">
-              <div className="flex items-center justify-between gap-2">
-                <div>
-                  <p className="text-xs font-medium uppercase tracking-wide text-amber-700">
-                    Change vs previous period
-                  </p>
-                  <p className="text-[11px] text-slate-500">
-                    Same {windowDays}-day window
-                  </p>
-                </div>
-                <div className="h-9 w-9 rounded-full bg-sky-50 flex items-center justify-center text-lg">
-                  🔁
-                </div>
-              </div>
-              <p className="text-3xl font-semibold">
-                {pctChange === null
-                  ? "—"
-                  : `${pctChange > 0 ? "+" : ""}${pctChange.toFixed(1)}%`}
-              </p>
-              <p className="text-xs text-slate-500">
-                Based on summary from the forecasting engine.
-              </p>
-            </div>
-          </section>
-
-          {/* Main content: chart + top products */}
-          <section className="grid gap-6 mt-6 xl:grid-cols-3">
-            {/* Chart */}
-            <div className="rounded-2xl border bg-white/80 p-4 shadow-sm xl:col-span-2">
-              <div className="flex items-center justify-between mb-3">
-                <div>
-                  <h2 className="text-sm font-semibold text-slate-800">
-                    Daily sales trend
-                  </h2>
-                  <p className="text-xs text-slate-500">
-                    {windowLabel}
-                  </p>
-                </div>
-              </div>
-
-              {trend.length === 0 ? (
-                <p className="text-sm text-slate-500">
-                  Not enough data yet to show a trend.
+        {summary && !loading && (
+          <>
+            {/* KPI cards */}
+            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+              {/* Recommended bake */}
+              <div className="rounded-3xl border border-amber-100 bg-white/90 px-6 py-5 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                  Recommended bake
                 </p>
-              ) : (
-                <div className="h-72">
-                  <ResponsiveContainer width="100%" height="100%">
-                    <LineChart data={trend}>
-                      <CartesianGrid strokeDasharray="3 3" />
-                      <XAxis dataKey="date" />
-                      <YAxis />
-                      <Tooltip />
-                      <Line
-                        type="monotone"
-                        dataKey="units"
-                        name="Units sold"
-                        dot={false}
-                      />
-                    </LineChart>
-                  </ResponsiveContainer>
-                </div>
-              )}
-            </div>
-
-            {/* Top products */}
-            <div className="rounded-2xl border bg-white/80 p-4 shadow-sm">
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-sm font-semibold text-slate-800">
-                  Top 5 products
-                </h2>
-                <span className="text-[11px] rounded-full bg-slate-100 px-2 py-0.5 text-slate-600">
-                  Last 30 days
-                </span>
+                <p className="mt-3 text-3xl font-semibold text-slate-900">
+                  {total7.toLocaleString()}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Total units (last 7 days)
+                </p>
               </div>
 
+              {/* Rolling volume */}
+              <div className="rounded-3xl border border-amber-100 bg-amber-50/80 px-6 py-5 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-wide text-amber-700">
+                  Rolling volume
+                </p>
+                <p className="mt-3 text-3xl font-semibold text-slate-900">
+                  {total30.toLocaleString()}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Units sold over the last 30 days
+                </p>
+              </div>
+
+              {/* Trend vs previous period */}
+              <div className="rounded-3xl border border-rose-100 bg-rose-50/80 px-6 py-5 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-wide text-rose-700">
+                  Trend vs previous period
+                </p>
+                <p className="mt-3 text-3xl font-semibold text-slate-900">
+                  {pctChange === null
+                    ? "—"
+                    : `${pctChange > 0 ? "+" : ""}${pctChange.toFixed(1)}%`}
+                </p>
+                <p className="mt-1 text-xs text-slate-500">
+                  Same {windowDays}d window, if available from the model.
+                </p>
+              </div>
+
+              {/* Top product (30d) */}
+              <div className="rounded-3xl border border-emerald-100 bg-emerald-50/80 px-6 py-5 shadow-sm">
+                <p className="text-xs font-semibold uppercase tracking-wide text-emerald-700">
+                  Top product (30d)
+                </p>
+                <p className="mt-3 text-sm font-semibold text-slate-900">
+                  {topProduct
+                    ? topProduct.product_name
+                    : "Not enough data yet to surface a hero product."}
+                </p>
+                {topProduct && (
+                  <p className="mt-1 text-xs text-slate-500">
+                    {safeNumber(topProduct.units_sold).toLocaleString()} units
+                    in the last 30 days.
+                  </p>
+                )}
+              </div>
+            </div>
+
+            {/* Trend + Forecast drivers */}
+            <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)] mt-2">
+              {/* Daily sales trend */}
+              <section className="rounded-3xl border border-amber-100 bg-white/90 p-5 shadow-sm">
+                <div className="mb-3 flex items-center justify-between">
+                  <div>
+                    <h2 className="text-sm font-semibold text-slate-800">
+                      Daily sales trend
+                    </h2>
+                    <p className="text-xs text-slate-500">
+                      Aggregated units per day — {windowLabel}.
+                    </p>
+                  </div>
+                  <button
+                    type="button"
+                    className="inline-flex items-center gap-1 rounded-full border border-amber-100 bg-white px-3 py-1 text-xs text-slate-700 shadow-sm hover:bg-amber-50"
+                  >
+                    ↻ Refresh forecasts
+                  </button>
+                </div>
+
+                {trend.length === 0 ? (
+                  <p className="text-sm text-slate-500">
+                    Not enough data yet to show a trend.
+                  </p>
+                ) : (
+                  <div className="h-72">
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={trend}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="date" />
+                        <YAxis />
+                        <Tooltip />
+                        <Line
+                          type="monotone"
+                          dataKey="units"
+                          name="Units sold"
+                          dot={false}
+                        />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  </div>
+                )}
+              </section>
+
+              {/* Forecast drivers (placeholder) */}
+              <section className="rounded-3xl border border-sky-100 bg-sky-50/80 p-5 shadow-sm">
+                <h2 className="text-sm font-semibold text-slate-800">
+                  Forecast drivers
+                </h2>
+                <p className="mt-1 text-xs text-slate-600">
+                  You can plug real drivers (weather, events, promos) into this
+                  panel later. For now it&apos;s a simple placeholder so the
+                  layout matches your future vision.
+                </p>
+
+                <div className="mt-4 space-y-3 text-xs">
+                  <div className="rounded-2xl bg-white/80 p-3 border border-sky-100">
+                    <p className="font-semibold text-slate-800">Weather signal</p>
+                    <p className="mt-1 text-slate-600">
+                      Hook in a weather API to adjust hot/cold beverages and
+                      pastry demand.
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-white/80 p-3 border border-sky-100">
+                    <p className="font-semibold text-slate-800">
+                      Calendar / events
+                    </p>
+                    <p className="mt-1 text-slate-600">
+                      Holidays, paydays and local events can all shift demand up
+                      or down.
+                    </p>
+                  </div>
+
+                  <div className="rounded-2xl bg-white/80 p-3 border border-sky-100">
+                    <p className="font-semibold text-slate-800">
+                      Model experiments
+                    </p>
+                    <p className="mt-1 text-slate-600">
+                      Later, show which model/version is driving the current
+                      bake recommendations.
+                    </p>
+                  </div>
+                </div>
+              </section>
+            </div>
+
+            {/* Top products list */}
+            <section className="mt-2 rounded-3xl border border-amber-100 bg-white/90 p-5 shadow-sm">
+              <h2 className="text-sm font-semibold text-slate-800 mb-3">
+                Top products (last 30 days)
+              </h2>
               {topProducts.length === 0 ? (
                 <p className="text-sm text-slate-500">
                   Not enough data yet.
                 </p>
               ) : (
-                <ul className="space-y-2">
+                <ul className="space-y-2 text-sm">
                   {topProducts.map((p, idx) => (
                     <li
                       key={p.product_id}
-                      className="flex items-center justify-between rounded-xl px-2 py-1.5 hover:bg-slate-50"
+                      className="flex items-center justify-between rounded-2xl bg-amber-50/40 px-3 py-2"
                     >
-                      <div className="flex items-center gap-2">
-                        <span className="flex h-6 w-6 items-center justify-center rounded-full bg-slate-100 text-[11px] text-slate-600">
+                      <div className="flex items-center gap-3">
+                        <span className="text-xs font-semibold text-amber-700">
                           #{idx + 1}
                         </span>
-                        <span className="text-sm text-slate-800">
+                        <span className="text-slate-800">
                           {p.product_name}
                         </span>
                       </div>
-                      <span className="text-sm font-medium text-slate-900">
-                        {safeNumber(p.units_sold).toLocaleString()}{" "}
-                        <span className="text-xs text-slate-500">units</span>
+                      <span className="font-medium text-slate-900">
+                        {safeNumber(p.units_sold).toLocaleString()} units
                       </span>
                     </li>
                   ))}
                 </ul>
               )}
-            </div>
-          </section>
-        </>
-      )}
+            </section>
+          </>
+        )}
+      </div>
     </div>
   );
 }
+
 
 
 

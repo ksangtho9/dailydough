@@ -1,1 +1,1 @@
-# BAKEZY - local dev running.
+# Daily Dough - local dev running.

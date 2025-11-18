@@ -2838,3 +2838,75 @@ ValueError: cannot reindex on an axis with duplicate labels
 2025-11-18 17:24:23 - INFO - bakezy.forecast - Loaded 15 sales records for product_id=1 (from 2025-11-01 to 2025-11-03)
 2025-11-18 17:24:23 - INFO - bakezy.forecast - Forecast complete: product_id=1 horizon_days=14 points=14
 2025-11-18 17:24:23 - INFO - bakezy.forecast - Forecast complete: product_id=1 horizon_days=14 points=14
+2025-11-19 01:05:21 - INFO - bakezy.forecast - Starting forecast: product_id=1 horizon_days=14
+2025-11-19 01:05:21 - INFO - bakezy.forecast - Loaded 15 sales records for product_id=1 (from 2025-11-01 to 2025-11-03)
+2025-11-19 01:05:21 - INFO - bakezy.forecast - Starting forecast: product_id=2 horizon_days=14
+2025-11-19 01:05:21 - INFO - bakezy.forecast - Starting forecast: product_id=3 horizon_days=14
+2025-11-19 01:05:21 - WARNING - bakezy.forecast - Forecast failed: no sales data for product_id=3
+2025-11-19 01:05:21 - WARNING - bakezy.forecast - Forecast failed: no sales data for product_id=2
+2025-11-19 01:05:21 - WARNING - bakezy.forecast.api - Forecast API: no sales data (product_id=3)
+2025-11-19 01:05:21 - WARNING - bakezy.forecast.api - Forecast API: no sales data (product_id=2)
+2025-11-19 01:05:21 - INFO - bakezy.forecast - Starting forecast: product_id=1 horizon_days=14
+2025-11-19 01:05:21 - INFO - bakezy.forecast - Loaded 15 sales records for product_id=1 (from 2025-11-01 to 2025-11-03)
+2025-11-19 01:05:21 - INFO - bakezy.forecast - Starting forecast: product_id=2 horizon_days=14
+2025-11-19 01:05:21 - INFO - bakezy.forecast - Starting forecast: product_id=3 horizon_days=14
+2025-11-19 01:05:21 - WARNING - bakezy.forecast - Forecast failed: no sales data for product_id=2
+2025-11-19 01:05:21 - WARNING - bakezy.forecast - Forecast failed: no sales data for product_id=3
+2025-11-19 01:05:21 - WARNING - bakezy.forecast.api - Forecast API: no sales data (product_id=2)
+2025-11-19 01:05:21 - WARNING - bakezy.forecast.api - Forecast API: no sales data (product_id=3)
+2025-11-19 01:05:23 - INFO - bakezy.forecast - Forecast complete: product_id=1 horizon_days=14 points=14
+2025-11-19 01:05:23 - INFO - bakezy.forecast - Forecast complete: product_id=1 horizon_days=14 points=14
+2025-11-19 01:05:26 - INFO - bakezy.forecast - Starting forecast: product_id=2 horizon_days=14
+2025-11-19 01:05:26 - INFO - bakezy.forecast - Starting forecast: product_id=1 horizon_days=14
+2025-11-19 01:05:26 - INFO - bakezy.forecast - Starting forecast: product_id=3 horizon_days=14
+2025-11-19 01:05:26 - WARNING - bakezy.forecast - Forecast failed: no sales data for product_id=2
+2025-11-19 01:05:26 - WARNING - bakezy.forecast.api - Forecast API: no sales data (product_id=2)
+2025-11-19 01:05:26 - WARNING - bakezy.forecast - Forecast failed: no sales data for product_id=3
+2025-11-19 01:05:26 - WARNING - bakezy.forecast.api - Forecast API: no sales data (product_id=3)
+2025-11-19 01:05:26 - INFO - bakezy.forecast - Loaded 15 sales records for product_id=1 (from 2025-11-01 to 2025-11-03)
+2025-11-19 01:05:26 - INFO - bakezy.forecast - Starting forecast: product_id=1 horizon_days=14
+2025-11-19 01:05:26 - INFO - bakezy.forecast - Starting forecast: product_id=2 horizon_days=14
+2025-11-19 01:05:26 - INFO - bakezy.forecast - Loaded 15 sales records for product_id=1 (from 2025-11-01 to 2025-11-03)
+2025-11-19 01:05:26 - WARNING - bakezy.forecast - Forecast failed: no sales data for product_id=2
+2025-11-19 01:05:26 - INFO - bakezy.forecast - Starting forecast: product_id=3 horizon_days=14
+2025-11-19 01:05:26 - WARNING - bakezy.forecast.api - Forecast API: no sales data (product_id=2)
+2025-11-19 01:05:26 - WARNING - bakezy.forecast - Forecast failed: no sales data for product_id=3
+2025-11-19 01:05:26 - WARNING - bakezy.forecast.api - Forecast API: no sales data (product_id=3)
+2025-11-19 01:05:28 - INFO - bakezy.forecast - Forecast complete: product_id=1 horizon_days=14 points=14
+2025-11-19 01:05:28 - INFO - bakezy.forecast - Forecast complete: product_id=1 horizon_days=14 points=14
+2025-11-19 02:08:58 - INFO - bakezy.forecast - Starting forecast: product_id=1 horizon_days=14
+2025-11-19 02:08:58 - INFO - bakezy.forecast - Loaded 15 sales records for product_id=1 (from 2025-11-01 to 2025-11-03)
+2025-11-19 02:08:58 - INFO - bakezy.forecast - Starting forecast: product_id=2 horizon_days=14
+2025-11-19 02:08:58 - WARNING - bakezy.forecast - Forecast failed: no sales data for product_id=2
+2025-11-19 02:08:58 - WARNING - bakezy.forecast.api - Forecast API: no sales data (product_id=2)
+2025-11-19 02:08:58 - INFO - bakezy.forecast - Starting forecast: product_id=3 horizon_days=14
+2025-11-19 02:08:58 - INFO - bakezy.forecast - Starting forecast: product_id=1 horizon_days=14
+2025-11-19 02:08:58 - INFO - bakezy.forecast - Starting forecast: product_id=2 horizon_days=14
+2025-11-19 02:08:58 - WARNING - bakezy.forecast - Forecast failed: no sales data for product_id=3
+2025-11-19 02:08:58 - WARNING - bakezy.forecast.api - Forecast API: no sales data (product_id=3)
+2025-11-19 02:08:58 - WARNING - bakezy.forecast - Forecast failed: no sales data for product_id=2
+2025-11-19 02:08:58 - WARNING - bakezy.forecast.api - Forecast API: no sales data (product_id=2)
+2025-11-19 02:08:58 - INFO - bakezy.forecast - Loaded 15 sales records for product_id=1 (from 2025-11-01 to 2025-11-03)
+2025-11-19 02:08:58 - INFO - bakezy.forecast - Starting forecast: product_id=3 horizon_days=14
+2025-11-19 02:08:58 - WARNING - bakezy.forecast - Forecast failed: no sales data for product_id=3
+2025-11-19 02:08:58 - WARNING - bakezy.forecast.api - Forecast API: no sales data (product_id=3)
+2025-11-19 02:08:58 - INFO - bakezy.forecast - Forecast complete: product_id=1 horizon_days=14 points=14
+2025-11-19 02:08:58 - INFO - bakezy.forecast - Forecast complete: product_id=1 horizon_days=14 points=14
+2025-11-19 02:09:00 - INFO - bakezy.forecast - Starting forecast: product_id=1 horizon_days=14
+2025-11-19 02:09:00 - INFO - bakezy.forecast - Starting forecast: product_id=2 horizon_days=14
+2025-11-19 02:09:00 - INFO - bakezy.forecast - Starting forecast: product_id=3 horizon_days=14
+2025-11-19 02:09:00 - WARNING - bakezy.forecast - Forecast failed: no sales data for product_id=2
+2025-11-19 02:09:00 - WARNING - bakezy.forecast.api - Forecast API: no sales data (product_id=2)
+2025-11-19 02:09:00 - WARNING - bakezy.forecast - Forecast failed: no sales data for product_id=3
+2025-11-19 02:09:00 - WARNING - bakezy.forecast.api - Forecast API: no sales data (product_id=3)
+2025-11-19 02:09:00 - INFO - bakezy.forecast - Loaded 15 sales records for product_id=1 (from 2025-11-01 to 2025-11-03)
+2025-11-19 02:09:00 - INFO - bakezy.forecast - Starting forecast: product_id=1 horizon_days=14
+2025-11-19 02:09:00 - INFO - bakezy.forecast - Starting forecast: product_id=3 horizon_days=14
+2025-11-19 02:09:00 - INFO - bakezy.forecast - Starting forecast: product_id=2 horizon_days=14
+2025-11-19 02:09:00 - WARNING - bakezy.forecast - Forecast failed: no sales data for product_id=3
+2025-11-19 02:09:00 - WARNING - bakezy.forecast.api - Forecast API: no sales data (product_id=3)
+2025-11-19 02:09:00 - INFO - bakezy.forecast - Loaded 15 sales records for product_id=1 (from 2025-11-01 to 2025-11-03)
+2025-11-19 02:09:00 - WARNING - bakezy.forecast - Forecast failed: no sales data for product_id=2
+2025-11-19 02:09:00 - WARNING - bakezy.forecast.api - Forecast API: no sales data (product_id=2)
+2025-11-19 02:09:00 - INFO - bakezy.forecast - Forecast complete: product_id=1 horizon_days=14 points=14
+2025-11-19 02:09:00 - INFO - bakezy.forecast - Forecast complete: product_id=1 horizon_days=14 points=14
