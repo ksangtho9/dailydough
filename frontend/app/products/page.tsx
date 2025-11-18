@@ -26,6 +26,8 @@ type ForecastPoint = {
 
 type RecommendationsMap = Record<number, number | null>;
 
+const BAKERY_STORAGE_KEY = "current_bakery_id";
+
 export default function ProductsPage() {
   const router = useRouter();
 
@@ -48,6 +50,12 @@ export default function ProductsPage() {
       return;
     }
 
+    // 👇 initialize selected bakery from shared storage
+    const storedBakeryId = localStorage.getItem(BAKERY_STORAGE_KEY);
+    if (storedBakeryId) {
+      setSelectedBakeryId(storedBakeryId);
+    }
+
     async function loadProductsAndRecs() {
       try {
         setLoading(true);
@@ -68,6 +76,7 @@ export default function ProductsPage() {
           setRecommendations(recs);
         }
       } catch (err: any) {
+        console.error(err);
         setError(err.message || "Failed to load products");
       } finally {
         setLoading(false);
@@ -82,8 +91,24 @@ export default function ProductsPage() {
     selectedBakeryId === "all"
       ? products
       : products.filter(
-          (p) => p.bakery_id !== undefined && String(p.bakery_id) === selectedBakeryId
+          (p) =>
+            p.bakery_id !== undefined &&
+            String(p.bakery_id) === selectedBakeryId
         );
+
+  function handleBakeryChange(value: string) {
+    setSelectedBakeryId(value);
+
+    if (typeof window !== "undefined") {
+      if (value === "all") {
+        // If "All bakeries", clear the shared selection
+        window.localStorage.removeItem(BAKERY_STORAGE_KEY);
+      } else {
+        // Otherwise, keep in sync with dashboard/sidebar
+        window.localStorage.setItem(BAKERY_STORAGE_KEY, value);
+      }
+    }
+  }
 
   return (
     <div className="space-y-4">
@@ -94,7 +119,7 @@ export default function ProductsPage() {
           <span className="text-slate-600">Bakery:</span>
           <select
             value={selectedBakeryId}
-            onChange={(e) => setSelectedBakeryId(e.target.value)}
+            onChange={(e) => handleBakeryChange(e.target.value)}
             className="rounded-lg border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-slate-500"
           >
             <option value="all">All bakeries</option>
@@ -206,4 +231,5 @@ async function fetchRecommendations(
 
   return recs;
 }
+
 

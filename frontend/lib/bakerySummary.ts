@@ -9,16 +9,22 @@ export interface TopProductSummary {
 export interface BakerySummary {
   bakery_id: number;
   bakery_name: string;
-  as_of: string;
-  total_units_last_7_days: number;
-  total_units_last_30_days: number;
-  top_products_last_30_days: TopProductSummary[];
+  as_of: string; // ISO date string
+  window_days: number;
+  total_units: number;
+
+  previous_total_units: number;
+  pct_change_vs_previous: number | null;
+
+  top_products: TopProductSummary[];
 }
 
 export async function fetchBakerySummary(
-  bakeryId: number
+  bakeryId: number,
+  windowDays: number
 ): Promise<BakerySummary> {
-  // ✓ This matches your exact backend path
-  return apiFetch<BakerySummary>(`/api/v1/bakeries/${bakeryId}/summary`);
+  const params = new URLSearchParams({ days: String(windowDays) });
+  return apiFetch<BakerySummary>(
+    `/api/v1/bakeries/${bakeryId}/summary?${params.toString()}`
+  );
 }
- 

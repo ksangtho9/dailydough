@@ -1,6 +1,6 @@
 from datetime import date, timedelta
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func, desc
 
@@ -18,10 +18,19 @@ router = APIRouter(
 @router.get("/{bakery_id}/summary", response_model=BakerySummary)
 def get_bakery_summary(
     bakery_id: int,
+    days: int = Query(30, ge=1, le=365),
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    # 1) Make sure the bakery exists
+    """
+    Summary for a bakery over the last `days` days.
+
+    - total_units: total units sold in that window
+    - previous_total_units: total in the immediately preceding window
+    - pct_change_vs_previous: % change vs previous window (None if no prev data)
+    - top_products: top products in the current window
+    """
+    # 1) Check bakery exists
     bakery = (
         db.query(Bakery)
         .filter(Bakery.id == bakery_id)
@@ -34,28 +43,37 @@ def get_bakery_summary(
         )
 
     today = date.today()
-    d7 = today - timedelta(days=7)
-    d30 = today - timedelta(days=30)
+    start_date = today - timedelta(days=days)
 
-    # 2) Total units last 7 days
-    total_7 = (
+    # 2) Total units in current window
+    total_units = (
         db.query(func.coalesce(func.sum(SalesRecord.quantity_sold), 0.0))
         .filter(SalesRecord.bakery_id == bakery_id)
-        .filter(SalesRecord.date >= d7)
+        .filter(SalesRecord.date >= start_date)
         .filter(SalesRecord.date <= today)
         .scalar()
     )
 
-    # 3) Total units last 30 days
-    total_30 = (
+    # 3) Total units in previous window (same length, immediately before)
+    prev_end = start_date - timedelta(days=1)
+    prev_start = prev_end - timedelta(days=days - 1)
+
+    previous_total_units = (
         db.query(func.coalesce(func.sum(SalesRecord.quantity_sold), 0.0))
         .filter(SalesRecord.bakery_id == bakery_id)
-        .filter(SalesRecord.date >= d30)
-        .filter(SalesRecord.date <= today)
+        .filter(SalesRecord.date >= prev_start)
+        .filter(SalesRecord.date <= prev_end)
         .scalar()
     )
 
-    # 4) Top 5 products by units in last 30 days
+    # 4) Compute percent change vs previous window
+    pct_change: float | None = None
+    if previous_total_units and previous_total_units != 0:
+        pct_change = float(
+            (total_units - previous_total_units) / previous_total_units * 100.0
+        )
+
+    # 5) Top products in current window
     top_rows = (
         db.query(
             SalesRecord.product_id,
@@ -64,7 +82,7 @@ def get_bakery_summary(
         )
         .join(Product, Product.id == SalesRecord.product_id)
         .filter(SalesRecord.bakery_id == bakery_id)
-        .filter(SalesRecord.date >= d30)
+        .filter(SalesRecord.date >= start_date)
         .filter(SalesRecord.date <= today)
         .group_by(SalesRecord.product_id, Product.name)
         .order_by(desc("units"))
@@ -81,14 +99,15 @@ def get_bakery_summary(
         for row in top_rows
     ]
 
-    # 5) Return summary INCLUDING bakery_name
     return BakerySummary(
         bakery_id=bakery_id,
-        bakery_name=bakery.name,   # 👈 this was missing before
+        bakery_name=bakery.name,
         as_of=today,
-        total_units_last_7_days=float(total_7 or 0),
-        total_units_last_30_days=float(total_30 or 0),
-        top_products_last_30_days=top_products,
+        window_days=days,
+        total_units=float(total_units or 0),
+        previous_total_units=float(previous_total_units or 0),
+        pct_change_vs_previous=pct_change,
+        top_products=top_products,
     )
 
 

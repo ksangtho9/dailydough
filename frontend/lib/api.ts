@@ -1,4 +1,4 @@
-// lib/api.ts
+// frontend/lib/api.ts
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
 
@@ -7,11 +7,6 @@ export { API_BASE_URL };
 function getAuthToken(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem("access_token");
-}
-
-function clearAuthToken() {
-  if (typeof window === "undefined") return;
-  localStorage.removeItem("access_token");
 }
 
 export async function apiFetch<T>(
@@ -35,15 +30,17 @@ export async function apiFetch<T>(
     headers,
   });
 
-  if (!res.ok) {
-    // 👇 handle 401 specially
-    if (res.status === 401 && typeof window !== "undefined") {
-      clearAuthToken();
-      // store a flag so we can show a message on the login page
-      window.localStorage.setItem("session_expired", "1");
-      window.location.href = "/login";
+  // 🔒 Global 401 handling
+  if (res.status === 401) {
+    if (typeof window !== "undefined") {
+      // clear token & send user back to login with a reason
+      window.localStorage.removeItem("access_token");
+      window.location.href = "/login?reason=expired";
     }
+    throw new Error("Unauthorized");
+  }
 
+  if (!res.ok) {
     const text = await res.text();
     throw new Error(`API error ${res.status}: ${text}`);
   }

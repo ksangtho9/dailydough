@@ -1,6 +1,5 @@
 from datetime import date
 from pydantic import BaseModel
-from typing import List
 
 
 class TopProductSummary(BaseModel):
@@ -11,10 +10,13 @@ class TopProductSummary(BaseModel):
 
 class BakerySummary(BaseModel):
     bakery_id: int
-    bakery_name: str 
+    bakery_name: str
     as_of: date
 
-    total_units_last_7_days: float
-    total_units_last_30_days: float
+    window_days: int
+    total_units: float
 
-    top_products_last_30_days: List[TopProductSummary]
+    previous_total_units: float
+    pct_change_vs_previous: float | None  # percent, e.g. +12.3, -5.4
+
+    top_products: list[TopProductSummary]

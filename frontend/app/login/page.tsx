@@ -1,25 +1,18 @@
 "use client";
 
-import { FormEvent, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { FormEvent, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { API_BASE_URL } from "@/lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState(""); // use email if your backend expects email here
+  const searchParams = useSearchParams();
+  const [username, setUsername] = useState(""); // use email if backend expects email
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [sessionExpired, setSessionExpired] = useState(false);
 
-  // 👇 Check if we were redirected here because the session expired
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    if (localStorage.getItem("session_expired") === "1") {
-      setSessionExpired(true);
-      localStorage.removeItem("session_expired");
-    }
-  }, []);
+  const reason = searchParams.get("reason");
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -66,9 +59,17 @@ export default function LoginPage() {
           Sign in to view products and forecasts.
         </p>
 
-        {sessionExpired && (
-          <p className="mt-3 text-xs text-orange-600">
-            Your session expired. Please sign in again.
+        {/* Session expired notice */}
+        {reason === "expired" && !error && (
+          <p className="mt-3 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Your session has expired. Please sign in again.
+          </p>
+        )}
+
+        {/* Hard error from a failed login attempt */}
+        {error && (
+          <p className="mt-3 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-xs text-red-700">
+            {error}
           </p>
         )}
 
@@ -100,12 +101,6 @@ export default function LoginPage() {
               required
             />
           </div>
-
-          {error && (
-            <p className="text-xs text-red-600">
-              {error}
-            </p>
-          )}
 
           <button
             type="submit"
