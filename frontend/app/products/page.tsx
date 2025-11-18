@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useEffect, useState, FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 
@@ -41,6 +41,8 @@ export default function ProductsPage() {
   const [recommendations, setRecommendations] = useState<RecommendationsMap>({});
   const [recsLoading, setRecsLoading] = useState(false);
 
+  const [showAddProductModal, setShowAddProductModal] = useState(false);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -50,7 +52,7 @@ export default function ProductsPage() {
       return;
     }
 
-    // 👇 initialize selected bakery from shared storage
+    // initialize selected bakery from shared storage
     const storedBakeryId = localStorage.getItem(BAKERY_STORAGE_KEY);
     if (storedBakeryId) {
       setSelectedBakeryId(storedBakeryId);
@@ -110,25 +112,48 @@ export default function ProductsPage() {
     }
   }
 
+  const canAddProduct =
+    bakeries.length > 0 && selectedBakeryId !== "all";
+
   return (
     <div className="space-y-4">
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-2xl font-semibold">Products</h2>
 
-        <div className="flex items-center gap-2 text-sm">
-          <span className="text-slate-600">Bakery:</span>
-          <select
-            value={selectedBakeryId}
-            onChange={(e) => handleBakeryChange(e.target.value)}
-            className="rounded-lg border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-slate-500"
+        <div className="flex items-center gap-3">
+          {/* Bakery selector */}
+          <div className="flex items-center gap-2 text-sm">
+            <span className="text-slate-600">Bakery:</span>
+
+            {bakeries.length === 0 ? (
+              <span className="text-xs text-slate-500 italic">
+                No bakeries yet
+              </span>
+            ) : (
+              <select
+                value={selectedBakeryId}
+                onChange={(e) => handleBakeryChange(e.target.value)}
+                className="rounded-lg border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-slate-500"
+              >
+                <option value="all">All bakeries</option>
+                {bakeries.map((b) => (
+                  <option key={b.id} value={String(b.id)}>
+                    {b.name}
+                  </option>
+                ))}
+              </select>
+            )}
+          </div>
+
+          {/* Add product button */}
+          <button
+            type="button"
+            onClick={() => setShowAddProductModal(true)}
+            disabled={!canAddProduct}
+            className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-40"
           >
-            <option value="all">All bakeries</option>
-            {bakeries.map((b) => (
-              <option key={b.id} value={String(b.id)}>
-                {b.name}
-              </option>
-            ))}
-          </select>
+            + Add product
+          </button>
         </div>
       </div>
 
@@ -151,6 +176,45 @@ export default function ProductsPage() {
             </thead>
 
             <tbody>
+              {/* No bakeries at all */}
+              {bakeries.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="px-4 py-6 text-center text-slate-500"
+                  >
+                    No bakeries found — create one before adding products.
+                  </td>
+                </tr>
+              )}
+
+              {/* Bakeries exist but no products */}
+              {bakeries.length > 0 && products.length === 0 && (
+                <tr>
+                  <td
+                    colSpan={5}
+                    className="px-4 py-6 text-center text-slate-500"
+                  >
+                    No products found for this bakery yet.
+                  </td>
+                </tr>
+              )}
+
+              {/* Products exist but filter removes all */}
+              {bakeries.length > 0 &&
+                products.length > 0 &&
+                filteredProducts.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={5}
+                      className="px-4 py-6 text-center text-slate-500"
+                    >
+                      No products match this bakery.
+                    </td>
+                  </tr>
+                )}
+
+              {/* Show products */}
               {filteredProducts.map((p) => {
                 const rec = recommendations[p.id];
                 const bakeryName =
@@ -181,20 +245,22 @@ export default function ProductsPage() {
                   </tr>
                 );
               })}
-
-              {filteredProducts.length === 0 && (
-                <tr>
-                  <td
-                    className="px-4 py-4 text-center text-slate-500"
-                    colSpan={5}
-                  >
-                    No products for this bakery yet.
-                  </td>
-                </tr>
-              )}
             </tbody>
           </table>
         </div>
+      )}
+
+      {/* Add Product Modal */}
+      {showAddProductModal && (
+        <AddProductModal
+          bakeryId={
+            selectedBakeryId === "all" ? null : Number(selectedBakeryId)
+          }
+          onClose={() => setShowAddProductModal(false)}
+          onCreated={(newProduct) => {
+            setProducts((prev) => [...prev, newProduct]);
+          }}
+        />
       )}
     </div>
   );
@@ -231,5 +297,115 @@ async function fetchRecommendations(
 
   return recs;
 }
+
+type AddProductModalProps = {
+  bakeryId: number | null;
+  onClose: () => void;
+  onCreated: (p: Product) => void;
+};
+
+function AddProductModal({
+  bakeryId,
+  onClose,
+  onCreated,
+}: AddProductModalProps) {
+  const [name, setName] = useState("");
+  const [sku, setSku] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setError(null);
+
+    if (!bakeryId) {
+      setError("Please select a bakery first.");
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const newProduct = await apiFetch<Product>("/api/products/", {
+        method: "POST",
+        body: JSON.stringify({
+          name,
+          sku: sku || null,
+          bakery_id: bakeryId,
+        }),
+      });
+
+      onCreated(newProduct);
+      onClose();
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "Failed to create product");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
+        <h3 className="text-lg font-semibold">Add product</h3>
+        <p className="mt-1 text-xs text-slate-600">
+          Create a new product for the selected bakery.
+        </p>
+
+        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
+          <div>
+            <label className="block text-xs font-medium text-slate-600">
+              Name
+            </label>
+            <input
+              type="text"
+              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-500"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              required
+            />
+          </div>
+
+          <div>
+            <label className="block text-xs font-medium text-slate-600">
+              SKU (optional)
+            </label>
+            <input
+              type="text"
+              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-500"
+              value={sku}
+              onChange={(e) => setSku(e.target.value)}
+            />
+          </div>
+
+          {error && (
+            <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded px-3 py-2">
+              {error}
+            </p>
+          )}
+
+          <div className="flex justify-end gap-2 pt-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-lg px-3 py-2 text-sm hover:bg-slate-100"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={loading}
+              className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
+            >
+              {loading ? "Saving…" : "Create product"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+
 
 

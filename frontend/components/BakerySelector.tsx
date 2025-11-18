@@ -9,12 +9,13 @@ export function BakerySelector() {
   const [bakeries, setBakeries] = useState<Bakery[]>([]);
   const [selectedId, setSelectedId] = useState<string>("");
   const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    let initialId: string | null = null;
+    let initial = "";
+
     if (typeof window !== "undefined") {
-      initialId = window.localStorage.getItem(STORAGE_KEY);
+      const stored = window.localStorage.getItem(STORAGE_KEY);
+      if (stored) initial = stored;
     }
 
     async function load() {
@@ -23,20 +24,17 @@ export function BakerySelector() {
         const data = await fetchBakeries();
         setBakeries(data);
 
-        if (data.length > 0) {
-          const idToUse =
-            initialId && data.some((b) => b.id === Number(initialId))
-              ? initialId
-              : String(data[0].id);
-
-          setSelectedId(idToUse);
+        // If we had a stored id and it still exists, use it
+        if (initial && data.some((b) => String(b.id) === initial)) {
+          setSelectedId(initial);
+        } else if (data.length > 0) {
+          // Otherwise default to first bakery and sync storage
+          const firstId = String(data[0].id);
+          setSelectedId(firstId);
           if (typeof window !== "undefined") {
-            window.localStorage.setItem(STORAGE_KEY, idToUse);
+            window.localStorage.setItem(STORAGE_KEY, firstId);
           }
         }
-      } catch (err) {
-        console.error(err);
-        setError("Failed to load bakeries");
       } finally {
         setLoading(false);
       }
@@ -45,51 +43,40 @@ export function BakerySelector() {
     load();
   }, []);
 
-  function handleChange(e: React.ChangeEvent<HTMLSelectElement>) {
-    const val = e.target.value;
-    setSelectedId(val);
+  function handleChange(value: string) {
+    setSelectedId(value);
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(STORAGE_KEY, val);
+      window.localStorage.setItem(STORAGE_KEY, value);
     }
   }
 
   if (loading) {
     return (
-      <div className="px-4 py-2 text-xs text-slate-500">
+      <p className="text-xs text-slate-500">
         Loading bakeries…
-      </div>
+      </p>
     );
   }
 
-  if (error) {
+  if (bakeries.length === 0) {
     return (
-      <div className="px-4 py-2 text-xs text-red-600">
-        {error}
-      </div>
-    );
-  }
-
-  if (!bakeries.length) {
-    return (
-      <div className="px-4 py-2 text-xs text-slate-500">
-        No bakeries found.
-      </div>
+      <p className="text-xs text-slate-500 italic">
+        No bakeries yet — add one in the backend for now.
+      </p>
     );
   }
 
   return (
-    <div className="px-4 py-3 border-b">
-      <label className="block text-xs font-medium text-slate-600 mb-1">
-        Current bakery
-      </label>
+    <div className="space-y-1">
+      <p className="text-xs font-medium text-slate-600">Current bakery</p>
       <select
         value={selectedId}
-        onChange={handleChange}
-        className="w-full rounded-lg border px-2 py-1 text-xs"
+        onChange={(e) => handleChange(e.target.value)}
+        className="w-full rounded-lg border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-slate-500"
       >
         {bakeries.map((b) => (
-          <option key={b.id} value={b.id}>
-            {b.name} (#{b.id})
+          <option key={b.id} value={String(b.id)}>
+            {b.name}
           </option>
         ))}
       </select>

@@ -1,3 +1,4 @@
+// frontend/lib/bakerySummary.ts
 import { apiFetch } from "./api";
 
 export interface TopProductSummary {
@@ -9,22 +10,30 @@ export interface TopProductSummary {
 export interface BakerySummary {
   bakery_id: number;
   bakery_name: string;
-  as_of: string; // ISO date string
-  window_days: number;
-  total_units: number;
+  as_of: string;
 
-  previous_total_units: number;
-  pct_change_vs_previous: number | null;
+  total_units_last_7_days: number;
+  total_units_last_30_days: number;
 
-  top_products: TopProductSummary[];
+  // Optional extras – only used if backend provides them
+  total_units_window?: number;
+  total_units_prev_window?: number | null;
+  pct_change_vs_prev?: number | null;
+
+  top_products_last_30_days: TopProductSummary[];
 }
 
+/**
+ * Fetch per-bakery summary stats.
+ * `windowDays` is used for "this period vs previous period" if backend supports it.
+ */
 export async function fetchBakerySummary(
   bakeryId: number,
   windowDays: number
 ): Promise<BakerySummary> {
-  const params = new URLSearchParams({ days: String(windowDays) });
+  // If backend doesn't care about window_days, it'll just ignore this query param
   return apiFetch<BakerySummary>(
-    `/api/v1/bakeries/${bakeryId}/summary?${params.toString()}`
+    `/api/v1/bakeries/${bakeryId}/summary?window_days=${windowDays}`
   );
 }
+

@@ -30,14 +30,15 @@ export async function apiFetch<T>(
     headers,
   });
 
-  // 🔒 Global 401 handling
+  // 🔥 Handle expired/invalid auth
   if (res.status === 401) {
     if (typeof window !== "undefined") {
-      // clear token & send user back to login with a reason
-      window.localStorage.removeItem("access_token");
-      window.location.href = "/login?reason=expired";
+      // clear token + mark that session expired
+      localStorage.removeItem("access_token");
+      localStorage.setItem("session_expired", "1");
+      window.location.href = "/login";
     }
-    throw new Error("Unauthorized");
+    throw new Error("Session expired. Redirecting to login.");
   }
 
   if (!res.ok) {

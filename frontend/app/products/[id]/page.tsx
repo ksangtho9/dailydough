@@ -41,6 +41,17 @@ type ChartPoint = {
   upper?: number;
 };
 
+type ForecastAccuracy = {
+  mape: number | null; // in %
+  rmse: number | null; // in units
+  n_points: number; // overlapping days
+};
+
+type ErrorPoint = {
+  date: string;
+  absError: number;
+};
+
 export default function ProductDetailPage() {
   const params = useParams<{ id: string }>();
   const router = useRouter();
@@ -117,6 +128,8 @@ export default function ProductDetailPage() {
 
   const salesTable = normalizeSales(salesRaw);
   const forecastTable = normalizeForecast(forecastRaw);
+  const accuracy = computeForecastAccuracy(salesTable, forecastTable);
+  const errorSeries = buildErrorSeries(salesTable, forecastTable);
 
   return (
     <div className="space-y-6">
@@ -225,6 +238,87 @@ export default function ProductDetailPage() {
         )}
       </section>
 
+      {/* Forecast accuracy */}
+      <section className="space-y-4">
+        <div className="grid gap-4 md:grid-cols-3">
+          <div className="rounded-xl border bg-white p-4">
+            <p className="text-xs uppercase text-slate-500">
+              FORECAST ACCURACY (MAPE)
+            </p>
+            <p className="mt-2 text-2xl font-semibold">
+              {accuracy.mape !== null ? `${accuracy.mape.toFixed(1)}%` : "—"}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Average percentage error on days where actual & forecast overlap.
+            </p>
+          </div>
+
+          <div className="rounded-xl border bg-white p-4">
+            <p className="text-xs uppercase text-slate-500">
+              FORECAST ERROR (RMSE)
+            </p>
+            <p className="mt-2 text-2xl font-semibold">
+              {accuracy.rmse !== null ? accuracy.rmse.toFixed(1) : "—"}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Root mean squared error in units per day.
+            </p>
+          </div>
+
+          <div className="rounded-xl border bg-white p-4">
+            <p className="text-xs uppercase text-slate-500">DATA POINTS</p>
+            <p className="mt-2 text-2xl font-semibold">
+              {accuracy.n_points}
+            </p>
+            <p className="mt-1 text-xs text-slate-500">
+              Overlapping days with both actual and forecast.{" "}
+              {accuracy.n_points === 0 &&
+                "You’ll see accuracy once you have historical forecasts overlapping with sales."}
+            </p>
+          </div>
+        </div>
+
+        {/* Error sparkline */}
+        <div className="rounded-xl border bg-white p-4">
+          <div className="flex items-center justify-between mb-2">
+            <p className="text-xs uppercase text-slate-500">
+              DAILY ABSOLUTE ERROR
+            </p>
+            <p className="text-[11px] text-slate-500">
+              |forecast − actual| per day
+            </p>
+          </div>
+
+          {errorSeries.length === 0 ? (
+            <p className="text-xs text-slate-500">
+              No overlapping days yet — once you have both forecasts and actuals
+              for the same dates, you’ll see error history here.
+            </p>
+          ) : (
+            <div className="h-32">
+              <ResponsiveContainer width="100%" height="100%">
+                <LineChart data={errorSeries}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis
+                    dataKey="date"
+                    tick={{ fontSize: 10 }}
+                    minTickGap={16}
+                  />
+                  <YAxis tick={{ fontSize: 10 }} />
+                  <Tooltip />
+                  <Line
+                    type="monotone"
+                    dataKey="absError"
+                    name="Absolute error"
+                    dot={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </div>
+      </section>
+
       {/* Tables */}
       <section className="grid gap-4 md:grid-cols-2">
         {/* Sales table */}
@@ -284,25 +378,24 @@ export default function ProductDetailPage() {
                   </tr>
                 </thead>
                 <tbody>
-  {forecastTable.map((row, idx) => (
-    <tr
-      key={`${row.ds}-${idx}`}
-      className="border-b last:border-b-0"
-    >
-      <td className="px-3 py-1.5">{row.ds}</td>
-      <td className="px-3 py-1.5 text-right">
-        {Math.round(row.yhat)}
-      </td>
-      <td className="px-3 py-1.5 text-right">
-        {Math.round(row.yhat_lower)}
-      </td>
-      <td className="px-3 py-1.5 text-right">
-        {Math.round(row.yhat_upper)}
-      </td>
-    </tr>
-  ))}
-</tbody>
-
+                  {forecastTable.map((row, idx) => (
+                    <tr
+                      key={`${row.ds}-${idx}`}
+                      className="border-b last:border-b-0"
+                    >
+                      <td className="px-3 py-1.5">{row.ds}</td>
+                      <td className="px-3 py-1.5 text-right">
+                        {Math.round(row.yhat)}
+                      </td>
+                      <td className="px-3 py-1.5 text-right">
+                        {Math.round(row.yhat_lower)}
+                      </td>
+                      <td className="px-3 py-1.5 text-right">
+                        {Math.round(row.yhat_upper)}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
               </table>
             </div>
           )}
@@ -335,7 +428,6 @@ function normalizeSales(rawSales: any): SalesPoint[] {
     .map(([date, quantity]) => ({ date, quantity }))
     .sort((a, b) => a.date.localeCompare(b.date));
 }
-
 
 // Normalize forecast into a consistent array
 function normalizeForecast(rawForecast: any): ForecastPoint[] {
@@ -379,3 +471,80 @@ function buildChartData(rawSales: any, rawForecast: any): ChartPoint[] {
 
   return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
 }
+
+function computeForecastAccuracy(
+  sales: SalesPoint[],
+  forecast: ForecastPoint[]
+): ForecastAccuracy {
+  if (sales.length === 0 || forecast.length === 0) {
+    return { mape: null, rmse: null, n_points: 0 };
+  }
+
+  const actualMap = new Map<string, number>();
+  for (const s of sales) {
+    actualMap.set(s.date, s.quantity);
+  }
+
+  let sqErrSum = 0;
+  let absPctSum = 0;
+  let nRmse = 0;
+  let nMape = 0;
+
+  for (const f of forecast) {
+    const actual = actualMap.get(f.ds);
+    if (actual === undefined) continue;
+
+    const yhat = f.yhat;
+    const err = yhat - actual;
+
+    // RMSE uses all overlapping points
+    sqErrSum += err * err;
+    nRmse += 1;
+
+    // MAPE skips days with 0 actual
+    if (actual !== 0) {
+      absPctSum += Math.abs(err / actual);
+      nMape += 1;
+    }
+  }
+
+  if (nRmse === 0) {
+    return { mape: null, rmse: null, n_points: 0 };
+  }
+
+  const rmse = Math.sqrt(sqErrSum / nRmse);
+  const mape = nMape > 0 ? (absPctSum / nMape) * 100 : null;
+
+  return {
+    mape,
+    rmse,
+    n_points: nRmse,
+  };
+}
+
+function buildErrorSeries(
+  sales: SalesPoint[],
+  forecast: ForecastPoint[]
+): ErrorPoint[] {
+  if (sales.length === 0 || forecast.length === 0) return [];
+
+  const actualMap = new Map<string, number>();
+  for (const s of sales) {
+    actualMap.set(s.date, s.quantity);
+  }
+
+  const points: ErrorPoint[] = [];
+
+  for (const f of forecast) {
+    const actual = actualMap.get(f.ds);
+    if (actual === undefined) continue;
+
+    const absError = Math.abs(f.yhat - actual);
+    points.push({ date: f.ds, absError });
+  }
+
+  // Keep in chronological order
+  return points.sort((a, b) => a.date.localeCompare(b.date));
+}
+
+

@@ -1,112 +1,106 @@
 "use client";
 
-import { useEffect, useState, ChangeEvent } from "react";
-import { useRouter } from "next/navigation";
-import Papa from "papaparse";
+import { useState, useCallback, DragEvent, ChangeEvent } from "react";
 import { API_BASE_URL } from "@/lib/api";
 
-type CsvPreviewRow = Record<string, any>;
+type UploadResult = {
+  filename: string;
+  inserted: number;
+  skipped_missing_product: number;
+  parse_errors: string[];
+  row_errors: string[];
+};
 
-export default function UploadPage() {
-  const router = useRouter();
-
+export default function UploadSalesPage() {
   const [file, setFile] = useState<File | null>(null);
-  const [previewRows, setPreviewRows] = useState<CsvPreviewRow[]>([]);
-  const [columns, setColumns] = useState<string[]>([]);
-  const [parsing, setParsing] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [message, setMessage] = useState<string | null>(null);
+  const [previewRows, setPreviewRows] = useState<string[][]>([]);
+  const [header, setHeader] = useState<string[]>([]);
+  const [dragActive, setDragActive] = useState(false);
+
+  const [loading, setLoading] = useState(false);
+  const [result, setResult] = useState<UploadResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Protect route – require login
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const token = localStorage.getItem("access_token");
-    if (!token) {
-      router.push("/login");
-    }
-  }, [router]);
-
-  function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
-    const f = e.target.files?.[0] || null;
+  // ----- CSV preview -----
+  const handleFileSelected = useCallback((f: File | null) => {
     setFile(f);
-    setPreviewRows([]);
-    setColumns([]);
-    setMessage(null);
+    setResult(null);
     setError(null);
+    setPreviewRows([]);
+    setHeader([]);
 
-    if (f) {
-      parseCsv(f);
-    }
-  }
+    if (!f) return;
 
-  function parseCsv(f: File) {
-    setParsing(true);
-    Papa.parse<CsvPreviewRow>(f, {
-      header: true,
-      dynamicTyping: true,
-      preview: 20, // only first 20 rows for preview
-      skipEmptyLines: true,
-      complete: (results) => {
-        const rows = results.data || [];
-        setPreviewRows(rows);
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const text = String(e.target?.result || "");
+      const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+      if (lines.length === 0) return;
 
-        if (rows.length > 0) {
-          setColumns(Object.keys(rows[0]));
-        }
+      const [headerLine, ...rest] = lines;
+      const headerParts = headerLine.split(",");
 
-        setParsing(false);
+      const rows = rest.slice(0, 20).map((line) => line.split(","));
+      setHeader(headerParts);
+      setPreviewRows(rows);
+    };
+    reader.readAsText(f);
+  }, []);
 
-        // Quick validation hint
-        const required = ["sale_date", "product_id", "units_sold", "revenue"];
-        const missing = required.filter(
-          (col) => !Object.keys(rows[0] || {}).includes(col)
-        );
-        if (missing.length > 0) {
-          setError(
-            `Warning: missing expected columns: ${missing.join(
-              ", "
-            )}. Check your CSV headers.`
-          );
-        }
-      },
-      error: (err) => {
-        console.error(err);
-        setError("Failed to parse CSV file");
-        setParsing(false);
-      },
-    });
-  }
+  const onInputChange = (e: ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0] ?? null;
+    handleFileSelected(f);
+  };
 
+  const onDrop = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    const f = e.dataTransfer.files?.[0];
+    if (f) handleFileSelected(f);
+  };
+
+  const onDragOver = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(true);
+  };
+
+  const onDragLeave = (e: DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+  };
+
+  // ----- Upload to backend -----
   async function handleUpload() {
     if (!file) {
-      setError("Please select a CSV file first.");
+      setError("Please choose a CSV file first.");
       return;
     }
 
-    setUploading(true);
-    setMessage(null);
+    setLoading(true);
     setError(null);
+    setResult(null);
 
     try {
       const formData = new FormData();
-      // Adjust field name if your backend expects something else
       formData.append("file", file);
 
-      let headers: HeadersInit = {};
+      // 🔐 include auth token if present
+      let headers: HeadersInit | undefined = undefined;
       if (typeof window !== "undefined") {
-        const token = localStorage.getItem("access_token");
+        const token = window.localStorage.getItem("access_token");
         if (token) {
-          headers = {
-            Authorization: `Bearer ${token}`,
-          };
+          headers = { Authorization: `Bearer ${token}` };
         }
       }
 
       const res = await fetch(`${API_BASE_URL}/api/sales/upload-csv`, {
         method: "POST",
-        headers,
         body: formData,
+        headers,
       });
 
       if (!res.ok) {
@@ -114,57 +108,60 @@ export default function UploadPage() {
         throw new Error(`Upload failed: ${text}`);
       }
 
-      const text = await res.text(); // backend might return JSON or plain text
-      setMessage(
-        text || "Upload successful. Sales data has been ingested."
-      );
+      const data = (await res.json()) as UploadResult;
+      setResult(data);
     } catch (err: any) {
       console.error(err);
-      setError(err.message || "Failed to upload CSV.");
+      setError(err.message || "Upload failed.");
     } finally {
-      setUploading(false);
+      setLoading(false);
     }
   }
 
   return (
     <div className="space-y-6">
+      {/* Header */}
       <header>
-        <h2 className="text-2xl font-semibold tracking-tight">
-          Upload sales CSV
-        </h2>
-        <p className="text-sm text-slate-600">
-          Import historical sales data to power your forecasts. Expected
-          columns: <code>date</code>, <code>product_id</code>,{" "}
-          <code>units_sold</code>, <code>revenue</code>.
+        <h2 className="text-2xl font-semibold">Upload sales CSV</h2>
+        <p className="mt-1 text-sm text-slate-600">
+          Import historical sales data to power your forecasts. Expected columns:{" "}
+          <span className="font-mono text-xs">
+            product_id, sale_date, units_sold, revenue
+          </span>
+          .
         </p>
       </header>
 
-      {/* File picker */}
-      <section className="rounded-2xl border border-dashed bg-white p-6">
-        <div className="flex flex-col items-center justify-center gap-3 text-center">
-          <p className="text-sm text-slate-700">
-            Drag and drop a CSV file here, or click to choose a file.
-          </p>
+      {/* Dropzone */}
+      <section
+        onDrop={onDrop}
+        onDragOver={onDragOver}
+        onDragLeave={onDragLeave}
+        className={`flex flex-col items-center justify-center rounded-2xl border-2 border-dashed px-4 py-12 text-sm transition ${
+          dragActive ? "border-slate-900 bg-slate-50" : "border-slate-300 bg-white"
+        }`}
+      >
+        <p className="mb-2 text-slate-700">
+          Drag and drop a CSV file here, or click to choose a file.
+        </p>
+        <label className="cursor-pointer rounded-lg border px-3 py-2 text-xs font-medium hover:bg-slate-100">
+          Choose File
           <input
             type="file"
-            accept=".csv,text/csv"
-            onChange={handleFileChange}
-            className="block text-sm"
+            accept=".csv"
+            onChange={onInputChange}
+            className="hidden"
           />
-          {file && (
-            <p className="text-xs text-slate-500">
-              Selected file: <span className="font-medium">{file.name}</span>
-            </p>
-          )}
-          {parsing && (
-            <p className="text-xs text-slate-500">Parsing preview…</p>
-          )}
-        </div>
+        </label>
+
+        <p className="mt-2 text-xs text-slate-500">
+          {file ? `Selected: ${file.name}` : "No file chosen"}
+        </p>
       </section>
 
       {/* Preview */}
-      <section className="rounded-xl border bg-white p-4">
-        <h3 className="mb-3 text-sm font-semibold text-slate-700">
+      <section className="rounded-2xl border bg-white p-4">
+        <h3 className="text-sm font-semibold text-slate-700 mb-2">
           Preview (first 20 rows)
         </h3>
 
@@ -174,23 +171,18 @@ export default function UploadPage() {
           </p>
         )}
 
-        {file && previewRows.length === 0 && !parsing && (
-          <p className="text-sm text-slate-500">
-            No rows found in this CSV (or headers only).
-          </p>
+        {file && previewRows.length === 0 && (
+          <p className="text-sm text-slate-500">Reading file…</p>
         )}
 
         {file && previewRows.length > 0 && (
-          <div className="max-h-64 overflow-auto border rounded-lg">
+          <div className="max-h-72 overflow-auto border rounded-lg">
             <table className="min-w-full text-xs">
-              <thead className="bg-slate-50 border-b text-slate-500">
+              <thead className="bg-slate-50 border-b text-slate-600">
                 <tr>
-                  {columns.map((col) => (
-                    <th
-                      key={col}
-                      className="px-3 py-2 text-left whitespace-nowrap"
-                    >
-                      {col}
+                  {header.map((h, idx) => (
+                    <th key={idx} className="px-3 py-2 text-left font-medium">
+                      {h}
                     </th>
                   ))}
                 </tr>
@@ -198,12 +190,9 @@ export default function UploadPage() {
               <tbody>
                 {previewRows.map((row, idx) => (
                   <tr key={idx} className="border-b last:border-b-0">
-                    {columns.map((col) => (
-                      <td
-                        key={col}
-                        className="px-3 py-1.5 whitespace-nowrap"
-                      >
-                        {String(row[col] ?? "")}
+                    {row.map((cell, cidx) => (
+                      <td key={cidx} className="px-3 py-1.5 text-slate-700">
+                        {cell}
                       </td>
                     ))}
                   </tr>
@@ -214,27 +203,86 @@ export default function UploadPage() {
         )}
       </section>
 
-      {/* Messages + Upload button */}
+      {/* Actions + result */}
       <section className="space-y-3">
+        <button
+          type="button"
+          onClick={handleUpload}
+          disabled={loading || !file}
+          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-40"
+        >
+          {loading ? "Uploading…" : "Upload CSV"}
+        </button>
+
         {error && (
-          <p className="text-sm text-red-600">
+          <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded px-3 py-2">
             {error}
           </p>
         )}
-        {message && (
-          <p className="text-sm text-emerald-600">
-            {message}
-          </p>
+
+        {result && (
+          <div className="rounded-xl border bg-white p-4 text-sm space-y-2">
+            <p>
+              <span className="font-medium">File:</span>{" "}
+              <span className="text-slate-800">{result.filename}</span>
+            </p>
+            <p>
+              <span className="font-medium">Inserted rows:</span>{" "}
+              {result.inserted.toLocaleString()}
+            </p>
+            <p>
+              <span className="font-medium">Skipped (missing product):</span>{" "}
+              {result.skipped_missing_product.toLocaleString()}
+            </p>
+
+            {(result.parse_errors.length > 0 ||
+              result.row_errors.length > 0) && (
+              <div className="pt-2 space-y-2">
+                {result.parse_errors.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-red-700">
+                      Parse errors
+                    </p>
+                    <ul className="mt-1 list-disc pl-4 text-xs text-red-700">
+                      {result.parse_errors.map((e, idx) => (
+                        <li key={idx}>{e}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+
+                {result.row_errors.length > 0 && (
+                  <div>
+                    <p className="text-xs font-semibold text-amber-700">
+                      Row-level issues
+                    </p>
+                    <ul className="mt-1 list-disc pl-4 text-xs text-amber-700">
+                      {result.row_errors.map((e, idx) => (
+                        <li key={idx}>{e}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            )}
+
+            {result.parse_errors.length === 0 &&
+              result.row_errors.length === 0 && (
+                <p className="text-xs text-emerald-700 bg-emerald-50 border border-emerald-100 rounded px-3 py-2 mt-2">
+                  Upload completed with no reported errors.
+                </p>
+              )}
+          </div>
         )}
 
-        <button
-          onClick={handleUpload}
-          disabled={!file || uploading}
-          className="rounded-lg bg-slate-900 px-4 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
-        >
-          {uploading ? "Uploading…" : "Upload CSV"}
-        </button>
+        {!result && !error && !loading && (
+          <p className="text-xs text-slate-500">
+            No upload yet — choose a CSV and click{" "}
+            <span className="font-medium">Upload CSV</span>.
+          </p>
+        )}
       </section>
     </div>
   );
 }
+
