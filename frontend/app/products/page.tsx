@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState, FormEvent } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 
@@ -38,10 +38,17 @@ export default function ProductsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  const [recommendations, setRecommendations] = useState<RecommendationsMap>({});
+  const [recommendations, setRecommendations] =
+    useState<RecommendationsMap>({});
   const [recsLoading, setRecsLoading] = useState(false);
 
-  const [showAddProductModal, setShowAddProductModal] = useState(false);
+  // Stable date label
+  const todayLabel = new Date().toLocaleDateString("en-US", {
+    weekday: "long",
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -103,164 +110,227 @@ export default function ProductsPage() {
 
     if (typeof window !== "undefined") {
       if (value === "all") {
-        // If "All bakeries", clear the shared selection
         window.localStorage.removeItem(BAKERY_STORAGE_KEY);
       } else {
-        // Otherwise, keep in sync with dashboard/sidebar
         window.localStorage.setItem(BAKERY_STORAGE_KEY, value);
       }
     }
   }
 
-  const canAddProduct =
-    bakeries.length > 0 && selectedBakeryId !== "all";
-
   return (
-    <div className="space-y-4">
-      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        <h2 className="text-2xl font-semibold">Products</h2>
+    <div className="space-y-6">
+      {/* Header */}
+      <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="space-y-1">
+          <h1 className="text-2xl font-semibold tracking-tight">Products</h1>
+          <p className="text-sm text-slate-600">
+            SKU list with bake recommendations per product.
+          </p>
+          <p className="text-xs text-slate-500">
+            {todayLabel}
+          </p>
+        </div>
 
-        <div className="flex items-center gap-3">
-          {/* Bakery selector */}
+        <div className="flex flex-col items-end gap-2">
+          {/* Bakery filter */}
           <div className="flex items-center gap-2 text-sm">
-            <span className="text-slate-600">Bakery:</span>
+            <span className="text-slate-600">Current bakery</span>
 
             {bakeries.length === 0 ? (
               <span className="text-xs text-slate-500 italic">
                 No bakeries yet
               </span>
             ) : (
-              <select
-                value={selectedBakeryId}
-                onChange={(e) => handleBakeryChange(e.target.value)}
-                className="rounded-lg border px-2 py-1 text-sm outline-none focus:ring-2 focus:ring-slate-500"
-              >
-                <option value="all">All bakeries</option>
-                {bakeries.map((b) => (
-                  <option key={b.id} value={String(b.id)}>
-                    {b.name}
-                  </option>
-                ))}
-              </select>
+              <div className="relative">
+                <select
+                  value={selectedBakeryId}
+                  onChange={(e) => handleBakeryChange(e.target.value)}
+                  className="appearance-none rounded-full border border-slate-200 bg-white px-4 py-1.5 text-xs font-medium text-slate-800 shadow-sm pr-8 outline-none focus:ring-2 focus:ring-amber-400"
+                >
+                  <option value="all">All bakeries</option>
+                  {bakeries.map((b) => (
+                    <option key={b.id} value={String(b.id)}>
+                      {b.name}
+                    </option>
+                  ))}
+                </select>
+                <span className="pointer-events-none absolute inset-y-0 right-2 flex items-center text-[10px] text-slate-400">
+                  ▾
+                </span>
+              </div>
             )}
           </div>
 
-          {/* Add product button */}
-          <button
-            type="button"
-            onClick={() => setShowAddProductModal(true)}
-            disabled={!canAddProduct}
-            className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-40"
-          >
-            + Add product
-          </button>
+          {/* Tiny legend for tomorrow bake */}
+          <p className="text-[11px] text-slate-500">
+            Tomorrow&apos;s bake uses P50 from your forecast.
+          </p>
         </div>
-      </div>
+      </header>
 
-      {loading && <p>Loading…</p>}
-      {error && <p className="text-red-600">Error: {error}</p>}
+      {loading && <p className="text-sm text-slate-500">Loading…</p>}
+      {error && <p className="text-sm text-red-600">Error: {error}</p>}
 
       {!loading && !error && (
-        <div className="overflow-x-auto border bg-white rounded-lg">
-          <table className="min-w-full text-sm">
-            <thead className="bg-slate-50 border-b text-slate-500">
-              <tr>
-                <th className="px-4 py-2 text-left">ID</th>
-                <th className="px-4 py-2 text-left">Name</th>
-                <th className="px-4 py-2 text-left">SKU</th>
-                <th className="px-4 py-2 text-left">Bakery</th>
-                <th className="px-4 py-2 text-right">
-                  Tomorrow&apos;s bake (P50)
-                </th>
-              </tr>
-            </thead>
+        <section className="rounded-2xl border bg-white/80 shadow-sm">
+          <div className="flex items-center justify-between border-b px-4 py-3">
+            <div className="flex items-center gap-2">
+              <h2 className="text-sm font-semibold text-slate-800">
+                Product list
+              </h2>
+              <span className="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-600">
+                {filteredProducts.length} SKUs
+              </span>
+            </div>
+          </div>
 
-            <tbody>
-              {/* No bakeries at all */}
-              {bakeries.length === 0 && (
+          <div className="overflow-x-auto">
+            <table className="min-w-full text-sm">
+              <thead className="border-b bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                  <td
-                    colSpan={5}
-                    className="px-4 py-6 text-center text-slate-500"
-                  >
-                    No bakeries found — create one before adding products.
-                  </td>
+                  <th className="px-4 py-2 text-left">ID</th>
+                  <th className="px-4 py-2 text-left">Name</th>
+                  <th className="px-4 py-2 text-left">SKU</th>
+                  <th className="px-4 py-2 text-left">Bakery</th>
+                  <th className="px-4 py-2 text-right">
+                    Tomorrow&apos;s bake (P50)
+                  </th>
                 </tr>
-              )}
+              </thead>
 
-              {/* Bakeries exist but no products */}
-              {bakeries.length > 0 && products.length === 0 && (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="px-4 py-6 text-center text-slate-500"
-                  >
-                    No products found for this bakery yet.
-                  </td>
-                </tr>
-              )}
-
-              {/* Products exist but filter removes all */}
-              {bakeries.length > 0 &&
-                products.length > 0 &&
-                filteredProducts.length === 0 && (
+              <tbody>
+                {/* No bakeries at all */}
+                {bakeries.length === 0 && (
                   <tr>
                     <td
                       colSpan={5}
-                      className="px-4 py-6 text-center text-slate-500"
+                      className="px-4 py-8 text-center text-slate-500 text-sm"
                     >
-                      No products match this bakery.
+                      <div className="inline-flex flex-col items-center gap-1">
+                        <span className="text-lg">🏪</span>
+                        <span className="font-medium">
+                          No bakeries found.
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          Create a bakery in the backend before adding
+                          products.
+                        </span>
+                      </div>
                     </td>
                   </tr>
                 )}
 
-              {/* Show products */}
-              {filteredProducts.map((p) => {
-                const rec = recommendations[p.id];
-                const bakeryName =
-                  bakeries.find((b) => b.id === p.bakery_id)?.name || "—";
-
-                return (
-                  <tr key={p.id} className="border-b last:border-b-0">
-                    <td className="px-4 py-2">{p.id}</td>
-
-                    <td className="px-4 py-2 font-medium">
-                      <Link
-                        href={`/products/${p.id}`}
-                        className="text-blue-600 hover:underline"
-                      >
-                        {p.name}
-                      </Link>
-                    </td>
-
-                    <td className="px-4 py-2">{p.sku || "—"}</td>
-                    <td className="px-4 py-2">{bakeryName}</td>
-
-                    <td className="px-4 py-2 text-right">
-                      {recsLoading && rec === undefined && "…"}
-                      {!recsLoading && rec === undefined && "—"}
-                      {rec !== undefined && rec !== null && Math.round(rec)}
-                      {rec !== undefined && rec === null && "—"}
+                {/* Bakeries exist but no products */}
+                {bakeries.length > 0 && products.length === 0 && (
+                  <tr>
+                    <td
+                      colSpan={5}
+                      className="px-4 py-8 text-center text-slate-500 text-sm"
+                    >
+                      <div className="inline-flex flex-col items-center gap-1">
+                        <span className="text-lg">🧁</span>
+                        <span className="font-medium">
+                          No products yet.
+                        </span>
+                        <span className="text-xs text-slate-500">
+                          Add your first product so BAKEZY can start
+                          forecasting.
+                        </span>
+                      </div>
                     </td>
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      )}
+                )}
 
-      {/* Add Product Modal */}
-      {showAddProductModal && (
-        <AddProductModal
-          bakeryId={
-            selectedBakeryId === "all" ? null : Number(selectedBakeryId)
-          }
-          onClose={() => setShowAddProductModal(false)}
-          onCreated={(newProduct) => {
-            setProducts((prev) => [...prev, newProduct]);
-          }}
-        />
+                {/* Products exist but filter removes all */}
+                {bakeries.length > 0 &&
+                  products.length > 0 &&
+                  filteredProducts.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="px-4 py-8 text-center text-slate-500 text-sm"
+                      >
+                        <div className="inline-flex flex-col items-center gap-1">
+                          <span className="text-lg">🔍</span>
+                          <span className="font-medium">
+                            No products match this bakery.
+                          </span>
+                          <span className="text-xs text-slate-500">
+                            Try switching the bakery filter back to{" "}
+                            <span className="font-semibold">All bakeries</span>.
+                          </span>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+
+                {/* Show products */}
+                {filteredProducts.map((p, idx) => {
+                  const rec = recommendations[p.id];
+                  const bakeryName =
+                    bakeries.find((b) => b.id === p.bakery_id)?.name || "—";
+
+                  const isStripe = idx % 2 === 1;
+
+                  return (
+                    <tr
+                      key={p.id}
+                      className={`border-b last:border-b-0 ${
+                        isStripe ? "bg-slate-50/50" : "bg-white"
+                      } hover:bg-amber-50/40 transition-colors`}
+                    >
+                      <td className="px-4 py-2 align-middle text-xs text-slate-500">
+                        {p.id}
+                      </td>
+
+                      <td className="px-4 py-2 align-middle font-medium text-slate-900">
+                        <Link
+                          href={`/products/${p.id}`}
+                          className="text-sm text-slate-900 hover:text-amber-700 hover:underline"
+                        >
+                          {p.name}
+                        </Link>
+                      </td>
+
+                      <td className="px-4 py-2 align-middle text-sm text-slate-700">
+                        {p.sku || (
+                          <span className="text-xs italic text-slate-400">
+                            none
+                          </span>
+                        )}
+                      </td>
+
+                      <td className="px-4 py-2 align-middle text-sm">
+                        <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700">
+                          {bakeryName}
+                        </span>
+                      </td>
+
+                      <td className="px-4 py-2 align-middle text-right text-sm">
+                        {recsLoading && rec === undefined && (
+                          <span className="text-xs text-slate-400">
+                            loading…
+                          </span>
+                        )}
+                        {!recsLoading && rec === undefined && (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
+                        {rec !== undefined && rec !== null && (
+                          <span className="font-semibold text-slate-900">
+                            {Math.round(rec)}
+                          </span>
+                        )}
+                        {rec !== undefined && rec === null && (
+                          <span className="text-xs text-slate-400">—</span>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </section>
       )}
     </div>
   );
@@ -298,113 +368,6 @@ async function fetchRecommendations(
   return recs;
 }
 
-type AddProductModalProps = {
-  bakeryId: number | null;
-  onClose: () => void;
-  onCreated: (p: Product) => void;
-};
-
-function AddProductModal({
-  bakeryId,
-  onClose,
-  onCreated,
-}: AddProductModalProps) {
-  const [name, setName] = useState("");
-  const [sku, setSku] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-
-  async function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setError(null);
-
-    if (!bakeryId) {
-      setError("Please select a bakery first.");
-      return;
-    }
-
-    try {
-      setLoading(true);
-      const newProduct = await apiFetch<Product>("/api/products/", {
-        method: "POST",
-        body: JSON.stringify({
-          name,
-          sku: sku || null,
-          bakery_id: bakeryId,
-        }),
-      });
-
-      onCreated(newProduct);
-      onClose();
-    } catch (err: any) {
-      console.error(err);
-      setError(err.message || "Failed to create product");
-    } finally {
-      setLoading(false);
-    }
-  }
-
-  return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
-      <div className="w-full max-w-md rounded-xl bg-white p-6 shadow-xl">
-        <h3 className="text-lg font-semibold">Add product</h3>
-        <p className="mt-1 text-xs text-slate-600">
-          Create a new product for the selected bakery.
-        </p>
-
-        <form onSubmit={handleSubmit} className="mt-4 space-y-4">
-          <div>
-            <label className="block text-xs font-medium text-slate-600">
-              Name
-            </label>
-            <input
-              type="text"
-              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-500"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              required
-            />
-          </div>
-
-          <div>
-            <label className="block text-xs font-medium text-slate-600">
-              SKU (optional)
-            </label>
-            <input
-              type="text"
-              className="mt-1 w-full rounded-lg border px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-slate-500"
-              value={sku}
-              onChange={(e) => setSku(e.target.value)}
-            />
-          </div>
-
-          {error && (
-            <p className="text-xs text-red-600 bg-red-50 border border-red-100 rounded px-3 py-2">
-              {error}
-            </p>
-          )}
-
-          <div className="flex justify-end gap-2 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg px-3 py-2 text-sm hover:bg-slate-100"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={loading}
-              className="rounded-lg bg-slate-900 px-3 py-2 text-sm font-medium text-white hover:bg-slate-800 disabled:opacity-50"
-            >
-              {loading ? "Saving…" : "Create product"}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
-  );
-}
 
 
 
