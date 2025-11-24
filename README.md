@@ -1,1 +1,1 @@
-# Daily Dough - local dev running.
+# Daily Dough - local dev running. This is the second version with better ML implementation
