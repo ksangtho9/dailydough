@@ -122,7 +122,7 @@ export default function ProductsPage() {
       {/* Header */}
       <header className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="space-y-1">
-          <h1 className="text-2xl font-semibold tracking-tight">Products</h1>
+          <h1 className="text-2xl font-semibold tracking-tight text-[#0f172a]">Products</h1>
           <p className="text-sm text-slate-600">
             SKU list with bake recommendations per product.
           </p>

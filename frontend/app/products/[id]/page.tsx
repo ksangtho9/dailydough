@@ -104,6 +104,7 @@ export default function ProductDetailPage() {
 
         setSalesRaw(salesData);
         setForecastRaw(forecastData);
+        console.log("forecastData from API", forecastData);
 
         const normalizedForecast = normalizeForecast(forecastData);
         if (normalizedForecast.length > 0) {
@@ -136,10 +137,12 @@ export default function ProductDetailPage() {
       {/* Header */}
       <header className="flex items-center justify-between">
         <div>
-          <h2 className="text-2xl font-semibold tracking-tight">{title}</h2>
-          <p className="text-sm text-slate-600">
-            Sales history and demand forecast.
-          </p>
+        <h2 className="text-2xl font-semibold tracking-tight text-slate-900">
+          {title}
+        </h2>
+        <p className="text-sm text-slate-700">
+          Sales history and demand forecast.
+        </p>
         </div>
 
         <Link
@@ -153,8 +156,8 @@ export default function ProductDetailPage() {
       {/* How many to bake */}
       <section className="grid gap-4 md:grid-cols-3">
         <div className="rounded-xl border bg-white p-4">
-          <p className="text-xs uppercase text-slate-500">RECOMMENDED BAKE</p>
-          <p className="mt-2 text-2xl font-semibold">
+          <p className="text-xs uppercase text-slate-700">RECOMMENDED BAKE</p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">
             {recommendedP50 !== null ? Math.round(recommendedP50) : "—"}
           </p>
           <p className="mt-1 text-xs text-slate-500">
@@ -163,8 +166,8 @@ export default function ProductDetailPage() {
         </div>
 
         <div className="rounded-xl border bg-white p-4">
-          <p className="text-xs uppercase text-slate-500">SAFE LOW</p>
-          <p className="mt-2 text-2xl font-semibold">
+          <p className="text-xs uppercase text-slate-700">SAFE LOW</p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">
             {recommendedLow !== null ? Math.round(recommendedLow) : "—"}
           </p>
           <p className="mt-1 text-xs text-slate-500">
@@ -173,11 +176,11 @@ export default function ProductDetailPage() {
         </div>
 
         <div className="rounded-xl border bg-white p-4">
-          <p className="text-xs uppercase text-slate-500">SAFE HIGH</p>
-          <p className="mt-2 text-2xl font-semibold">
+          <p className="text-xs uppercase text-slate-700">SAFE HIGH</p>
+          <p className="mt-2 text-2xl font-semibold text-slate-900">
             {recommendedHigh !== null ? Math.round(recommendedHigh) : "—"}
           </p>
-          <p className="mt-1 text-xs text-slate-500">
+          <p className="mt-1 text-xs text-slate-700">
             P90 — fewer stockouts, more risk of leftovers
           </p>
         </div>
@@ -211,12 +214,14 @@ export default function ProductDetailPage() {
                   type="monotone"
                   dataKey="actual"
                   name="Actual sales"
+                  stroke="#1e293b"
                   dot={false}
                 />
                 <Line
                   type="monotone"
                   dataKey="forecast"
                   name="Forecast (P50)"
+                  stroke="#1e293b"
                   strokeDasharray="5 5"
                   dot={false}
                 />
@@ -224,12 +229,14 @@ export default function ProductDetailPage() {
                   type="monotone"
                   dataKey="lower"
                   name="Lower bound (P10)"
+                  stroke="#1e293b"
                   dot={false}
                 />
                 <Line
                   type="monotone"
                   dataKey="upper"
                   name="Upper bound (P90)"
+                  stroke="#1e293b"
                   dot={false}
                 />
               </LineChart>
@@ -333,7 +340,8 @@ export default function ProductDetailPage() {
           ) : (
             <div className="max-h-64 overflow-auto">
               <table className="min-w-full text-xs">
-                <thead className="bg-slate-50 border-b text-slate-500">
+                <thead className="bg-slate-100 border-b text-slate-800">
+
                   <tr>
                     <th className="px-3 py-2 text-left">Date</th>
                     <th className="px-3 py-2 text-right">Units sold</th>
@@ -383,14 +391,15 @@ export default function ProductDetailPage() {
                       key={`${row.ds}-${idx}`}
                       className="border-b last:border-b-0"
                     >
-                      <td className="px-3 py-1.5">{row.ds}</td>
-                      <td className="px-3 py-1.5 text-right">
-                        {Math.round(row.yhat)}
+                      <td className="px-3 py-1.5 text-slate-800">{row.ds}</td>
+                      <td className="px-3 py-1.5 text-right text-slate-800">
+                      {Math.round(row.yhat)}
                       </td>
-                      <td className="px-3 py-1.5 text-right">
+
+                      <td className="px-3 py-1.5 text-right text-slate-800">
                         {Math.round(row.yhat_lower)}
                       </td>
-                      <td className="px-3 py-1.5 text-right">
+                      <td className="px-3 py-1.5 text-right text-slate-800">
                         {Math.round(row.yhat_upper)}
                       </td>
                     </tr>
@@ -431,19 +440,40 @@ function normalizeSales(rawSales: any): SalesPoint[] {
 
 // Normalize forecast into a consistent array
 function normalizeForecast(rawForecast: any): ForecastPoint[] {
-  const forecast: any[] = Array.isArray(rawForecast)
-    ? rawForecast
-    : rawForecast?.forecast || rawForecast?.data || [];
+  if (!rawForecast) return [];
+
+  // If backend sent an error object instead of data
+  if (rawForecast.detail) {
+    console.warn("Forecast error from API:", rawForecast.detail);
+    return [];
+  }
+
+  let forecast: any[] = [];
+
+  if (Array.isArray(rawForecast)) {
+    // Plain list of points
+    forecast = rawForecast;
+  } else if (Array.isArray(rawForecast.forecast)) {
+    // { forecast: [...] }
+    forecast = rawForecast.forecast;
+  } else if (Array.isArray(rawForecast.data)) {
+    // { data: [...] }
+    forecast = rawForecast.data;
+  } else if (Array.isArray(rawForecast.points)) {
+    // { points: [...] }
+    forecast = rawForecast.points;
+  }
 
   return forecast
     .map((f) => ({
-      ds: f.ds || f.date,
-      yhat: f.yhat ?? f.forecast ?? 0,
-      yhat_lower: f.yhat_lower ?? f.lower ?? 0,
-      yhat_upper: f.yhat_upper ?? f.upper ?? 0,
+      ds: f.ds || f.date, // support "ds" or "date"
+      yhat: f.yhat ?? f.forecast ?? f.p50 ?? 0,
+      yhat_lower: f.yhat_lower ?? f.lower ?? f.p10 ?? 0,
+      yhat_upper: f.yhat_upper ?? f.upper ?? f.p90 ?? 0,
     }))
     .filter((f) => !!f.ds);
 }
+
 
 function buildChartData(rawSales: any, rawForecast: any): ChartPoint[] {
   const sales = normalizeSales(rawSales);
