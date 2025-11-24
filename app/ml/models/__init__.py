@@ -1,9 +1,23 @@
-"""
-Model wrappers for BAKEZY.
+"""Forecasting model implementations."""
 
-Each model module should expose a class with a unified interface:
+from .base_model import BaseForecastModel
+from .prophet_model import ProphetForecastModel, ProphetModel, ProphetConfig
+from .lightgbm_model import LightGBMModel, LightGBMConfig
+from .neuralprophet_model import NeuralProphetModel, NeuralProphetConfig
+from .tft_model import TFTModel, TFTConfig
+from .sarima_model import SARIMAModel, SARIMAConfig
 
-class SomeModel:
-    def fit(self, df: pd.DataFrame) -> None: ...
-    def predict(self, horizon_days: int) -> pd.DataFrame: ...
-"""
+__all__ = [
+    "BaseForecastModel",
+    "ProphetForecastModel",
+    "ProphetModel",  # Backward compatibility alias
+    "ProphetConfig",
+    "LightGBMModel",
+    "LightGBMConfig",
+    "NeuralProphetModel",
+    "NeuralProphetConfig",
+    "TFTModel",
+    "TFTConfig",
+    "SARIMAModel",
+    "SARIMAConfig",
+]

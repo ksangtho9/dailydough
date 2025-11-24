@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.database.database import get_db
 from app.api.auth import get_current_user
-from app.ml.forecast_service import ForecastService
+from app.ml.inference.forecast_service import ForecastService
 from app.schemas import sales_record
 
 logger = logging.getLogger("bakezy.forecast.api")

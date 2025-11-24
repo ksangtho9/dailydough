@@ -1,10 +1,7 @@
 """
-ML package for BAKEZY.
+ML Engine for DailyDough forecasting.
 
-Contains:
-- preprocessing: raw → cleaned time series
-- features: feature engineering
-- models: model wrappers (Prophet, XGBoost, etc.)
-- trainer: training utilities
-- forecaster: high-level forecast orchestration
+This module provides a modular ML engine supporting multiple forecasting models
+(Prophet, LightGBM, TFT, NeuralProphet), feature engineering, training pipelines,
+and inference.
 """
