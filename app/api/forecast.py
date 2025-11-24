@@ -4,7 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.database.database import get_db
 from app.api.auth import get_current_user
-from app.ml.inference.forecast_service import ForecastService
+from app.ml.inference.forecast_service import get_forecast_for_product
 from app.schemas import sales_record
 
 logger = logging.getLogger("bakezy.forecast.api")
@@ -36,14 +36,12 @@ def forecast_product_sales(
     """
 
     # You might later enforce "product belongs to this user"
-    # using current_user + bakery ownership. For now, ForecastService
+    # using current_user + bakery ownership. For now, the service
     # just validates product existence & sales data.
-
-    service = ForecastService()
 
     # Handle Prophet not installed
     try:
-        forecast_result = service.generate_prophet_forecast_for_product(
+        forecast_result = get_forecast_for_product(
             db=db,
             product_id=product_id,
             horizon_days=horizon_days,
@@ -82,9 +80,10 @@ def forecast_product_sales(
         ) from e
 
     # Map dataclass → Pydantic response model
+    from datetime import date as date_type
     points = [
         sales_record.ForecastPointOut(
-            date=p.date,
+            date=date_type.fromisoformat(p.date) if isinstance(p.date, str) else p.date,
             yhat=p.yhat,
             yhat_lower=p.yhat_lower,
             yhat_upper=p.yhat_upper,
