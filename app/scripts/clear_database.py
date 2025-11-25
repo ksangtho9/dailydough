@@ -40,3 +40,4 @@ def clear_database() -> None:
 if __name__ == "__main__":
     clear_database()
 
+

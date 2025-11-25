@@ -47,3 +47,4 @@ def train_all_products(
         if owns_session:
             db.close()
 
+

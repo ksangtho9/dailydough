@@ -22,3 +22,4 @@ export function ForecastConfidenceBadge({ metrics }: Props) {
   return <span className={className}>{meta.label}</span>;
 }
 
+

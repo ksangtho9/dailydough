@@ -93,3 +93,4 @@ export function ProductWeekdayPatternChart({ productId }: Props) {
   );
 }
 
+

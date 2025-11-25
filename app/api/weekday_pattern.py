@@ -76,3 +76,4 @@ def get_weekday_pattern(
         points=points,
     )
 
+

@@ -14,3 +14,4 @@ class WeekdayPatternResponse(BaseModel):
     window_days: int
     points: List[WeekdayValue]
 
+

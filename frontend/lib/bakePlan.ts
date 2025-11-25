@@ -21,3 +21,4 @@ export async function fetchBakePlan(
   return apiFetch<BakePlanResponse>(`/api/bakeries/${bakeryId}/bake-plan${params}`);
 }
 
+

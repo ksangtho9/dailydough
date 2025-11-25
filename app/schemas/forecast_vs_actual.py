@@ -14,3 +14,4 @@ class ForecastVsActualResponse(BaseModel):
     window_days: int
     points: List[ForecastVsActualPoint]
 
+

@@ -14,3 +14,4 @@ class TopProductsResponse(BaseModel):
     window_days: int
     items: List[TopProductItem]
 
+

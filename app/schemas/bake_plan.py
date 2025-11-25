@@ -16,3 +16,4 @@ class BakePlanResponse(BaseModel):
     date: date
     items: List[BakePlanItem]
 
+

@@ -13,3 +13,4 @@ class DashboardSummaryResponse(BaseModel):
     forecast_accuracy_pct: Optional[float] = None
     high_risk_items: int
 
+

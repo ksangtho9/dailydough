@@ -120,3 +120,4 @@ def get_dashboard_summary(
         high_risk_items=high_risk_items,
     )
 
+

@@ -17,3 +17,4 @@ def debug_db_stats(db: Session = Depends(get_db)):
         "sales": db.query(SalesRecord).count(),
     }
 
+
