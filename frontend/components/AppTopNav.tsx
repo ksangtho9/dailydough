@@ -97,7 +97,7 @@ export function AppTopNav() {
         <div className="flex flex-wrap items-center gap-3">
           <Link
             href="/dashboard"
-            className="text-lg font-semibold tracking-tight text-slate-900 hover:text-amber-700"
+            className="text-3xl font-bold tracking-tight text-slate-900 hover:text-amber-700"
           >
             Daily Dough
           </Link>

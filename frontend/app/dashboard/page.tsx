@@ -81,7 +81,7 @@ export default function DashboardPage() {
       setPlanLoading(true);
       setPlanError(null);
       try {
-        const data = await fetchBakePlan(bakeryId);
+        const data = await fetchBakePlan(bakeryId!);
         if (!cancelled) {
           setBakePlan(data);
         }
@@ -114,7 +114,7 @@ export default function DashboardPage() {
       setSummaryLoading(true);
       setSummaryError(null);
       try {
-        const data = await fetchDashboardSummary(bakeryId);
+        const data = await fetchDashboardSummary(bakeryId!);
         if (!cancelled) {
           setDashboardSummary(data);
         }
@@ -214,11 +214,6 @@ export default function DashboardPage() {
   if (!bakeryId) {
     return (
       <div className="space-y-6">
-        <header>
-          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
-            Daily Dough
-          </h1>
-        </header>
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <p className="text-sm text-slate-600">
             No bakery selected yet. Go to the{" "}
@@ -234,22 +229,17 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
-          Daily Dough
-        </h1>
-      </header>
 
-      <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+      <section className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         {summaryCards.map((card) => (
           <div
             key={card.title}
-            className={`rounded-2xl px-5 py-4 ${card.accent}`}
+            className={`rounded-xl p-8 shadow-sm min-h-[160px] ${card.accent}`}
           >
-            <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
+            <p className="text-sm font-semibold uppercase tracking-wide text-slate-600">
               {card.title}
             </p>
-            <p className="mt-3 text-3xl font-semibold text-slate-900">
+            <p className="mt-3 text-3xl font-bold text-slate-900">
               {card.value}
             </p>
             <p className="mt-1 text-xs text-slate-500">{card.helper}</p>
@@ -280,8 +270,8 @@ export default function DashboardPage() {
       </div>
 
       {activeTab === "bake" && (
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
-          <section className="rounded-3xl border border-amber-100 bg-white p-5 shadow-sm">
+        <div className="grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <section className="rounded-xl border border-amber-100 bg-white p-8 shadow-sm min-h-[250px]">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
                 <p className="text-xs uppercase text-slate-600">
@@ -381,7 +371,7 @@ export default function DashboardPage() {
             </div>
           </section>
 
-          <section className="rounded-3xl border border-amber-100 bg-white p-5 shadow-sm">
+          <section className="rounded-xl border border-amber-100 bg-white p-8 shadow-sm min-h-[250px]">
             <div>
               <h3 className="text-sm font-semibold text-slate-900">
                 Forecast drivers
@@ -402,7 +392,7 @@ export default function DashboardPage() {
       )}
 
       {activeTab === "accuracy" && (
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
+        <section className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm min-h-[250px] space-y-4">
           <div>
             <h3 className="text-lg font-semibold text-slate-900">
               Model accuracy
@@ -416,15 +406,15 @@ export default function DashboardPage() {
       )}
 
       {activeTab === "insights" && (
-        <section className="grid gap-4 lg:grid-cols-2">
+        <section className="grid gap-6 lg:grid-cols-2">
           {bakeryId ? (
             <TopProductsCard bakeryId={bakeryId} />
           ) : (
-            <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm text-sm text-slate-600">
+            <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm min-h-[250px] text-sm text-slate-600">
               Select a bakery to view top products.
             </div>
           )}
-          <div className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm">
+          <div className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm min-h-[250px]">
             <h3 className="text-sm font-semibold text-slate-900">
               Getting started
             </h3>

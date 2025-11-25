@@ -74,7 +74,7 @@ export function TomorrowsBakePlanCard({ bakeryId }: Props) {
           )}
           {!loading && !error && data && data.items.length === 0 && (
             <p className="text-sm text-slate-500">
-              No forecasted units for tomorrow yet. Upload data or retrain models to populate the plan.
+              No forecasted units for tomorrow yet. Upload data to populate the plan. Models train automatically.
             </p>
           )}
           {!loading && !error && data && data.items.length > 0 && (

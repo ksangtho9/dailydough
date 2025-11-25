@@ -459,10 +459,10 @@ export default function DataUploadPage() {
                 View products
               </Link>
               <Link
-                href="/plan"
+                href="/dashboard"
                 className="rounded-full bg-slate-900 px-4 py-2 text-sm font-semibold text-white hover:bg-slate-800"
               >
-                Train models
+                View dashboard
               </Link>
             </div>
           </div>
