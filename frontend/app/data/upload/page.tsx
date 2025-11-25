@@ -5,10 +5,12 @@ import {
   ChangeEvent,
   DragEvent,
   useCallback,
+  useEffect,
   useMemo,
   useState,
 } from "react";
 import { API_BASE_URL } from "@/lib/api";
+import { BAKERY_SELECTION_CHANGED_EVENT } from "@/lib/bakeries";
 
 const REQUIRED_ROLES = ["date", "product_id", "product_name", "quantity"] as const;
 type Role = (typeof REQUIRED_ROLES)[number];
@@ -42,10 +44,10 @@ const ROLE_LABEL: Record<Role, string> = {
 };
 
 const ROLE_DESCRIPTION: Record<Role, string> = {
-  date: "Calendar date for the sale",
-  product_id: "SKU / external identifier",
-  product_name: "Human readable product name",
-  quantity: "Units sold for that date",
+  date: "Calendar date for the sale (e.g., date, sale_date)",
+  product_id: "SKU / external identifier (e.g., Product Code, SKU, product_id)",
+  product_name: "Human readable product name (e.g., Product Name)",
+  quantity: "Units sold for that date (e.g., Sales Qty, quantity, qty)",
 };
 
 const createEmptyMapping = (): MappingState =>
@@ -56,6 +58,8 @@ const createEmptyMapping = (): MappingState =>
     },
     {} as MappingState,
   );
+
+const STORAGE_KEY = "current_bakery_id";
 
 export default function DataUploadPage() {
   const [file, setFile] = useState<File | null>(null);
@@ -69,8 +73,42 @@ export default function DataUploadPage() {
   const [availableColumns, setAvailableColumns] = useState<string[]>([]);
   const [mapping, setMapping] = useState<MappingState>(createEmptyMapping());
   const [mappingError, setMappingError] = useState<string | null>(null);
+  const [bakeryId, setBakeryId] = useState<number | null>(null);
 
   const hasFile = Boolean(file);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const stored = window.localStorage.getItem(STORAGE_KEY);
+    if (stored) {
+      const asNum = Number(stored);
+      if (!Number.isNaN(asNum)) {
+        setBakeryId(asNum);
+      }
+    }
+
+    function handleSelectionChange() {
+      if (typeof window === "undefined") return;
+      const stored = window.localStorage.getItem(STORAGE_KEY);
+      if (!stored) {
+        setBakeryId(null);
+        return;
+      }
+      const asNum = Number(stored);
+      setBakeryId(Number.isNaN(asNum) ? null : asNum);
+    }
+
+    window.addEventListener(
+      BAKERY_SELECTION_CHANGED_EVENT,
+      handleSelectionChange
+    );
+    return () => {
+      window.removeEventListener(
+        BAKERY_SELECTION_CHANGED_EVENT,
+        handleSelectionChange
+      );
+    };
+  }, []);
 
   const handleFileChange = (selected: File | null) => {
     setFile(selected);
@@ -125,6 +163,11 @@ export default function DataUploadPage() {
         return;
       }
 
+      if (!bakeryId) {
+        setError("Please select a bakery before uploading sales data. Go to the Bakeries page to create or select a bakery.");
+        return;
+      }
+
       setLoading(true);
       setError(null);
       setMappingError(null);
@@ -140,8 +183,9 @@ export default function DataUploadPage() {
       }
 
       try {
+        // Use bakery-specific endpoint
         const response = await fetch(
-          `${API_BASE_URL}/api/sales/upload-csv`,
+          `${API_BASE_URL}/api/bakeries/${bakeryId}/sales/upload`,
           {
             method: "POST",
             body: form,
@@ -193,7 +237,7 @@ export default function DataUploadPage() {
         setLoading(false);
       }
     },
-    [authHeaders, file],
+    [authHeaders, file, bakeryId],
   );
 
   const handleUpload = () => submitUpload();
@@ -268,6 +312,15 @@ export default function DataUploadPage() {
           Drop in historical sales and we&apos;ll auto-detect columns. If we
           can&apos;t infer them all, you&apos;ll be able to map them manually.
         </p>
+        {!bakeryId && (
+          <div className="mt-3 rounded-lg border border-amber-200 bg-amber-50 px-4 py-2 text-sm text-amber-800">
+            <strong>No bakery selected.</strong> Please{" "}
+            <Link href="/bakeries" className="font-medium underline hover:text-amber-900">
+              select or create a bakery
+            </Link>{" "}
+            before uploading data. The bakery is taken from your current selection, so you don&apos;t need a bakery_id column in the file.
+          </div>
+        )}
       </header>
 
       <section
@@ -297,11 +350,16 @@ export default function DataUploadPage() {
           <button
             type="button"
             onClick={handleUpload}
-            disabled={!hasFile || loading}
+            disabled={!hasFile || loading || !bakeryId}
             className="rounded-full bg-slate-900 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-slate-800 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {loading ? "Uploading…" : "Upload CSV"}
           </button>
+          <p className="text-xs text-slate-500 max-w-md text-center">
+            <strong>Required columns:</strong> Date, Product/SKU, and Sold quantity.
+            The bakery is taken from your current selection, so you don&apos;t need a bakery_id column.
+            Extra columns like delivery or waste are ignored.
+          </p>
         </div>
       </section>
 

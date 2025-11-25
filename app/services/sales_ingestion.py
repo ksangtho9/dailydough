@@ -155,6 +155,8 @@ def ingest_sales_csv(
     file_bytes: bytes,
     column_mapping_json: Optional[str] = None,
     target_bakery: Optional[Bakery] = None,
+    context_bakery_id: Optional[int] = None,
+    demo_bakery_id: Optional[int] = None,
 ) -> SalesIngestionResult:
     df_raw = _read_dataframe(file_bytes)
     explicit_mapping = _load_column_mapping(column_mapping_json, list(df_raw.columns))
@@ -174,7 +176,12 @@ def ingest_sales_csv(
     }
     df_internal = df_raw.rename(columns=rename_map)
 
-    forced_bakery_id = target_bakery.id if target_bakery else None
+    # Priority: target_bakery > context_bakery_id > demo_bakery_id
+    forced_bakery_id = (
+        target_bakery.id if target_bakery
+        else context_bakery_id
+        else demo_bakery_id
+    )
     rows, parse_errors = _dataframe_to_rows(df_internal, forced_bakery_id)
     if not rows and parse_errors:
         raise ValueError("; ".join(parse_errors))
@@ -202,12 +209,17 @@ def ingest_sales_csv(
         csv_product_name: Optional[str] = row.get("product_name")
         csv_bakery_id: Optional[int] = row.get("bakery_id")
 
+        # Auto-fill bakery_id from context if missing
+        # Priority: CSV bakery_id > forced_bakery_id (from context/demo) > error
         if csv_bakery_id is None:
-            skipped_missing_product += 1
-            row_errors.append(
-                f"Line {idx}: bakery_id missing and no demo bakery specified"
-            )
-            continue
+            if forced_bakery_id is not None:
+                csv_bakery_id = forced_bakery_id
+            else:
+                skipped_missing_product += 1
+                row_errors.append(
+                    f"Line {idx}: bakery_id missing and no bakery context or demo bakery specified"
+                )
+                continue
 
         sku_key = (
             csv_product_sku.strip().lower()

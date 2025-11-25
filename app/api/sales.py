@@ -76,6 +76,10 @@ async def upload_sales(
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
 ):
+    """
+    Upload sales CSV. If bakery_id is provided in the URL path, it will be used
+    as the context bakery for rows that don't have bakery_id in the CSV.
+    """
     if not file.filename.endswith(".csv"):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -89,6 +93,7 @@ async def upload_sales(
             db=db,
             file_bytes=content_bytes,
             column_mapping_json=column_mapping,
+            context_bakery_id=None,
         )
     except SchemaInferenceError as exc:
         raise HTTPException(

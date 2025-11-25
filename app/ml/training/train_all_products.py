@@ -13,6 +13,7 @@ def train_all_products(
     *,
     db: Optional[Session] = None,
     model_name: str = "prophet",
+    bakery_id: Optional[int] = None,
 ) -> List[Dict[str, Any]]:
     owns_session = False
     if db is None:
@@ -21,7 +22,10 @@ def train_all_products(
 
     results: List[Dict[str, Any]] = []
     try:
-        products = db.query(Product).order_by(Product.id.asc()).all()
+        query = db.query(Product).order_by(Product.id.asc())
+        if bakery_id is not None:
+            query = query.filter(Product.bakery_id == bakery_id)
+        products = query.all()
         for product in products:
             try:
                 result = train_product(

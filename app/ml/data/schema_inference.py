@@ -20,8 +20,22 @@ def normalize_column_name(name: str) -> str:
 
 ALIASES = {
     "date": ["date", "saledate", "orderdate", "day", "transactiondate"],
-    "product_id": ["productid", "sku", "itemid", "productcode", "externalid"],
-    "product_name": ["productname", "product", "item", "itemname", "sku_name"],
+    "product_id": [
+        "productid",
+        "sku",
+        "itemid",
+        "productcode",
+        "product code",
+        "externalid",
+    ],
+    "product_name": [
+        "productname",
+        "product name",
+        "product",
+        "item",
+        "itemname",
+        "sku_name",
+    ],
     "quantity": [
         "qty",
         "quantity",
@@ -30,6 +44,8 @@ ALIASES = {
         "quantitysold",
         "salesunits",
         "qtysold",
+        "sales qty",
+        "salesqty",
     ],
     # Optional but helpful when auto-creating products
     "bakery_id": ["bakeryid", "locationid", "storeid"],
