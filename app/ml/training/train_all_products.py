@@ -48,3 +48,4 @@ def train_all_products(
             db.close()
 
 
+

@@ -14,3 +14,4 @@ class DashboardSummaryResponse(BaseModel):
     high_risk_items: int
 
 
+

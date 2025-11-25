@@ -37,3 +37,4 @@ class ForecastMetrics(Base):
     product = relationship("Product", back_populates="forecast_metrics")
 
 
+
