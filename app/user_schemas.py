@@ -2,6 +2,8 @@ from datetime import datetime, date
 
 from pydantic import BaseModel, EmailStr, ConfigDict, constr
 
+from app.schemas.forecast import ForecastMetricsSchema
+
 
 # ========== User schemas ==========
 
@@ -35,6 +37,7 @@ class TokenData(BaseModel):
 class BakeryBase(BaseModel):
     name: str
     location: str | None = None
+    timezone: str | None = None
 
 
 class BakeryCreate(BakeryBase):
@@ -63,6 +66,7 @@ class ProductCreate(ProductBase):
 class ProductOut(ProductBase):
     id: int
     bakery_id: int
+    forecast_metrics: ForecastMetricsSchema | None = None
 
     model_config = ConfigDict(from_attributes=True)
 

@@ -1,22 +1,28 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import {
+  BAKERY_UPDATED_EVENT,
+  BAKERY_SELECTION_CHANGED_EVENT,
+} from "@/lib/bakeries";
+import { ForecastConfidenceBadge } from "@/components/ForecastConfidenceBadge";
+import type { ForecastMetrics } from "@/lib/metrics";
 
 type Product = {
   id: number;
   name: string;
   sku?: string | null;
   bakery_id?: number | null;
+  forecast_metrics?: ForecastMetrics | null;
 };
 
 type Bakery = {
   id: number;
   name: string;
 };
-
 type ForecastPoint = {
   ds: string;
   yhat: number;
@@ -50,6 +56,35 @@ export default function ProductsPage() {
     day: "numeric",
   });
 
+  const loadProductsAndRecs = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const [bakeryData, productData] = await Promise.all([
+        apiFetch<Bakery[]>("/api/bakeries/"),
+        apiFetch<Product[]>("/api/products/"),
+      ]);
+
+      setBakeries(bakeryData);
+      setProducts(productData);
+
+      if (productData.length > 0) {
+        setRecsLoading(true);
+        const recs = await fetchRecommendations(productData);
+        setRecommendations(recs);
+      } else {
+        setRecommendations({});
+      }
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "Failed to load products");
+    } finally {
+      setLoading(false);
+      setRecsLoading(false);
+    }
+  }, []);
+
   useEffect(() => {
     if (typeof window === "undefined") return;
 
@@ -59,42 +94,41 @@ export default function ProductsPage() {
       return;
     }
 
-    // initialize selected bakery from shared storage
     const storedBakeryId = localStorage.getItem(BAKERY_STORAGE_KEY);
     if (storedBakeryId) {
       setSelectedBakeryId(storedBakeryId);
     }
 
-    async function loadProductsAndRecs() {
-      try {
-        setLoading(true);
-        setError(null);
-
-        // 1) Load bakeries
-        const bakeryData = await apiFetch<Bakery[]>("/api/bakeries/");
-        setBakeries(bakeryData);
-
-        // 2) Load products
-        const productData = await apiFetch<Product[]>("/api/products/");
-        setProducts(productData);
-
-        // 3) Load recommendations for all products
-        if (productData.length > 0) {
-          setRecsLoading(true);
-          const recs = await fetchRecommendations(productData);
-          setRecommendations(recs);
-        }
-      } catch (err: any) {
-        console.error(err);
-        setError(err.message || "Failed to load products");
-      } finally {
-        setLoading(false);
-        setRecsLoading(false);
-      }
-    }
-
     loadProductsAndRecs();
-  }, [router]);
+  }, [router, loadProductsAndRecs]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handler = () => {
+      loadProductsAndRecs();
+    };
+
+    window.addEventListener(BAKERY_UPDATED_EVENT, handler);
+    return () => window.removeEventListener(BAKERY_UPDATED_EVENT, handler);
+  }, [loadProductsAndRecs]);
+
+  useEffect(() => {
+    function handleSelectionChange() {
+      if (typeof window === "undefined") return;
+      const stored = window.localStorage.getItem(BAKERY_STORAGE_KEY);
+      setSelectedBakeryId(stored ?? "all");
+    }
+    window.addEventListener(
+      BAKERY_SELECTION_CHANGED_EVENT,
+      handleSelectionChange
+    );
+    return () =>
+      window.removeEventListener(
+        BAKERY_SELECTION_CHANGED_EVENT,
+        handleSelectionChange
+      );
+  }, []);
 
   const filteredProducts =
     selectedBakeryId === "all"
@@ -192,6 +226,7 @@ export default function ProductsPage() {
                   <th className="px-4 py-2 text-left">Name</th>
                   <th className="px-4 py-2 text-left">SKU</th>
                   <th className="px-4 py-2 text-left">Bakery</th>
+                  <th className="px-4 py-2 text-left">Confidence</th>
                   <th className="px-4 py-2 text-right">
                     Tomorrow&apos;s bake (P50)
                   </th>
@@ -203,7 +238,7 @@ export default function ProductsPage() {
                 {bakeries.length === 0 && (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={6}
                       className="px-4 py-8 text-center text-slate-500 text-sm"
                     >
                       <div className="inline-flex flex-col items-center gap-1">
@@ -212,7 +247,7 @@ export default function ProductsPage() {
                           No bakeries found.
                         </span>
                         <span className="text-xs text-slate-500">
-                          Create a bakery in the backend before adding
+                          Create a bakery from the Bakeries page before adding
                           products.
                         </span>
                       </div>
@@ -224,7 +259,7 @@ export default function ProductsPage() {
                 {bakeries.length > 0 && products.length === 0 && (
                   <tr>
                     <td
-                      colSpan={5}
+                      colSpan={6}
                       className="px-4 py-8 text-center text-slate-500 text-sm"
                     >
                       <div className="inline-flex flex-col items-center gap-1">
@@ -246,8 +281,8 @@ export default function ProductsPage() {
                   products.length > 0 &&
                   filteredProducts.length === 0 && (
                     <tr>
-                      <td
-                        colSpan={5}
+                    <td
+                      colSpan={6}
                         className="px-4 py-8 text-center text-slate-500 text-sm"
                       >
                         <div className="inline-flex flex-col items-center gap-1">
@@ -304,6 +339,12 @@ export default function ProductsPage() {
                         <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700">
                           {bakeryName}
                         </span>
+                      </td>
+
+                      <td className="px-4 py-2 align-middle text-sm">
+                        <ForecastConfidenceBadge
+                          metrics={p.forecast_metrics ?? null}
+                        />
                       </td>
 
                       <td className="px-4 py-2 align-middle text-right text-sm">

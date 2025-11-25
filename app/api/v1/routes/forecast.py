@@ -18,10 +18,6 @@ def get_product_forecast(
     db: Session = Depends(get_db),
     current_user=Depends(get_current_user),
 ):
-    """
-    Returns forecast data for a single product.
-    Uses the new ML engine (Prophet for now, pluggable for other models).
-    """
     bakery_id = current_user.bakery_id
 
     # Ensure product belongs to this bakery
@@ -31,29 +27,15 @@ def get_product_forecast(
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
-    # Get forecast using new ML engine
-    try:
-        forecast_result = get_forecast_for_product(
-            db=db,
-            product_id=product_id,
-            horizon_days=horizon,
-        )
-    except ValueError as e:
-        msg = str(e)
-        if "Product not found" in msg or "No sales data" in msg:
-            raise HTTPException(status_code=404, detail=msg)
-        raise HTTPException(status_code=400, detail=msg)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Forecast error: {str(e)}")
+    forecast = get_forecast_for_product(
+        product_id=product_id,
+        days_ahead=horizon,
+        db=db,
+    )
 
-    # Convert to v1 schema format (simpler - just quantity, no bounds)
-    from datetime import date as date_type
     points = [
-        ProductForecastPoint(
-            date=date_type.fromisoformat(p.date) if isinstance(p.date, str) else p.date,
-            quantity=p.yhat
-        )
-        for p in forecast_result.points
+        ProductForecastPoint(date=point.date, quantity=point.yhat)
+        for point in forecast.points
     ]
 
     return ProductForecastResponse(product_id=product_id, points=points)

@@ -20,6 +20,7 @@ def create_bakery(
     bakery = Bakery(
         name=bakery_in.name,
         location=bakery_in.location,
+        timezone=bakery_in.timezone or "UTC",
     )
     db.add(bakery)
     try:

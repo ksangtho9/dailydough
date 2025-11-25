@@ -18,9 +18,10 @@ export function Sidebar() {
   const pathname = usePathname();
 
   const isProducts = pathname.startsWith("/products");
-  const isUpload = pathname.startsWith("/upload");
+  const isDataUpload = pathname.startsWith("/data");
   const isDashboard = pathname.startsWith("/dashboard");
   const isPlan = pathname.startsWith("/plan");
+  const isBakeries = pathname.startsWith("/bakeries");
 
   return (
     <aside className="w-64 border-r bg-white shadow-sm flex flex-col">
@@ -39,6 +40,10 @@ export function Sidebar() {
           Dashboard
         </Link>
 
+        <Link href="/bakeries" className={navItemClass(isBakeries)}>
+          Bakeries
+        </Link>
+
         <Link href="/products" className={navItemClass(isProducts)}>
           Products
         </Link>
@@ -47,8 +52,8 @@ export function Sidebar() {
           Bake plan
         </Link>
 
-        <Link href="/upload" className={navItemClass(isUpload)}>
-          Upload sales CSV
+        <Link href="/data/upload" className={navItemClass(isDataUpload)}>
+          Data upload
         </Link>
       </nav>
 

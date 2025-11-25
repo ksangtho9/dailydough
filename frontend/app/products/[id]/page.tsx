@@ -14,6 +14,11 @@ import {
   Tooltip,
   Legend,
 } from "recharts";
+import { ForecastConfidenceBadge } from "@/components/ForecastConfidenceBadge";
+import type { ForecastMetrics } from "@/lib/metrics";
+import { formatLastTrainedAt } from "@/lib/metrics";
+import { ProductWeekdayPatternChart } from "@/components/ProductWeekdayPatternChart";
+import { ForecastVsActualChart } from "@/components/ForecastVsActualChart";
 
 type Product = {
   id: number;
@@ -60,6 +65,7 @@ export default function ProductDetailPage() {
   const [product, setProduct] = useState<Product | null>(null);
   const [salesRaw, setSalesRaw] = useState<any>([]);
   const [forecastRaw, setForecastRaw] = useState<any>([]);
+  const [metrics, setMetrics] = useState<ForecastMetrics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -105,6 +111,20 @@ export default function ProductDetailPage() {
         setSalesRaw(salesData);
         setForecastRaw(forecastData);
         console.log("forecastData from API", forecastData);
+
+        try {
+          const metricsData = await apiFetch<ForecastMetrics>(
+            `/api/products/${productId}/metrics`
+          );
+          setMetrics(metricsData);
+        } catch (err: any) {
+          const message = String(err?.message ?? "");
+          if (message.includes("404")) {
+            setMetrics(null);
+          } else {
+            console.error("Failed to load metrics", err);
+          }
+        }
 
         const normalizedForecast = normalizeForecast(forecastData);
         if (normalizedForecast.length > 0) {
@@ -183,6 +203,32 @@ export default function ProductDetailPage() {
           <p className="mt-1 text-xs text-slate-700">
             P90 — fewer stockouts, more risk of leftovers
           </p>
+        </div>
+      </section>
+
+      <section className="rounded-xl border bg-white p-4">
+        <div className="flex items-center justify-between">
+          <div>
+            <p className="text-xs uppercase text-slate-700">MODEL QUALITY</p>
+            <div className="mt-2">
+              <ForecastConfidenceBadge metrics={metrics} />
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-3 text-xs text-slate-600 space-y-1">
+          <p>
+            MAPE:{" "}
+            {metrics?.mape != null
+              ? `${(metrics.mape * 100).toFixed(1)}%`
+              : "Not available"}
+          </p>
+          <p>
+            RMSE:{" "}
+            {metrics?.rmse != null ? metrics.rmse.toFixed(2) : "Not available"}
+          </p>
+          <p>Training points: {metrics?.n_points ?? 0}</p>
+          <p>Last trained: {formatLastTrainedAt(metrics?.last_trained_at ?? null)}</p>
         </div>
       </section>
 
@@ -325,6 +371,11 @@ export default function ProductDetailPage() {
           )}
         </div>
       </section>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <ProductWeekdayPatternChart productId={Number(productId)} />
+        <ForecastVsActualChart productId={Number(productId)} />
+      </div>
 
       {/* Tables */}
       <section className="grid gap-4 md:grid-cols-2">

@@ -1,2 +1,2 @@
-"""Scripts for database management and utilities."""
+"""Helper scripts for local maintenance tasks."""
 

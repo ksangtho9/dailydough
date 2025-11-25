@@ -1,10 +1,10 @@
 // frontend/app/layout.tsx
 import "./globals.css";
 import type { Metadata } from "next";
-import { Sidebar } from "@/components/Sidebar";
+import { AppTopNav } from "@/components/AppTopNav";
 
 export const metadata: Metadata = {
-  title: "BAKEZY Dashboard",
+  title: "Daily Dough",
   description: "AI demand forecasting for bakeries",
 };
 
@@ -15,16 +15,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body className="min-h-screen bg-[#F7F3EE] text-slate-900">
-        <div className="flex min-h-screen">
-          {/* Sidebar */}
-          <Sidebar />
-
-          {/* Main content area */}
-          <main className="flex-1">
-            <div className="mx-auto max-w-6xl px-6 py-6">{children}</div>
-          </main>
-        </div>
+      <body className="min-h-screen bg-[#F8F1E8] text-slate-900">
+        <AppTopNav />
+        <main className="mx-auto max-w-6xl px-6 pt-28 pb-10">{children}</main>
       </body>
     </html>
   );

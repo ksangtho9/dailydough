@@ -1,56 +1,55 @@
-"""
-DEPRECATED: logic moved to app/ml/training/ (train_product.py, evaluation.py, model_selection.py)
+from __future__ import annotations
 
-This file is kept for backward compatibility only.
-"""
+from dataclasses import dataclass
+from typing import Literal, Optional
 
-from app.ml.training.train_product import (
-    train_product_model,
-    train_product_with_evaluation,
-    TrainResult,
-)
-from app.ml.models.prophet_model import ProphetModel, ProphetConfig
-from app.ml.models.lightgbm_model import LightGBMModel, LightGBMConfig
+import pandas as pd
 
-# For backward compatibility
-ModelName = str  # "prophet", "lightgbm", etc.
+from .preprocessing import CleanedTimeSeries
+from .features import FeatureEngineer
+from .models.prophet_model import ProphetSalesModel
+from .models.xgboost_model import XGBoostSalesModel
 
-# Alias old class names
-ProphetSalesModel = ProphetModel
-XGBoostSalesModel = LightGBMModel  # Note: XGBoost is now LightGBM
+
+ModelName = Literal["prophet", "xgboost"]
+
+
+@dataclass
+class TrainResult:
+    model_name: ModelName
+    # In MLOps v2, you might store metrics here (MAE, MAPE, etc.)
+    # For now this is a simple placeholder.
+    model: object
+
 
 class ModelTrainer:
-    """
-    Backward compatibility wrapper for ModelTrainer.
-    """
-    def __init__(self, feature_engineer=None):
-        # feature_engineer is ignored for backward compatibility
-        pass
+    def __init__(self, feature_engineer: Optional[FeatureEngineer] = None):
+        self.feature_engineer = feature_engineer or FeatureEngineer()
 
-    def train(self, ts, model_name="prophet"):
+    def train(
+        self,
+        ts: CleanedTimeSeries,
+        model_name: ModelName = "prophet",
+    ) -> TrainResult:
         """
-        Train a model (backward compatibility method).
-        
-        Args:
-            ts: CleanedTimeSeries
-            model_name: Model name ("prophet" or "xgboost")
-        
-        Returns:
-            TrainResult
+        High-level training routine for a single product time series.
         """
-        # Map old model names
-        if model_name == "xgboost":
-            model_name = "lightgbm"
-        
-        return train_product_model(ts, model_name=model_name)
+        df = ts.df.copy()
 
-__all__ = [
-    "ModelTrainer",
-    "TrainResult",
-    "train_product_model",
-    "train_product_with_evaluation",
-    "ProphetSalesModel",
-    "XGBoostSalesModel",
-    "ProphetModel",
-    "LightGBMModel",
-]
+        # Feature engineering
+        df["ds"] = pd.to_datetime(df["ds"])
+        df = self.feature_engineer.transform(df)
+
+        if model_name == "prophet":
+            # Prophet only cares about ds, y
+            model = ProphetSalesModel()
+            model.fit(df[["ds", "y"]])
+            return TrainResult(model_name="prophet", model=model)
+
+        elif model_name == "xgboost":
+            model = XGBoostSalesModel()
+            model.fit(df)
+            return TrainResult(model_name="xgboost", model=model)
+
+        else:
+            raise ValueError(f"Unsupported model: {model_name}")

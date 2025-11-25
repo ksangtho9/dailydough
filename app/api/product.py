@@ -1,9 +1,10 @@
 from fastapi import APIRouter, Depends, HTTPException, status
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, selectinload
 
 from app.database.database import get_db
-from app.models import Product, Bakery
+from app.models import Product, Bakery, ForecastMetrics
 from app.user_schemas import ProductCreate, ProductOut
+from app.schemas.forecast import ForecastMetricsSchema
 
 router = APIRouter(
     prefix="/products",
@@ -41,7 +42,37 @@ def list_products(
     bakery_id: int | None = None,
     db: Session = Depends(get_db),
 ):
-    query = db.query(Product)
+    query = db.query(Product).options(selectinload(Product.forecast_metrics))
     if bakery_id is not None:
         query = query.filter(Product.bakery_id == bakery_id)
     return query.all()
+
+
+@router.get(
+    "/{product_id}/metrics",
+    response_model=ForecastMetricsSchema,
+    status_code=status.HTTP_200_OK,
+)
+def get_product_metrics(
+    product_id: int,
+    db: Session = Depends(get_db),
+):
+    product = db.query(Product).filter(Product.id == product_id).one_or_none()
+    if product is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Product not found",
+        )
+
+    metrics = (
+        db.query(ForecastMetrics)
+        .filter(ForecastMetrics.product_id == product_id)
+        .one_or_none()
+    )
+    if metrics is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="No forecast metrics for this product",
+        )
+
+    return metrics

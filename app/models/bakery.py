@@ -12,6 +12,7 @@ class Bakery(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String, nullable=False, unique=True)
     location = Column(String, nullable=True)
+    timezone = Column(String, nullable=True, default="UTC")
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
 
     # relationships

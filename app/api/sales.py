@@ -1,16 +1,17 @@
-from datetime import datetime
-import csv
-from io import StringIO
-from typing import List, Tuple
+from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, HTTPException, UploadFile, status
+from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.database.database import get_db
-from app.models import SalesRecord, Product, Bakery
+from app.models import SalesRecord, Bakery, Product
 from app.user_schemas import SalesRecordCreate, SalesRecordOut
 from app.api.auth import get_current_user          # ✅ import from auth.py
 from app.schemas import sales_record               # ✅ our sales-series schemas
+from app.services.sales_ingestion import (
+    SchemaInferenceError,
+    ingest_sales_csv,
+)
 
 
 router = APIRouter(
@@ -67,52 +68,10 @@ def list_sales(
     return query.order_by(SalesRecord.date).all()
 
 
-# ---------- CSV upload helpers + endpoint ----------
-
-def parse_csv(content: str) -> Tuple[List[dict], List[str]]:
-    """
-    Parse CSV with columns:
-      product_id,sale_date,units_sold,revenue
-
-    We map:
-      sale_date   -> date
-      units_sold  -> quantity_sold
-      revenue     -> ignored in DB for now
-    """
-    reader = csv.DictReader(StringIO(content))
-    required_fields = {"product_id", "sale_date", "units_sold", "revenue"}
-    rows: List[dict] = []
-    errors: List[str] = []
-
-    # Validate headers
-    missing = required_fields - set((reader.fieldnames or []))
-    if missing:
-        errors.append(f"Missing required columns: {', '.join(sorted(missing))}")
-        return [], errors
-
-    for idx, raw in enumerate(reader, start=2):  # start=2 accounts for header line
-        try:
-            product_id = int(raw["product_id"])
-            sale_date = datetime.strptime(raw["sale_date"], "%Y-%m-%d").date()
-            quantity_sold = float(raw["units_sold"])
-            # revenue is parsed but not stored in SalesRecord
-            _ = float(raw["revenue"])
-
-            rows.append(
-                {
-                    "product_id": product_id,
-                    "date": sale_date,
-                    "quantity_sold": quantity_sold,
-                }
-            )
-        except Exception as exc:
-            errors.append(f"Line {idx}: {exc}")
-    return rows, errors
-
-
 @router.post("/upload-csv", status_code=status.HTTP_201_CREATED)
 async def upload_sales(
     file: UploadFile = File(...),
+    column_mapping: Optional[str] = Form(None),
     db: Session = Depends(get_db),
 ):
     if not file.filename.endswith(".csv"):
@@ -122,62 +81,44 @@ async def upload_sales(
         )
 
     content_bytes = await file.read()
-    try:
-        content = content_bytes.decode("utf-8")
-    except UnicodeDecodeError:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="CSV must be UTF-8 encoded",
-        )
-
-    rows, parse_errors = parse_csv(content)
-    if not rows and parse_errors:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="; ".join(parse_errors),
-        )
-
-    inserted = 0
-    skipped_missing_product = 0
-    row_errors: List[str] = []
-
-    for idx, row in enumerate(rows, start=2):
-        product = db.query(Product).filter(Product.id == row["product_id"]).first()
-        if not product:
-            skipped_missing_product += 1
-            row_errors.append(
-                f"Line {idx}: product_id {row['product_id']} not found"
-            )
-            continue
-
-        try:
-            record = SalesRecord(
-                bakery_id=product.bakery_id,
-                product_id=row["product_id"],
-                date=row["date"],
-                quantity_sold=row["quantity_sold"],
-            )
-            db.add(record)
-            inserted += 1
-        except Exception as exc:
-            row_errors.append(f"Line {idx}: {exc}")
-            db.rollback()
 
     try:
-        db.commit()
+        ingestion_result = ingest_sales_csv(
+            db=db,
+            file_bytes=content_bytes,
+            column_mapping_json=column_mapping,
+        )
+    except SchemaInferenceError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={
+                "code": "schema_inference_failed",
+                "message": "Could not infer all required columns from CSV.",
+                "inferred_mapping": exc.mapping,
+                "missing_roles": exc.missing_roles,
+                "available_columns": exc.available_columns,
+            },
+        ) from exc
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
     except Exception as exc:
-        db.rollback()
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
-        )
+        ) from exc
 
     return {
         "filename": file.filename,
-        "inserted": inserted,
-        "skipped_missing_product": skipped_missing_product,
-        "parse_errors": parse_errors,
-        "row_errors": row_errors,
+        "inserted": ingestion_result.inserted,
+        "sales_rows_inserted": ingestion_result.sales_rows_inserted,
+        "skipped_missing_product": ingestion_result.skipped_missing_product,
+        "created_products": ingestion_result.created_products,
+        "existing_products_used": ingestion_result.existing_products_used,
+        "parse_errors": ingestion_result.parse_errors,
+        "row_errors": ingestion_result.row_errors,
     }
 
 

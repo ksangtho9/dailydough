@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey, Date, Float
+from sqlalchemy import Column, Integer, String, ForeignKey
 from sqlalchemy.orm import relationship
 
 from app.database.database import Base
@@ -16,3 +16,9 @@ class Product(Base):
 
     bakery = relationship("Bakery", back_populates="products")
     sales_records = relationship("SalesRecord", back_populates="product")
+    forecast_metrics = relationship(
+        "ForecastMetrics",
+        uselist=False,
+        back_populates="product",
+        cascade="all, delete-orphan",
+    )

@@ -1,7 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { fetchBakeries, type Bakery } from "@/lib/bakeries";
+import { useCallback, useEffect, useState } from "react";
+import {
+  fetchBakeries,
+  type Bakery,
+  BAKERY_UPDATED_EVENT,
+} from "@/lib/bakeries";
 
 const STORAGE_KEY = "current_bakery_id";
 
@@ -10,38 +14,59 @@ export function BakerySelector() {
   const [selectedId, setSelectedId] = useState<string>("");
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    let initial = "";
+  const loadBakeries = useCallback(async () => {
+    try {
+      setLoading(true);
+      const data = await fetchBakeries();
+      setBakeries(data);
 
+      setSelectedId((current) => {
+        if (current && data.some((b) => String(b.id) === current)) {
+          return current;
+        }
+
+        if (data.length === 0) {
+          if (typeof window !== "undefined") {
+            window.localStorage.removeItem(STORAGE_KEY);
+          }
+          return "";
+        }
+
+        const fallback = String(data[0].id);
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(STORAGE_KEY, fallback);
+        }
+        return fallback;
+      });
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
     if (typeof window !== "undefined") {
       const stored = window.localStorage.getItem(STORAGE_KEY);
-      if (stored) initial = stored;
-    }
-
-    async function load() {
-      try {
-        setLoading(true);
-        const data = await fetchBakeries();
-        setBakeries(data);
-
-        // If we had a stored id and it still exists, use it
-        if (initial && data.some((b) => String(b.id) === initial)) {
-          setSelectedId(initial);
-        } else if (data.length > 0) {
-          // Otherwise default to first bakery and sync storage
-          const firstId = String(data[0].id);
-          setSelectedId(firstId);
-          if (typeof window !== "undefined") {
-            window.localStorage.setItem(STORAGE_KEY, firstId);
-          }
-        }
-      } finally {
-        setLoading(false);
+      if (stored) {
+        setSelectedId(stored);
       }
     }
 
-    load();
-  }, []);
+    loadBakeries();
+
+    function handleRefresh() {
+      loadBakeries();
+    }
+
+    if (typeof window !== "undefined") {
+      window.addEventListener(BAKERY_UPDATED_EVENT, handleRefresh);
+    }
+
+    return () => {
+      if (typeof window !== "undefined") {
+        window.removeEventListener(BAKERY_UPDATED_EVENT, handleRefresh);
+      }
+    };
+  }, [loadBakeries]);
 
   function handleChange(value: string) {
     setSelectedId(value);
@@ -61,7 +86,7 @@ export function BakerySelector() {
   if (bakeries.length === 0) {
     return (
       <p className="text-xs text-slate-500 italic">
-        No bakeries yet — add one in the backend for now.
+        No bakeries yet — add one to get started.
       </p>
     );
   }

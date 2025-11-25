@@ -9,6 +9,9 @@ type UploadResult = {
   skipped_missing_product: number;
   parse_errors: string[];
   row_errors: string[];
+  created_products?: number;
+  existing_products_used?: number;
+  sales_rows_inserted?: number;
 };
 
 export default function UploadSalesPage() {
@@ -126,9 +129,12 @@ export default function UploadSalesPage() {
         <p className="mt-1 text-sm text-slate-600">
           Import historical sales data to power your forecasts. Expected columns:{" "}
           <span className="font-mono text-xs">
-            product_id, sale_date, units_sold, revenue
-          </span>
-          .
+            product_id (or product_sku), sale_date, units_sold, revenue
+          </span>{" "}
+          with optional{" "}
+          <span className="font-mono text-xs">product_name</span> and{" "}
+          <span className="font-mono text-xs">bakery_id</span> for auto-creating
+          missing products.
         </p>
       </header>
 
@@ -228,12 +234,24 @@ export default function UploadSalesPage() {
             </p>
             <p>
               <span className="font-medium">Inserted rows:</span>{" "}
-              {result.inserted.toLocaleString()}
+              {(result.sales_rows_inserted ?? result.inserted).toLocaleString()}
             </p>
             <p>
               <span className="font-medium">Skipped (missing product):</span>{" "}
               {result.skipped_missing_product.toLocaleString()}
             </p>
+            {(result.created_products ?? 0) > 0 && (
+              <p>
+                <span className="font-medium">New products created:</span>{" "}
+                {result.created_products?.toLocaleString()}
+              </p>
+            )}
+            {typeof result.existing_products_used === "number" && (
+              <p>
+                <span className="font-medium">Existing products referenced:</span>{" "}
+                {result.existing_products_used.toLocaleString()}
+              </p>
+            )}
 
             {(result.parse_errors.length > 0 ||
               result.row_errors.length > 0) && (

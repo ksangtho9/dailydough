@@ -36,15 +36,14 @@ def forecast_product_sales(
     """
 
     # You might later enforce "product belongs to this user"
-    # using current_user + bakery ownership. For now, the service
+    # using current_user + bakery ownership. For now, the ML layer
     # just validates product existence & sales data.
 
-    # Handle Prophet not installed
     try:
         forecast_result = get_forecast_for_product(
-            db=db,
             product_id=product_id,
-            horizon_days=horizon_days,
+            days_ahead=horizon_days,
+            db=db,
         )
     except ImportError as e:
         logger.exception("Prophet import error during forecast: product_id=%d", product_id)
@@ -79,21 +78,4 @@ def forecast_product_sales(
             detail=msg,
         ) from e
 
-    # Map dataclass → Pydantic response model
-    from datetime import date as date_type
-    points = [
-        sales_record.ForecastPointOut(
-            date=date_type.fromisoformat(p.date) if isinstance(p.date, str) else p.date,
-            yhat=p.yhat,
-            yhat_lower=p.yhat_lower,
-            yhat_upper=p.yhat_upper,
-        )
-        for p in forecast_result.points
-    ]
-
-    return sales_record.ProductForecastOut(
-        product_id=forecast_result.product_id,
-        product_name=forecast_result.product_name,
-        horizon_days=forecast_result.horizon_days,
-        points=points,
-    )
+    return forecast_result

@@ -1,49 +1,49 @@
 from __future__ import annotations
 
-from typing import List, Optional
+from typing import List, Dict, Any, Optional
+
 from sqlalchemy.orm import Session
 
+from app.database.database import SessionLocal
 from app.models import Product
-from .train_product import train_product, TrainResult
-
-ModelName = str  # "prophet", "lightgbm", etc.
+from .train_product import train_product
 
 
 def train_all_products(
-    db: Session,
-    model_name: ModelName = "prophet",
-    product_ids: Optional[List[int]] = None,
-) -> List[TrainResult]:
-    """
-    Loop over all products and call train_product(product.id).
-    
-    Reuses the actual DB/session access pattern from the current codebase.
-    
-    Args:
-        db: Database session
-        model_name: Model to train (default: "prophet")
-        product_ids: Optional list of product IDs to train. If None, trains all products.
-    
-    Returns:
-        List of TrainResult objects
-    """
-    results = []
-    
-    # Get product IDs
-    if product_ids is None:
-        products = db.query(Product).all()
-        product_ids = [p.id for p in products]
-    
-    for product_id in product_ids:
-        try:
-            # Train product using the main training function
-            result = train_product(db, product_id, model_name=model_name)
+    *,
+    db: Optional[Session] = None,
+    model_name: str = "prophet",
+) -> List[Dict[str, Any]]:
+    owns_session = False
+    if db is None:
+        db = SessionLocal()
+        owns_session = True
+
+    results: List[Dict[str, Any]] = []
+    try:
+        products = db.query(Product).order_by(Product.id.asc()).all()
+        for product in products:
+            try:
+                result = train_product(
+                    product_id=product.id,
+                    db=db,
+                    model_name=model_name,
+                )
+            except Exception as exc:
+                result = {
+                    "product_id": product.id,
+                    "product_name": product.name,
+                    "status": "failed",
+                    "model_type": model_name,
+                    "n_points": 0,
+                    "mape": None,
+                    "rmse": None,
+                    "last_trained_at": None,
+                    "error": str(exc),
+                }
             results.append(result)
-            print(f"Trained {model_name} for product {product_id}")
-            
-        except Exception as e:
-            print(f"Failed to train product {product_id}: {e}")
-            continue
-    
-    return results
+        return results
+    finally:
+        if owns_session:
+            db.close()
 

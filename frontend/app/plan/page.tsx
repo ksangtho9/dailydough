@@ -1,14 +1,14 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { BAKERY_UPDATED_EVENT } from "@/lib/bakeries";
 
 type Bakery = {
   id: number;
   name: string;
 };
-
 type Product = {
   id: number;
   name: string;
@@ -48,6 +48,26 @@ export default function BakePlanPage() {
   const [error, setError] = useState<string | null>(null);
   const [forecastsLoading, setForecastsLoading] = useState(false);
 
+  const loadBasics = useCallback(async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      const [bakeryData, productData] = await Promise.all([
+        apiFetch<Bakery[]>("/api/bakeries/"),
+        apiFetch<Product[]>("/api/products/"),
+      ]);
+
+      setBakeries(bakeryData);
+      setProducts(productData);
+    } catch (err: any) {
+      console.error(err);
+      setError(err.message || "Failed to load bake plan data");
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   // On mount: auth check, load bakeries/products, restore bakery filter
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -63,28 +83,19 @@ export default function BakePlanPage() {
       setSelectedBakeryId(storedBakeryId);
     }
 
-    async function loadBasics() {
-      try {
-        setLoading(true);
-        setError(null);
-
-        const [bakeryData, productData] = await Promise.all([
-          apiFetch<Bakery[]>("/api/bakeries/"),
-          apiFetch<Product[]>("/api/products/"),
-        ]);
-
-        setBakeries(bakeryData);
-        setProducts(productData);
-      } catch (err: any) {
-        console.error(err);
-        setError(err.message || "Failed to load bake plan data");
-      } finally {
-        setLoading(false);
-      }
-    }
-
     loadBasics();
-  }, [router]);
+  }, [router, loadBasics]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    const handler = () => {
+      loadBasics();
+    };
+
+    window.addEventListener(BAKERY_UPDATED_EVENT, handler);
+    return () => window.removeEventListener(BAKERY_UPDATED_EVENT, handler);
+  }, [loadBasics]);
 
   // When products, bakery filter or horizon change → recompute plan
   useEffect(() => {

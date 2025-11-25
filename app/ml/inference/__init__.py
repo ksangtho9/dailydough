@@ -1,2 +1,2 @@
-"""Inference service for generating forecasts."""
+"""Inference helpers for serving forecasts via the API layer."""
 
