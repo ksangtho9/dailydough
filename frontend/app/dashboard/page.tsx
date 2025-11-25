@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { fetchBakePlan, type BakePlanResponse } from "@/lib/bakePlan";
 import {
@@ -9,7 +10,6 @@ import {
 import { BAKERY_SELECTION_CHANGED_EVENT } from "@/lib/bakeries";
 import { TopProductsCard } from "@/components/TopProductsCard";
 import { GettingStartedChecklist } from "@/components/GettingStartedChecklist";
-import { TrainAllModelsButton } from "@/components/TrainAllModelsButton";
 
 const STORAGE_KEY = "current_bakery_id";
 
@@ -211,6 +211,27 @@ export default function DashboardPage() {
     { key: "ask", label: "Ask AI" },
   ];
 
+  if (!bakeryId) {
+    return (
+      <div className="space-y-6">
+        <header>
+          <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
+            Daily Dough
+          </h1>
+        </header>
+        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <p className="text-sm text-slate-600">
+            No bakery selected yet. Go to the{" "}
+            <Link href="/bakeries" className="font-medium text-amber-700 hover:underline">
+              Bakeries page
+            </Link>{" "}
+            to create your first bakery.
+          </p>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <header>
@@ -390,15 +411,6 @@ export default function DashboardPage() {
               Track how forecasts compare to actuals over time. Accuracy
               breakdown by SKU is coming soon.
             </p>
-          </div>
-          <div className="rounded-2xl border border-slate-100 bg-slate-50 p-4">
-            <p className="text-xs uppercase text-slate-500">Retrain models</p>
-            <p className="mt-1 text-sm text-slate-600">
-              Run a full retrain after uploading fresh sales history.
-            </p>
-            <div className="mt-3 max-w-xs">
-              <TrainAllModelsButton />
-            </div>
           </div>
         </section>
       )}

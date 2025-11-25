@@ -25,9 +25,9 @@ const DEFAULT_STEPS: ChecklistStep[] = [
   },
   {
     id: "train_all",
-    label: "Train all products",
-    description: "Run the ML engine to prepare forecasts for every product.",
-    href: "/products",
+    label: "Models train automatically",
+    description: "After uploading sales data, models retrain automatically in the background.",
+    href: undefined,
   },
   {
     id: "review_bake_plan",

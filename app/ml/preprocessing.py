@@ -51,6 +51,9 @@ class SalesPreprocessor:
         )
 
         # 🔹 IMPORTANT: aggregate duplicates (same product_id + ds)
+        # IMPORTANT: CSV rows may be arbitrarily sorted by the user.
+        # Always sort by product_id then date so the model sees a proper chronological series per product.
+        # This ensures training works correctly regardless of CSV row order.
         df = (
             df.groupby(["product_id", "ds"], as_index=False)["y"]
               .sum()
@@ -76,9 +79,9 @@ class SalesPreprocessor:
             # nothing for this product
             return pd.DataFrame(columns=["ds", "y", "product_id"])
 
-        # 🔹 ds is already unique per product_id thanks to to_dataframe(),
-        # but we sort to be safe.
-        df_prod = df_prod.sort_values("ds")
+        # IMPORTANT: CSV rows may be arbitrarily sorted by the user.
+        # Always sort by date so the model sees a proper chronological series.
+        df_prod = df_prod.sort_values("ds").reset_index(drop=True)
 
         start = self.min_date or df_prod["ds"].min()
         end = df_prod["ds"].max()

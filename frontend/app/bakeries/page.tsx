@@ -5,16 +5,21 @@ import {
   fetchBakeries,
   createBakery,
   emitBakeryUpdate,
+  emitBakerySelectionChanged,
+  BAKERY_UPDATED_EVENT,
   type Bakery,
   type CreateBakeryPayload,
 } from "@/lib/bakeries";
+import { Button } from "@/components/ui/button";
 
 const DEFAULT_TIMEZONE = "America/Los_Angeles";
+const STORAGE_KEY = "current_bakery_id";
 
 export default function BakeriesPage() {
   const [bakeries, setBakeries] = useState<Bakery[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [currentBakeryId, setCurrentBakeryId] = useState<number | null>(null);
 
   const [name, setName] = useState("");
   const [location, setLocation] = useState("");
@@ -39,7 +44,61 @@ export default function BakeriesPage() {
 
   useEffect(() => {
     loadBakeries();
+    
+    // Load current bakery from localStorage
+    if (typeof window !== "undefined") {
+      const stored = window.localStorage.getItem(STORAGE_KEY);
+      if (stored) {
+        const asNum = Number(stored);
+        if (!Number.isNaN(asNum)) {
+          setCurrentBakeryId(asNum);
+        }
+      }
+    }
+
+    // Listen for bakery updates (e.g., from demo seeding)
+    function handleBakeryUpdate() {
+      loadBakeries();
+    }
+
+    if (typeof window !== "undefined") {
+      window.addEventListener(BAKERY_UPDATED_EVENT, handleBakeryUpdate);
+      return () => {
+        window.removeEventListener(BAKERY_UPDATED_EVENT, handleBakeryUpdate);
+      };
+    }
   }, [loadBakeries]);
+
+  // Listen for bakery selection changes
+  useEffect(() => {
+    function handleSelectionChange(e: Event) {
+      const customEvent = e as CustomEvent<{ value: string | null }>;
+      const value = customEvent.detail?.value;
+      if (value) {
+        const asNum = Number(value);
+        if (!Number.isNaN(asNum)) {
+          setCurrentBakeryId(asNum);
+        }
+      } else {
+        setCurrentBakeryId(null);
+      }
+    }
+
+    if (typeof window !== "undefined") {
+      window.addEventListener("current-bakery-changed", handleSelectionChange);
+      return () => {
+        window.removeEventListener("current-bakery-changed", handleSelectionChange);
+      };
+    }
+  }, []);
+
+  function setAsCurrent(bakeryId: number) {
+    setCurrentBakeryId(bakeryId);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(STORAGE_KEY, String(bakeryId));
+    }
+    emitBakerySelectionChanged(String(bakeryId));
+  }
 
   async function handleCreateBakery(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -65,7 +124,7 @@ export default function BakeriesPage() {
         payload.timezone = timezone.trim();
       }
 
-      await createBakery(payload);
+      const created = await createBakery(payload);
 
       setName("");
       setLocation("");
@@ -74,6 +133,9 @@ export default function BakeriesPage() {
 
       await loadBakeries();
       emitBakeryUpdate();
+      
+      // Automatically set the newly created bakery as current
+      setAsCurrent(created.id);
     } catch (err: any) {
       console.error(err);
       setFormError(err?.message || "Failed to create bakery");
@@ -197,36 +259,31 @@ export default function BakeriesPage() {
                 No bakeries yet — add your first one above.
               </div>
             ) : (
-              <table className="min-w-full text-sm">
-                <thead className="border-b bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
-                  <tr>
-                    <th className="px-4 py-2 text-left">Name</th>
-                    <th className="px-4 py-2 text-left">Location</th>
-                    <th className="px-4 py-2 text-left">Timezone</th>
-                    <th className="px-4 py-2 text-left">Created</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {bakeries.map((bakery) => (
-                    <tr key={bakery.id} className="border-b last:border-b-0">
-                      <td className="px-4 py-3 font-medium text-slate-800">
+              <div className="divide-y divide-slate-100">
+                {bakeries.map((bakery) => (
+                  <div
+                    key={bakery.id}
+                    className="flex items-center justify-between px-4 py-3"
+                  >
+                    <div className="flex-1 space-y-0.5">
+                      <p className="text-sm font-medium text-slate-800">
                         {bakery.name}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {bakery.location || "—"}
-                      </td>
-                      <td className="px-4 py-3 text-slate-600">
-                        {bakery.timezone || DEFAULT_TIMEZONE}
-                      </td>
-                      <td className="px-4 py-3 text-slate-500">
-                        {bakery.created_at
-                          ? new Date(bakery.created_at).toLocaleDateString()
-                          : "—"}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+                      </p>
+                      <p className="text-xs text-slate-500">
+                        {bakery.location || "No location"} • {bakery.timezone || DEFAULT_TIMEZONE}
+                      </p>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant={currentBakeryId === bakery.id ? "default" : "outline"}
+                      onClick={() => setAsCurrent(bakery.id)}
+                      className="ml-4"
+                    >
+                      {currentBakeryId === bakery.id ? "Current" : "Set as current"}
+                    </Button>
+                  </div>
+                ))}
+              </div>
             )}
           </div>
         )}

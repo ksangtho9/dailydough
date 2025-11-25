@@ -1,6 +1,6 @@
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, File, Form, HTTPException, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
 
 from app.database.database import get_db
@@ -12,6 +12,7 @@ from app.services.sales_ingestion import (
     SchemaInferenceError,
     ingest_sales_csv,
 )
+from app.ml.training.train_all_products import train_all_products
 
 
 router = APIRouter(
@@ -72,6 +73,7 @@ def list_sales(
 async def upload_sales(
     file: UploadFile = File(...),
     column_mapping: Optional[str] = Form(None),
+    background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
 ):
     if not file.filename.endswith(".csv"):
@@ -109,6 +111,11 @@ async def upload_sales(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(exc),
         ) from exc
+
+    # Trigger automatic training in the background after successful upload
+    # Models will retrain for all products that may have been affected
+    # Pass db=None so train_all_products creates its own session (BackgroundTasks runs after request completes)
+    background_tasks.add_task(train_all_products, db=None)
 
     return {
         "filename": file.filename,
