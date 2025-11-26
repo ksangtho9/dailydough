@@ -177,11 +177,12 @@ def ingest_sales_csv(
     df_internal = df_raw.rename(columns=rename_map)
 
     # Priority: target_bakery > context_bakery_id > demo_bakery_id
-    forced_bakery_id = (
-        target_bakery.id if target_bakery
-        else context_bakery_id
-        else demo_bakery_id
-    )
+    if target_bakery:
+        forced_bakery_id = target_bakery.id
+    elif context_bakery_id is not None:
+        forced_bakery_id = context_bakery_id
+    else:
+        forced_bakery_id = demo_bakery_id
     rows, parse_errors = _dataframe_to_rows(df_internal, forced_bakery_id)
     if not rows and parse_errors:
         raise ValueError("; ".join(parse_errors))

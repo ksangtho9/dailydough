@@ -26,6 +26,7 @@ export function AppTopNav() {
   const pathname = usePathname();
   const [bakeries, setBakeries] = useState<Bakery[]>([]);
   const [selectedBakeryId, setSelectedBakeryId] = useState<string>("");
+  const [bakeriesLoading, setBakeriesLoading] = useState(true);
 
   const setActiveBakery = useCallback((value: string | null) => {
     const nextValue = value ?? "";
@@ -42,6 +43,7 @@ export function AppTopNav() {
 
   const loadBakeries = useCallback(async () => {
     try {
+      setBakeriesLoading(true);
       const data = await fetchBakeries();
       setBakeries(data);
 
@@ -62,6 +64,8 @@ export function AppTopNav() {
       console.error("Failed to load bakeries", err);
       setBakeries([]);
       setActiveBakery(null);
+    } finally {
+      setBakeriesLoading(false);
     }
   }, [setActiveBakery]);
 
@@ -105,7 +109,9 @@ export function AppTopNav() {
             Bakery:{" "}
             <span className="text-slate-900">{currentBakeryName}</span>
           </span>
-          {bakeries.length > 0 && (
+          {bakeriesLoading ? (
+            <span className="text-xs text-slate-500">Loading...</span>
+          ) : bakeries.length > 0 ? (
             <select
               value={selectedBakeryId}
               onChange={(e) => setActiveBakery(e.target.value)}
@@ -117,7 +123,7 @@ export function AppTopNav() {
                 </option>
               ))}
             </select>
-          )}
+          ) : null}
         </div>
 
         <div className="flex flex-1 flex-wrap items-center justify-end gap-3">
