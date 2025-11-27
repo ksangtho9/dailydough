@@ -24,3 +24,4 @@ export function ForecastConfidenceBadge({ metrics }: Props) {
 
 
 
+
