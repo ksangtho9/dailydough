@@ -168,6 +168,7 @@ def ingest_sales_csv(
     target_bakery: Optional[Bakery] = None,
     context_bakery_id: Optional[int] = None,
     demo_bakery_id: Optional[int] = None,
+    replace_mode: bool = False,
 ) -> SalesIngestionResult:
     df_raw = _read_dataframe(file_bytes)
     explicit_mapping = _load_column_mapping(column_mapping_json, list(df_raw.columns))
@@ -280,6 +281,14 @@ def ingest_sales_csv(
                 products_by_sku[sku_key] = product
             created_products += 1
             product_was_created = True
+
+        # If replace_mode, delete existing record for this (date, product_id, bakery_id) first
+        if replace_mode:
+            db.query(SalesRecord).filter(
+                SalesRecord.bakery_id == (product.bakery_id or csv_bakery_id),
+                SalesRecord.product_id == product.id,
+                SalesRecord.date == row["date"],
+            ).delete(synchronize_session=False)
 
         try:
             record = SalesRecord(

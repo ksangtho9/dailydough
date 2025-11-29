@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { fetchBakePlan, type BakePlanResponse } from "@/lib/bakePlan";
 import {
   fetchDashboardSummary,
@@ -13,6 +13,7 @@ import { GettingStartedChecklist } from "@/components/GettingStartedChecklist";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 
 const STORAGE_KEY = "current_bakery_id";
+const DEV_MODE_KEY = "dashboard_dev_mode";
 
 type TabKey = "bake" | "accuracy" | "insights" | "ask";
 
@@ -27,6 +28,34 @@ function formatFriendlyDate(input?: string) {
   });
 }
 
+function generateMockBakePlan(bakeryId: number): BakePlanResponse {
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const dateStr = tomorrow.toISOString().split("T")[0];
+
+  const mockProducts = [
+    { name: "Croissant", quantity: 45 },
+    { name: "Sourdough Loaf", quantity: 28 },
+    { name: "Chocolate Chip Cookie", quantity: 120 },
+    { name: "Blueberry Muffin", quantity: 65 },
+    { name: "Cinnamon Roll", quantity: 38 },
+    { name: "Bagel", quantity: 85 },
+    { name: "Danish Pastry", quantity: 52 },
+    { name: "Apple Turnover", quantity: 42 },
+  ];
+
+  return {
+    bakery_id: bakeryId,
+    bakery_name: "Demo Bakery",
+    date: dateStr,
+    items: mockProducts.map((product, index) => ({
+      product_id: 1000 + index, // Mock product IDs
+      product_name: product.name,
+      forecast_quantity: product.quantity,
+    })),
+  };
+}
+
 export default function DashboardPage() {
   const [bakeryId, setBakeryId] = useState<number | null>(null);
   const [bakePlan, setBakePlan] = useState<BakePlanResponse | null>(null);
@@ -38,6 +67,8 @@ export default function DashboardPage() {
   const [summaryError, setSummaryError] = useState<string | null>(null);
   const [activeTab, setActiveTab] = useState<TabKey>("bake");
   const [sortMode, setSortMode] = useState("sku");
+  const [devMode, setDevMode] = useState(false);
+  const [selectedForecastDate, setSelectedForecastDate] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -48,7 +79,24 @@ export default function DashboardPage() {
         setBakeryId(asNum);
       }
     }
+    // Load developer mode preference
+    const devModeStored = window.localStorage.getItem(DEV_MODE_KEY);
+    if (devModeStored === "true") {
+      setDevMode(true);
+    }
   }, []);
+
+  const toggleDevMode = () => {
+    const newValue = !devMode;
+    setDevMode(newValue);
+    if (typeof window !== "undefined") {
+      window.localStorage.setItem(DEV_MODE_KEY, String(newValue));
+    }
+    // Reset date selection when disabling dev mode
+    if (!newValue) {
+      setSelectedForecastDate(null);
+    }
+  };
 
   useEffect(() => {
     function handleSelectionChange() {
@@ -74,35 +122,43 @@ export default function DashboardPage() {
     };
   }, []);
 
+  const loadPlan = useCallback(async (targetDate?: string) => {
+    if (bakeryId == null) return;
+    
+    setPlanLoading(true);
+    setPlanError(null);
+    const dateToUse = targetDate || selectedForecastDate || undefined;
+    console.log("[Dashboard] Loading bake plan for bakery:", bakeryId, "date:", dateToUse || "default (tomorrow)");
+    
+    try {
+      const data = await fetchBakePlan(bakeryId, dateToUse);
+      console.log("[Dashboard] Bake plan loaded successfully:", {
+        itemsCount: data.items.length,
+        date: data.date,
+        bakeryName: data.bakery_name,
+      });
+      setBakePlan(data);
+    } catch (err: any) {
+      const errorMessage = err?.message ?? "Failed to load bake plan.";
+      console.error("[Dashboard] Error loading bake plan:", {
+        error: err,
+        message: errorMessage,
+        bakeryId,
+        targetDate: dateToUse,
+      });
+      setPlanError(errorMessage);
+      setBakePlan(null);
+    } finally {
+      setPlanLoading(false);
+    }
+  }, [bakeryId, selectedForecastDate]);
+
   useEffect(() => {
     if (bakeryId == null) return;
-    let cancelled = false;
-
-    async function loadPlan() {
-      setPlanLoading(true);
-      setPlanError(null);
-      try {
-        const data = await fetchBakePlan(bakeryId!);
-        if (!cancelled) {
-          setBakePlan(data);
-        }
-      } catch (err: any) {
-        if (!cancelled) {
-          setPlanError(err?.message ?? "Failed to load bake plan.");
-          setBakePlan(null);
-        }
-      } finally {
-        if (!cancelled) {
-          setPlanLoading(false);
-        }
-      }
-    }
-
-    loadPlan();
-    return () => {
-      cancelled = true;
-    };
-  }, [bakeryId]);
+    // Only use selectedForecastDate if dev mode is enabled
+    const dateToUse = devMode ? (selectedForecastDate || undefined) : undefined;
+    loadPlan(dateToUse);
+  }, [bakeryId, devMode, selectedForecastDate, loadPlan]);
 
   useEffect(() => {
     if (bakeryId == null) {
@@ -137,14 +193,20 @@ export default function DashboardPage() {
     };
   }, [bakeryId]);
 
+  // In dev mode, use real API data (based on uploaded sales data)
+  // No longer using mock data - dev mode now allows date selection and uses real forecasts
+  const displayBakePlan = bakePlan;
+
+  const isShowingMockData = false; // No longer using mock data
+
   const totalUnits = useMemo(() => {
-    if (!bakePlan) return null;
-    return bakePlan.items.reduce((sum, item) => sum + item.forecast_quantity, 0);
-  }, [bakePlan]);
+    if (!displayBakePlan) return null;
+    return displayBakePlan.items.reduce((sum, item) => sum + item.forecast_quantity, 0);
+  }, [displayBakePlan]);
 
   const tableRows = useMemo(() => {
-    if (!bakePlan) return [];
-    return bakePlan.items.map((item, index) => {
+    if (!displayBakePlan) return [];
+    return displayBakePlan.items.map((item, index) => {
       const normal = item.forecast_quantity;
       const low = Math.max(0, Math.round(normal * 0.9));
       const high = Math.round(normal * 1.1);
@@ -160,7 +222,7 @@ export default function DashboardPage() {
         risk,
       };
     });
-  }, [bakePlan]);
+  }, [displayBakePlan]);
 
   const summaryCards = [
     {
@@ -203,7 +265,7 @@ export default function DashboardPage() {
     },
   ];
 
-  const planDateLabel = formatFriendlyDate(bakePlan?.date);
+  const planDateLabel = formatFriendlyDate(displayBakePlan?.date);
 
   const tabButtons: { key: TabKey; label: string }[] = [
     { key: "bake", label: "Bake Plan" },
@@ -274,14 +336,50 @@ export default function DashboardPage() {
           <section className="rounded-xl border border-amber-100 bg-white p-8 shadow-sm min-h-[250px]">
             <div className="flex flex-wrap items-center justify-between gap-3">
               <div>
-                <p className="text-xs uppercase text-slate-600">
-                  Tomorrow&apos;s Forecast
-                </p>
+                <div className="flex items-center gap-2">
+                  <p className="text-xs uppercase text-slate-600">
+                    {devMode && selectedForecastDate
+                      ? "Forecast for Selected Date"
+                      : "Tomorrow's Forecast"}
+                  </p>
+                  {devMode && (
+                    <span className="rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold uppercase text-amber-700">
+                      DEV MODE
+                    </span>
+                  )}
+                </div>
                 <h2 className="text-xl font-semibold text-slate-900">
                   {planDateLabel}
                 </h2>
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                <button
+                  type="button"
+                  onClick={toggleDevMode}
+                  className={`inline-flex items-center rounded-full border px-3 py-1 text-xs font-medium transition ${
+                    devMode
+                      ? "border-amber-300 bg-amber-50 text-amber-700 hover:bg-amber-100"
+                      : "border-slate-200 bg-white text-slate-700 hover:bg-slate-100"
+                  }`}
+                  title="Toggle developer mode to test forecasts with real data and date selection"
+                >
+                  🧪 Dev Mode
+                </button>
+                {devMode && (
+                  <input
+                    type="date"
+                    value={selectedForecastDate || ""}
+                    onChange={(e) => {
+                      const newDate = e.target.value;
+                      setSelectedForecastDate(newDate || null);
+                      if (newDate && bakeryId) {
+                        loadPlan(newDate);
+                      }
+                    }}
+                    className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-700 focus:border-amber-400 focus:outline-none focus:ring-2 focus:ring-amber-400/20"
+                    title="Select date to forecast for (dev mode only - past or future dates allowed)"
+                  />
+                )}
                 <select
                   value={sortMode}
                   onChange={(e) => setSortMode(e.target.value)}
@@ -293,7 +391,13 @@ export default function DashboardPage() {
                 </select>
                 <button
                   type="button"
-                  className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100"
+                  onClick={() => {
+                    console.log("[Dashboard] Manual refresh triggered");
+                    const dateToUse = devMode ? (selectedForecastDate || undefined) : undefined;
+                    loadPlan(dateToUse);
+                  }}
+                  disabled={planLoading}
+                  className="inline-flex items-center rounded-full border border-slate-200 px-3 py-1 text-xs font-medium text-slate-700 hover:bg-slate-100 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   ↻ Refresh forecasts
                 </button>
@@ -310,10 +414,25 @@ export default function DashboardPage() {
                 <p className="text-sm text-red-600">{planError}</p>
               )}
               {!planLoading && !planError && tableRows.length === 0 && (
-                <p className="text-sm text-slate-500">
-                  No products available yet. Upload sales data to generate a bake
-                  plan.
-                </p>
+                <div className="space-y-2">
+                  <p className="text-sm text-slate-500">
+                    No products available yet. Upload sales data to generate a bake
+                    plan.
+                  </p>
+                  {bakePlan && bakePlan.items.length === 0 && (
+                    <p className="text-xs text-slate-400 italic">
+                      Note: API returned empty items array. This may indicate no products have forecasts for the selected date, or forecast generation failed for all products.
+                      {devMode && selectedForecastDate && (
+                        <span> Try selecting a different date or ensure you have uploaded sales data.</span>
+                      )}
+                    </p>
+                  )}
+                  {devMode && (
+                    <p className="text-xs text-amber-600 italic">
+                      💡 Dev Mode: Use the date picker above to test forecasts for different dates. Forecasts are based on your uploaded sales data.
+                    </p>
+                  )}
+                </div>
               )}
               {!planLoading && !planError && tableRows.length > 0 && (
                 <table className="min-w-full text-sm">

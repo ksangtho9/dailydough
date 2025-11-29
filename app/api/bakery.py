@@ -1,10 +1,11 @@
 from typing import Optional
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
+from datetime import date
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from app.database.database import get_db
-from app.models import Bakery
+from app.models import Bakery, SalesRecord
 from app.user_schemas import BakeryCreate, BakeryOut
 from app.services.sales_ingestion import (
     SchemaInferenceError,
@@ -53,6 +54,7 @@ async def upload_sales_for_bakery(
     bakery_id: int,
     file: UploadFile = File(...),
     column_mapping: Optional[str] = Form(None),
+    upload_mode: Optional[str] = Form("append", description="Upload mode: 'append' or 'replace'"),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
 ):
@@ -76,12 +78,20 @@ async def upload_sales_for_bakery(
 
     content_bytes = await file.read()
 
+    # Validate upload_mode
+    if upload_mode not in ["append", "replace"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="upload_mode must be 'append' or 'replace'",
+        )
+
     try:
         ingestion_result = ingest_sales_csv(
             db=db,
             file_bytes=content_bytes,
             column_mapping_json=column_mapping,
             context_bakery_id=bakery_id,
+            replace_mode=(upload_mode == "replace"),
         )
     except SchemaInferenceError as exc:
         raise HTTPException(
@@ -119,4 +129,54 @@ async def upload_sales_for_bakery(
         "existing_products_used": ingestion_result.existing_products_used,
         "parse_errors": ingestion_result.parse_errors,
         "row_errors": ingestion_result.row_errors,
+    }
+
+
+@router.delete("/{bakery_id}/sales", status_code=status.HTTP_200_OK)
+def delete_sales_for_bakery(
+    bakery_id: int,
+    date_from: Optional[date] = Query(None, description="Delete records from this date (inclusive)"),
+    date_to: Optional[date] = Query(None, description="Delete records up to this date (inclusive)"),
+    product_id: Optional[int] = Query(None, description="Delete records for this product only"),
+    db: Session = Depends(get_db),
+):
+    """
+    Delete sales records for a bakery. Supports optional filters:
+    - date_from/date_to: Delete records within date range
+    - product_id: Delete records for a specific product
+    - If no filters provided, deletes all sales for the bakery
+    """
+    # Verify bakery exists
+    bakery = db.query(Bakery).filter(Bakery.id == bakery_id).first()
+    if not bakery:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bakery not found",
+        )
+
+    # Build query
+    query = db.query(SalesRecord).filter(SalesRecord.bakery_id == bakery_id)
+
+    if date_from:
+        query = query.filter(SalesRecord.date >= date_from)
+    if date_to:
+        query = query.filter(SalesRecord.date <= date_to)
+    if product_id:
+        query = query.filter(SalesRecord.product_id == product_id)
+
+    # Count before deletion
+    count = query.count()
+
+    # Delete records
+    query.delete(synchronize_session=False)
+    db.commit()
+
+    return {
+        "deleted_count": count,
+        "bakery_id": bakery_id,
+        "filters": {
+            "date_from": str(date_from) if date_from else None,
+            "date_to": str(date_to) if date_to else None,
+            "product_id": product_id,
+        },
     }

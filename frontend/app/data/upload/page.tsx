@@ -9,6 +9,7 @@ import {
   useMemo,
   useState,
 } from "react";
+import { Trash2, AlertTriangle } from "lucide-react";
 import { API_BASE_URL } from "@/lib/api";
 import { BAKERY_SELECTION_CHANGED_EVENT } from "@/lib/bakeries";
 
@@ -74,6 +75,14 @@ export default function DataUploadPage() {
   const [mapping, setMapping] = useState<MappingState>(createEmptyMapping());
   const [mappingError, setMappingError] = useState<string | null>(null);
   const [bakeryId, setBakeryId] = useState<number | null>(null);
+  const [uploadMode, setUploadMode] = useState<"append" | "replace">("append");
+  const [deleteDateFrom, setDeleteDateFrom] = useState<string>("");
+  const [deleteDateTo, setDeleteDateTo] = useState<string>("");
+  const [deleteProductId, setDeleteProductId] = useState<string>("");
+  const [deleteLoading, setDeleteLoading] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [deleteCount, setDeleteCount] = useState<number | null>(null);
 
   const hasFile = Boolean(file);
 
@@ -178,6 +187,7 @@ export default function DataUploadPage() {
 
       const form = new FormData();
       form.append("file", file);
+      form.append("upload_mode", uploadMode);
       if (mappingOverride) {
         form.append("column_mapping", JSON.stringify(mappingOverride));
       }
@@ -237,8 +247,51 @@ export default function DataUploadPage() {
         setLoading(false);
       }
     },
-    [authHeaders, file, bakeryId],
+    [authHeaders, file, bakeryId, uploadMode],
   );
+
+  const handleDelete = useCallback(async () => {
+    if (!bakeryId) {
+      setDeleteError("Please select a bakery before deleting data.");
+      return;
+    }
+
+    setDeleteLoading(true);
+    setDeleteError(null);
+
+    try {
+      const params = new URLSearchParams();
+      if (deleteDateFrom) params.append("date_from", deleteDateFrom);
+      if (deleteDateTo) params.append("date_to", deleteDateTo);
+      if (deleteProductId) params.append("product_id", deleteProductId);
+
+      const response = await fetch(
+        `${API_BASE_URL}/api/bakeries/${bakeryId}/sales?${params.toString()}`,
+        {
+          method: "DELETE",
+          headers: authHeaders(),
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: "Delete failed" }));
+        setDeleteError(errorData.detail || "Failed to delete data");
+        return;
+      }
+
+      const data = await response.json();
+      setDeleteCount(data.deleted_count);
+      setDeleteConfirm(false);
+      setDeleteDateFrom("");
+      setDeleteDateTo("");
+      setDeleteProductId("");
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to delete data.";
+      setDeleteError(message);
+    } finally {
+      setDeleteLoading(false);
+    }
+  }, [authHeaders, bakeryId, deleteDateFrom, deleteDateTo, deleteProductId]);
 
   const handleUpload = () => submitUpload();
 
@@ -347,6 +400,50 @@ export default function DataUploadPage() {
           <p className="text-xs text-slate-500">
             {file ? `Selected: ${file.name}` : "No file selected yet"}
           </p>
+
+          {/* Upload Mode Selector */}
+          {hasFile && (
+            <div className="w-full max-w-md space-y-2">
+              <label className="block text-xs font-medium text-slate-700">
+                Upload Mode
+              </label>
+              <div className="flex gap-4 rounded-lg border border-slate-200 bg-white p-2">
+                <label className="flex flex-1 cursor-pointer items-center gap-2 rounded-md px-3 py-2 hover:bg-slate-50">
+                  <input
+                    type="radio"
+                    name="upload_mode"
+                    value="append"
+                    checked={uploadMode === "append"}
+                    onChange={(e) => setUploadMode(e.target.value as "append" | "replace")}
+                    className="h-4 w-4 text-slate-900 focus:ring-slate-500"
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-slate-900">Append</p>
+                    <p className="text-xs text-slate-500">
+                      Add new data to existing records
+                    </p>
+                  </div>
+                </label>
+                <label className="flex flex-1 cursor-pointer items-center gap-2 rounded-md px-3 py-2 hover:bg-slate-50">
+                  <input
+                    type="radio"
+                    name="upload_mode"
+                    value="replace"
+                    checked={uploadMode === "replace"}
+                    onChange={(e) => setUploadMode(e.target.value as "append" | "replace")}
+                    className="h-4 w-4 text-slate-900 focus:ring-slate-500"
+                  />
+                  <div className="flex-1">
+                    <p className="text-sm font-medium text-slate-900">Replace</p>
+                    <p className="text-xs text-slate-500">
+                      Replace existing data for matching dates
+                    </p>
+                  </div>
+                </label>
+              </div>
+            </div>
+          )}
+
           <button
             type="button"
             onClick={handleUpload}
@@ -362,6 +459,128 @@ export default function DataUploadPage() {
           </p>
         </div>
       </section>
+
+      {/* Delete Data Section */}
+      {bakeryId && (
+        <section className="rounded-2xl border border-red-100 bg-red-50/50 p-5 shadow-sm">
+          <div className="flex items-start gap-3">
+            <Trash2 className="h-5 w-5 text-red-600 mt-0.5" />
+            <div className="flex-1">
+              <h2 className="text-lg font-semibold text-slate-900">Delete Sales Data</h2>
+              <p className="text-sm text-slate-600 mt-1">
+                Permanently delete sales records. Use filters to delete specific data, or leave all fields empty to delete all sales for this bakery.
+              </p>
+
+              <div className="mt-4 grid gap-4 md:grid-cols-3">
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    Date From (optional)
+                  </label>
+                  <input
+                    type="date"
+                    value={deleteDateFrom}
+                    onChange={(e) => setDeleteDateFrom(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    Date To (optional)
+                  </label>
+                  <input
+                    type="date"
+                    value={deleteDateTo}
+                    onChange={(e) => setDeleteDateTo(e.target.value)}
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-medium text-slate-700 mb-1">
+                    Product ID (optional)
+                  </label>
+                  <input
+                    type="number"
+                    value={deleteProductId}
+                    onChange={(e) => setDeleteProductId(e.target.value)}
+                    placeholder="All products"
+                    className="w-full rounded-lg border border-slate-200 px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-red-500"
+                  />
+                </div>
+              </div>
+
+              {deleteError && (
+                <div className="mt-3 rounded-lg border border-red-200 bg-red-100 px-3 py-2 text-sm text-red-700">
+                  {deleteError}
+                </div>
+              )}
+
+              {deleteCount !== null && (
+                <div className="mt-3 rounded-lg border border-green-200 bg-green-100 px-3 py-2 text-sm text-green-700">
+                  Successfully deleted {deleteCount.toLocaleString()} record(s).
+                </div>
+              )}
+
+              {!deleteConfirm ? (
+                <div className="mt-4 flex items-center gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setDeleteConfirm(true)}
+                    disabled={deleteLoading}
+                    className="inline-flex items-center gap-2 rounded-full border border-red-300 bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Delete Data
+                  </button>
+                  <p className="text-xs text-slate-500">
+                    {deleteDateFrom || deleteDateTo || deleteProductId
+                      ? "Deletes records matching the filters above"
+                      : "⚠️ Will delete ALL sales data for this bakery"}
+                  </p>
+                </div>
+              ) : (
+                <div className="mt-4 rounded-lg border border-amber-200 bg-amber-50 p-4">
+                  <div className="flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-amber-600 mt-0.5" />
+                    <div className="flex-1">
+                      <p className="text-sm font-semibold text-amber-900">
+                        Confirm Deletion
+                      </p>
+                      <p className="text-sm text-amber-800 mt-1">
+                        This action cannot be undone. Are you sure you want to delete{" "}
+                        {deleteDateFrom || deleteDateTo || deleteProductId
+                          ? "the filtered sales data"
+                          : "ALL sales data for this bakery"}
+                        ?
+                      </p>
+                      <div className="mt-3 flex items-center gap-3">
+                        <button
+                          type="button"
+                          onClick={handleDelete}
+                          disabled={deleteLoading}
+                          className="rounded-full bg-red-600 px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          {deleteLoading ? "Deleting…" : "Yes, Delete"}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            setDeleteConfirm(false);
+                            setDeleteError(null);
+                          }}
+                          disabled={deleteLoading}
+                          className="rounded-full border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                        >
+                          Cancel
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </section>
+      )}
 
       {error && (
         <div className="rounded-xl border border-red-100 bg-red-50 px-4 py-3 text-sm text-red-700">
