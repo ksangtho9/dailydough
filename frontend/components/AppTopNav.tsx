@@ -23,7 +23,7 @@ const navItems = [
   { label: "Products", href: "/products", icon: Package },
   { label: "History", href: "/history", icon: Clock },
   { label: "Upload Data", href: "/data/upload", icon: Upload },
-  { label: "AI Summary", href: "/ai-summary", icon: Sparkles },
+  { label: "Ask AI", href: "/ai-summary", icon: Sparkles },
 ];
 
 const navButtonClass =

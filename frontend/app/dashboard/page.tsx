@@ -15,7 +15,7 @@ import { TextShimmer } from "@/components/ui/text-shimmer";
 const STORAGE_KEY = "current_bakery_id";
 const DEV_MODE_KEY = "dashboard_dev_mode";
 
-type TabKey = "bake" | "accuracy" | "insights" | "ask";
+type TabKey = "bake" | "accuracy" | "insights";
 
 function formatFriendlyDate(input?: string) {
   if (!input) return "Tomorrow";
@@ -271,7 +271,6 @@ export default function DashboardPage() {
     { key: "bake", label: "Bake Plan" },
     { key: "accuracy", label: "Accuracy" },
     { key: "insights", label: "Insights" },
-    { key: "ask", label: "Ask AI" },
   ];
 
   if (!bakeryId) {
@@ -542,30 +541,6 @@ export default function DashboardPage() {
             </p>
             <GettingStartedChecklist />
           </div>
-        </section>
-      )}
-
-      {activeTab === "ask" && (
-        <section className="rounded-3xl border border-slate-200 bg-white p-6 shadow-sm space-y-4">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-900">
-              Ask the planning assistant
-            </h3>
-            <p className="text-sm text-slate-600">
-              Describe a scenario and the assistant will outline a bake plan.
-            </p>
-          </div>
-          <textarea
-            className="w-full rounded-2xl border border-slate-200 px-4 py-3 text-sm focus:border-amber-400 focus:outline-none"
-            rows={4}
-            placeholder="e.g. “What should I bake if rain is forecasted and payday is this Friday?”"
-          />
-          <button
-            type="button"
-            className="inline-flex items-center rounded-full bg-amber-500 px-4 py-2 text-sm font-semibold text-white shadow hover:bg-amber-600"
-          >
-            Ask AI
-          </button>
         </section>
       )}
     </div>

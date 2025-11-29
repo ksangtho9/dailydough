@@ -13,6 +13,7 @@ from .top_products import router as top_products_router
 from .weekday_pattern import router as weekday_pattern_router
 from .forecast_vs_actual import router as forecast_vs_actual_router
 from .dashboard_summary import router as dashboard_summary_router
+from .ai_assistant import router as ai_assistant_router
 
 api_router = APIRouter()
 
@@ -29,3 +30,4 @@ api_router.include_router(top_products_router)
 api_router.include_router(weekday_pattern_router)
 api_router.include_router(forecast_vs_actual_router)
 api_router.include_router(dashboard_summary_router)
+api_router.include_router(ai_assistant_router)

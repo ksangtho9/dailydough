@@ -16528,3 +16528,723 @@ ValueError: cannot reindex on an axis with duplicate labels
 2025-11-29 10:14:22 - INFO - bakezy.forecast - Starting forecast: product_id=1031 horizon_days=14
 2025-11-29 10:14:22 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1031 (from 2024-11-01 to 2025-10-31)
 2025-11-29 10:14:22 - INFO - bakezy.forecast - Forecast complete: product_id=1031 horizon_days=14 points=14
+2025-11-29 10:19:52 - INFO - bakezy.forecast - Starting forecast: product_id=1001 horizon_days=14
+2025-11-29 10:19:52 - INFO - bakezy.forecast - Starting forecast: product_id=5016 horizon_days=14
+2025-11-29 10:19:52 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=5016 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:52 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1001 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:52 - INFO - bakezy.forecast - Forecast complete: product_id=1001 horizon_days=14 points=14
+2025-11-29 10:19:52 - INFO - bakezy.forecast - Starting forecast: product_id=1007 horizon_days=14
+2025-11-29 10:19:52 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1007 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:52 - INFO - bakezy.forecast - Forecast complete: product_id=5016 horizon_days=14 points=14
+2025-11-29 10:19:52 - INFO - bakezy.forecast - Starting forecast: product_id=3010 horizon_days=14
+2025-11-29 10:19:52 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3010 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:52 - INFO - bakezy.forecast - Forecast complete: product_id=3010 horizon_days=14 points=14
+2025-11-29 10:19:52 - INFO - bakezy.forecast - Starting forecast: product_id=6158 horizon_days=14
+2025-11-29 10:19:52 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6158 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:52 - INFO - bakezy.forecast - Forecast complete: product_id=1007 horizon_days=14 points=14
+2025-11-29 10:19:52 - INFO - bakezy.forecast - Starting forecast: product_id=1009 horizon_days=14
+2025-11-29 10:19:52 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1009 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:53 - INFO - bakezy.forecast - Forecast complete: product_id=1009 horizon_days=14 points=14
+2025-11-29 10:19:53 - INFO - bakezy.forecast - Starting forecast: product_id=1015 horizon_days=14
+2025-11-29 10:19:53 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1015 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:53 - INFO - bakezy.forecast - Forecast complete: product_id=6158 horizon_days=14 points=14
+2025-11-29 10:19:53 - INFO - bakezy.forecast - Starting forecast: product_id=6143 horizon_days=14
+2025-11-29 10:19:53 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6143 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:53 - INFO - bakezy.forecast - Forecast complete: product_id=1015 horizon_days=14 points=14
+2025-11-29 10:19:53 - INFO - bakezy.forecast - Starting forecast: product_id=1016 horizon_days=14
+2025-11-29 10:19:53 - INFO - bakezy.forecast - Forecast complete: product_id=6143 horizon_days=14 points=14
+2025-11-29 10:19:53 - INFO - bakezy.forecast - Starting forecast: product_id=2005 horizon_days=14
+2025-11-29 10:19:53 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1016 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:53 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=2005 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:53 - INFO - bakezy.forecast - Forecast complete: product_id=2005 horizon_days=14 points=14
+2025-11-29 10:19:53 - INFO - bakezy.forecast - Starting forecast: product_id=2004 horizon_days=14
+2025-11-29 10:19:53 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=2004 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:53 - INFO - bakezy.forecast - Forecast complete: product_id=1016 horizon_days=14 points=14
+2025-11-29 10:19:53 - INFO - bakezy.forecast - Starting forecast: product_id=1017 horizon_days=14
+2025-11-29 10:19:53 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1017 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:54 - INFO - bakezy.forecast - Forecast complete: product_id=2004 horizon_days=14 points=14
+2025-11-29 10:19:54 - INFO - bakezy.forecast - Starting forecast: product_id=3148 horizon_days=14
+2025-11-29 10:19:54 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3148 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:54 - INFO - bakezy.forecast - Forecast complete: product_id=1017 horizon_days=14 points=14
+2025-11-29 10:19:54 - INFO - bakezy.forecast - Starting forecast: product_id=1021 horizon_days=14
+2025-11-29 10:19:54 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1021 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:54 - INFO - bakezy.forecast - Forecast complete: product_id=3148 horizon_days=14 points=14
+2025-11-29 10:19:54 - INFO - bakezy.forecast - Starting forecast: product_id=4121 horizon_days=14
+2025-11-29 10:19:54 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=4121 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:54 - INFO - bakezy.forecast - Forecast complete: product_id=1021 horizon_days=14 points=14
+2025-11-29 10:19:54 - INFO - bakezy.forecast - Starting forecast: product_id=1028 horizon_days=14
+2025-11-29 10:19:54 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1028 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:54 - INFO - bakezy.forecast - Forecast complete: product_id=4121 horizon_days=14 points=14
+2025-11-29 10:19:54 - INFO - bakezy.forecast - Starting forecast: product_id=6272 horizon_days=14
+2025-11-29 10:19:54 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6272 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:54 - INFO - bakezy.forecast - Forecast complete: product_id=1028 horizon_days=14 points=14
+2025-11-29 10:19:54 - INFO - bakezy.forecast - Starting forecast: product_id=1031 horizon_days=14
+2025-11-29 10:19:54 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1031 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:54 - INFO - bakezy.forecast - Forecast complete: product_id=6272 horizon_days=14 points=14
+2025-11-29 10:19:54 - INFO - bakezy.forecast - Starting forecast: product_id=3018 horizon_days=14
+2025-11-29 10:19:54 - INFO - bakezy.forecast - Forecast complete: product_id=1031 horizon_days=14 points=14
+2025-11-29 10:19:54 - INFO - bakezy.forecast - Starting forecast: product_id=1039 horizon_days=14
+2025-11-29 10:19:54 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3018 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:54 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1039 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:55 - INFO - bakezy.forecast - Forecast complete: product_id=3018 horizon_days=14 points=14
+2025-11-29 10:19:55 - INFO - bakezy.forecast - Starting forecast: product_id=6059 horizon_days=14
+2025-11-29 10:19:55 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6059 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:55 - INFO - bakezy.forecast - Forecast complete: product_id=1039 horizon_days=14 points=14
+2025-11-29 10:19:55 - INFO - bakezy.forecast - Starting forecast: product_id=1071 horizon_days=14
+2025-11-29 10:19:55 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1071 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:55 - INFO - bakezy.forecast - Forecast complete: product_id=6059 horizon_days=14 points=14
+2025-11-29 10:19:55 - INFO - bakezy.forecast - Starting forecast: product_id=5001 horizon_days=14
+2025-11-29 10:19:55 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=5001 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:55 - INFO - bakezy.forecast - Forecast complete: product_id=1071 horizon_days=14 points=14
+2025-11-29 10:19:55 - INFO - bakezy.forecast - Starting forecast: product_id=1082 horizon_days=14
+2025-11-29 10:19:55 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1082 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:55 - INFO - bakezy.forecast - Forecast complete: product_id=5001 horizon_days=14 points=14
+2025-11-29 10:19:55 - INFO - bakezy.forecast - Starting forecast: product_id=6416 horizon_days=14
+2025-11-29 10:19:55 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6416 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:55 - INFO - bakezy.forecast - Forecast complete: product_id=1082 horizon_days=14 points=14
+2025-11-29 10:19:55 - INFO - bakezy.forecast - Starting forecast: product_id=1123 horizon_days=14
+2025-11-29 10:19:55 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1123 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:56 - INFO - bakezy.forecast - Forecast complete: product_id=6416 horizon_days=14 points=14
+2025-11-29 10:19:56 - INFO - bakezy.forecast - Starting forecast: product_id=7052 horizon_days=14
+2025-11-29 10:19:56 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=7052 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:56 - INFO - bakezy.forecast - Forecast complete: product_id=1123 horizon_days=14 points=14
+2025-11-29 10:19:56 - INFO - bakezy.forecast - Starting forecast: product_id=2004 horizon_days=14
+2025-11-29 10:19:56 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=2004 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:56 - INFO - bakezy.forecast - Forecast complete: product_id=7052 horizon_days=14 points=14
+2025-11-29 10:19:56 - INFO - bakezy.forecast - Starting forecast: product_id=7002 horizon_days=14
+2025-11-29 10:19:56 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=7002 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:56 - INFO - bakezy.forecast - Forecast complete: product_id=2004 horizon_days=14 points=14
+2025-11-29 10:19:56 - INFO - bakezy.forecast - Starting forecast: product_id=2005 horizon_days=14
+2025-11-29 10:19:56 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=2005 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:56 - INFO - bakezy.forecast - Forecast complete: product_id=2005 horizon_days=14 points=14
+2025-11-29 10:19:56 - INFO - bakezy.forecast - Starting forecast: product_id=3010 horizon_days=14
+2025-11-29 10:19:56 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3010 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:56 - INFO - bakezy.forecast - Forecast complete: product_id=7002 horizon_days=14 points=14
+2025-11-29 10:19:56 - INFO - bakezy.forecast - Starting forecast: product_id=7009 horizon_days=14
+2025-11-29 10:19:56 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=7009 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:57 - INFO - bakezy.forecast - Forecast complete: product_id=3010 horizon_days=14 points=14
+2025-11-29 10:19:57 - INFO - bakezy.forecast - Starting forecast: product_id=3018 horizon_days=14
+2025-11-29 10:19:57 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3018 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:57 - INFO - bakezy.forecast - Forecast complete: product_id=7009 horizon_days=14 points=14
+2025-11-29 10:19:57 - INFO - bakezy.forecast - Starting forecast: product_id=3037 horizon_days=14
+2025-11-29 10:19:57 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3037 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:57 - INFO - bakezy.forecast - Forecast complete: product_id=3018 horizon_days=14 points=14
+2025-11-29 10:19:57 - INFO - bakezy.forecast - Starting forecast: product_id=3037 horizon_days=14
+2025-11-29 10:19:57 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3037 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:57 - INFO - bakezy.forecast - Forecast complete: product_id=3037 horizon_days=14 points=14
+2025-11-29 10:19:57 - INFO - bakezy.forecast - Starting forecast: product_id=1082 horizon_days=14
+2025-11-29 10:19:57 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1082 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:57 - INFO - bakezy.forecast - Forecast complete: product_id=3037 horizon_days=14 points=14
+2025-11-29 10:19:57 - INFO - bakezy.forecast - Starting forecast: product_id=3148 horizon_days=14
+2025-11-29 10:19:57 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3148 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:57 - INFO - bakezy.forecast - Forecast complete: product_id=1082 horizon_days=14 points=14
+2025-11-29 10:19:57 - INFO - bakezy.forecast - Starting forecast: product_id=1021 horizon_days=14
+2025-11-29 10:19:57 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1021 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:57 - INFO - bakezy.forecast - Forecast complete: product_id=3148 horizon_days=14 points=14
+2025-11-29 10:19:57 - INFO - bakezy.forecast - Starting forecast: product_id=4121 horizon_days=14
+2025-11-29 10:19:57 - INFO - bakezy.forecast - Forecast complete: product_id=1021 horizon_days=14 points=14
+2025-11-29 10:19:57 - INFO - bakezy.forecast - Starting forecast: product_id=1007 horizon_days=14
+2025-11-29 10:19:57 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=4121 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:57 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1007 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:58 - INFO - bakezy.forecast - Forecast complete: product_id=4121 horizon_days=14 points=14
+2025-11-29 10:19:58 - INFO - bakezy.forecast - Starting forecast: product_id=5001 horizon_days=14
+2025-11-29 10:19:58 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=5001 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:58 - INFO - bakezy.forecast - Forecast complete: product_id=1007 horizon_days=14 points=14
+2025-11-29 10:19:58 - INFO - bakezy.forecast - Starting forecast: product_id=1123 horizon_days=14
+2025-11-29 10:19:58 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1123 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:58 - INFO - bakezy.forecast - Forecast complete: product_id=5001 horizon_days=14 points=14
+2025-11-29 10:19:58 - INFO - bakezy.forecast - Starting forecast: product_id=5016 horizon_days=14
+2025-11-29 10:19:58 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=5016 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:58 - INFO - bakezy.forecast - Forecast complete: product_id=1123 horizon_days=14 points=14
+2025-11-29 10:19:58 - INFO - bakezy.forecast - Starting forecast: product_id=1001 horizon_days=14
+2025-11-29 10:19:58 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1001 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:58 - INFO - bakezy.forecast - Forecast complete: product_id=1001 horizon_days=14 points=14
+2025-11-29 10:19:58 - INFO - bakezy.forecast - Forecast complete: product_id=5016 horizon_days=14 points=14
+2025-11-29 10:19:58 - INFO - bakezy.forecast - Starting forecast: product_id=1039 horizon_days=14
+2025-11-29 10:19:58 - INFO - bakezy.forecast - Starting forecast: product_id=6059 horizon_days=14
+2025-11-29 10:19:58 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1039 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:58 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6059 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:59 - INFO - bakezy.forecast - Forecast complete: product_id=6059 horizon_days=14 points=14
+2025-11-29 10:19:59 - INFO - bakezy.forecast - Starting forecast: product_id=6143 horizon_days=14
+2025-11-29 10:19:59 - INFO - bakezy.forecast - Forecast complete: product_id=1039 horizon_days=14 points=14
+2025-11-29 10:19:59 - INFO - bakezy.forecast - Starting forecast: product_id=1016 horizon_days=14
+2025-11-29 10:19:59 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6143 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:59 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1016 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:59 - INFO - bakezy.forecast - Forecast complete: product_id=6143 horizon_days=14 points=14
+2025-11-29 10:19:59 - INFO - bakezy.forecast - Starting forecast: product_id=6158 horizon_days=14
+2025-11-29 10:19:59 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6158 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:59 - INFO - bakezy.forecast - Forecast complete: product_id=1016 horizon_days=14 points=14
+2025-11-29 10:19:59 - INFO - bakezy.forecast - Starting forecast: product_id=1009 horizon_days=14
+2025-11-29 10:19:59 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1009 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:59 - INFO - bakezy.forecast - Forecast complete: product_id=1009 horizon_days=14 points=14
+2025-11-29 10:19:59 - INFO - bakezy.forecast - Starting forecast: product_id=1071 horizon_days=14
+2025-11-29 10:19:59 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1071 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:19:59 - INFO - bakezy.forecast - Forecast complete: product_id=6158 horizon_days=14 points=14
+2025-11-29 10:19:59 - INFO - bakezy.forecast - Starting forecast: product_id=6272 horizon_days=14
+2025-11-29 10:19:59 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6272 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:20:00 - INFO - bakezy.forecast - Forecast complete: product_id=6272 horizon_days=14 points=14
+2025-11-29 10:20:00 - INFO - bakezy.forecast - Starting forecast: product_id=6416 horizon_days=14
+2025-11-29 10:20:00 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6416 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:20:00 - INFO - bakezy.forecast - Forecast complete: product_id=1071 horizon_days=14 points=14
+2025-11-29 10:20:00 - INFO - bakezy.forecast - Starting forecast: product_id=1015 horizon_days=14
+2025-11-29 10:20:00 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1015 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:20:00 - INFO - bakezy.forecast - Forecast complete: product_id=6416 horizon_days=14 points=14
+2025-11-29 10:20:00 - INFO - bakezy.forecast - Starting forecast: product_id=7002 horizon_days=14
+2025-11-29 10:20:00 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=7002 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:20:00 - INFO - bakezy.forecast - Forecast complete: product_id=1015 horizon_days=14 points=14
+2025-11-29 10:20:00 - INFO - bakezy.forecast - Starting forecast: product_id=1017 horizon_days=14
+2025-11-29 10:20:00 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1017 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:20:00 - INFO - bakezy.forecast - Forecast complete: product_id=1017 horizon_days=14 points=14
+2025-11-29 10:20:00 - INFO - bakezy.forecast - Starting forecast: product_id=1028 horizon_days=14
+2025-11-29 10:20:00 - INFO - bakezy.forecast - Forecast complete: product_id=7002 horizon_days=14 points=14
+2025-11-29 10:20:00 - INFO - bakezy.forecast - Starting forecast: product_id=7009 horizon_days=14
+2025-11-29 10:20:00 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=7009 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:20:00 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1028 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:20:01 - INFO - bakezy.forecast - Forecast complete: product_id=1028 horizon_days=14 points=14
+2025-11-29 10:20:01 - INFO - bakezy.forecast - Starting forecast: product_id=1031 horizon_days=14
+2025-11-29 10:20:01 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1031 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:20:01 - INFO - bakezy.forecast - Forecast complete: product_id=7009 horizon_days=14 points=14
+2025-11-29 10:20:01 - INFO - bakezy.forecast - Starting forecast: product_id=7052 horizon_days=14
+2025-11-29 10:20:01 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=7052 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:20:01 - INFO - bakezy.forecast - Forecast complete: product_id=7052 horizon_days=14 points=14
+2025-11-29 10:20:01 - INFO - bakezy.forecast - Forecast complete: product_id=1031 horizon_days=14 points=14
+2025-11-29 10:22:48 - INFO - bakezy.forecast - Starting forecast: product_id=1001 horizon_days=14
+2025-11-29 10:22:48 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1001 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:48 - INFO - bakezy.forecast - Starting forecast: product_id=1016 horizon_days=14
+2025-11-29 10:22:48 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1016 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:48 - INFO - bakezy.forecast - Starting forecast: product_id=1015 horizon_days=14
+2025-11-29 10:22:48 - INFO - bakezy.forecast - Starting forecast: product_id=1007 horizon_days=14
+2025-11-29 10:22:48 - INFO - bakezy.forecast - Starting forecast: product_id=1009 horizon_days=14
+2025-11-29 10:22:48 - INFO - bakezy.forecast - Starting forecast: product_id=1017 horizon_days=14
+2025-11-29 10:22:48 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1007 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:48 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1015 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:48 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1009 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:48 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1017 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:48 - INFO - bakezy.forecast - Forecast complete: product_id=1001 horizon_days=14 points=14
+2025-11-29 10:22:48 - INFO - bakezy.forecast - Forecast complete: product_id=1016 horizon_days=14 points=14
+2025-11-29 10:22:48 - INFO - bakezy.forecast - Starting forecast: product_id=1021 horizon_days=14
+2025-11-29 10:22:48 - INFO - bakezy.forecast - Starting forecast: product_id=1028 horizon_days=14
+2025-11-29 10:22:48 - INFO - bakezy.forecast - Forecast complete: product_id=1015 horizon_days=14 points=14
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Starting forecast: product_id=1031 horizon_days=14
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Forecast complete: product_id=1007 horizon_days=14 points=14
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Starting forecast: product_id=1039 horizon_days=14
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1021 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1028 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Forecast complete: product_id=1009 horizon_days=14 points=14
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1031 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Forecast complete: product_id=1017 horizon_days=14 points=14
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1039 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Starting forecast: product_id=1071 horizon_days=14
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Starting forecast: product_id=2004 horizon_days=14
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=2004 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1071 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Forecast complete: product_id=1028 horizon_days=14 points=14
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Starting forecast: product_id=1082 horizon_days=14
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1082 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Forecast complete: product_id=1021 horizon_days=14 points=14
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Forecast complete: product_id=1031 horizon_days=14 points=14
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Starting forecast: product_id=2005 horizon_days=14
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Starting forecast: product_id=1123 horizon_days=14
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1123 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Forecast complete: product_id=1071 horizon_days=14 points=14
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=2005 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Forecast complete: product_id=2004 horizon_days=14 points=14
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Forecast complete: product_id=1039 horizon_days=14 points=14
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Starting forecast: product_id=3018 horizon_days=14
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Starting forecast: product_id=3037 horizon_days=14
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Starting forecast: product_id=3010 horizon_days=14
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3018 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3010 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:49 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3037 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:50 - INFO - bakezy.forecast - Forecast complete: product_id=1082 horizon_days=14 points=14
+2025-11-29 10:22:50 - INFO - bakezy.forecast - Starting forecast: product_id=3148 horizon_days=14
+2025-11-29 10:22:50 - INFO - bakezy.forecast - Forecast complete: product_id=1123 horizon_days=14 points=14
+2025-11-29 10:22:50 - INFO - bakezy.forecast - Forecast complete: product_id=2005 horizon_days=14 points=14
+2025-11-29 10:22:50 - INFO - bakezy.forecast - Starting forecast: product_id=4121 horizon_days=14
+2025-11-29 10:22:50 - INFO - bakezy.forecast - Starting forecast: product_id=5001 horizon_days=14
+2025-11-29 10:22:50 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3148 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:50 - INFO - bakezy.forecast - Forecast complete: product_id=3018 horizon_days=14 points=14
+2025-11-29 10:22:50 - INFO - bakezy.forecast - Starting forecast: product_id=5016 horizon_days=14
+2025-11-29 10:22:50 - INFO - bakezy.forecast - Forecast complete: product_id=3010 horizon_days=14 points=14
+2025-11-29 10:22:50 - INFO - bakezy.forecast - Starting forecast: product_id=6143 horizon_days=14
+2025-11-29 10:22:50 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=4121 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:50 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=5001 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:50 - INFO - bakezy.forecast - Forecast complete: product_id=3037 horizon_days=14 points=14
+2025-11-29 10:22:50 - INFO - bakezy.forecast - Starting forecast: product_id=6059 horizon_days=14
+2025-11-29 10:22:50 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6143 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:50 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=5016 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:50 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6059 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:50 - INFO - bakezy.forecast - Forecast complete: product_id=3148 horizon_days=14 points=14
+2025-11-29 10:22:50 - INFO - bakezy.forecast - Starting forecast: product_id=6158 horizon_days=14
+2025-11-29 10:22:50 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6158 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:50 - INFO - bakezy.forecast - Forecast complete: product_id=5001 horizon_days=14 points=14
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Forecast complete: product_id=4121 horizon_days=14 points=14
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Starting forecast: product_id=6272 horizon_days=14
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Forecast complete: product_id=6143 horizon_days=14 points=14
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Starting forecast: product_id=7009 horizon_days=14
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Starting forecast: product_id=6416 horizon_days=14
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6272 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Forecast complete: product_id=6059 horizon_days=14 points=14
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6416 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=7009 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Forecast complete: product_id=5016 horizon_days=14 points=14
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Starting forecast: product_id=7002 horizon_days=14
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Starting forecast: product_id=7052 horizon_days=14
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=7002 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=7052 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Forecast complete: product_id=6158 horizon_days=14 points=14
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Starting forecast: product_id=1001 horizon_days=14
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Forecast complete: product_id=6272 horizon_days=14 points=14
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Starting forecast: product_id=1007 horizon_days=14
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Forecast complete: product_id=7009 horizon_days=14 points=14
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1001 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Forecast complete: product_id=6416 horizon_days=14 points=14
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Starting forecast: product_id=1009 horizon_days=14
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Starting forecast: product_id=1015 horizon_days=14
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1007 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Forecast complete: product_id=7052 horizon_days=14 points=14
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Forecast complete: product_id=7002 horizon_days=14 points=14
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1009 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Starting forecast: product_id=1016 horizon_days=14
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Starting forecast: product_id=1017 horizon_days=14
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1015 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1017 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:51 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1016 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:52 - INFO - bakezy.forecast - Forecast complete: product_id=1001 horizon_days=14 points=14
+2025-11-29 10:22:52 - INFO - bakezy.forecast - Starting forecast: product_id=1021 horizon_days=14
+2025-11-29 10:22:52 - INFO - bakezy.forecast - Forecast complete: product_id=1007 horizon_days=14 points=14
+2025-11-29 10:22:52 - INFO - bakezy.forecast - Starting forecast: product_id=1028 horizon_days=14
+2025-11-29 10:22:52 - INFO - bakezy.forecast - Forecast complete: product_id=1009 horizon_days=14 points=14
+2025-11-29 10:22:52 - INFO - bakezy.forecast - Starting forecast: product_id=1031 horizon_days=14
+2025-11-29 10:22:52 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1021 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:52 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1028 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:52 - INFO - bakezy.forecast - Forecast complete: product_id=1015 horizon_days=14 points=14
+2025-11-29 10:22:52 - INFO - bakezy.forecast - Starting forecast: product_id=1039 horizon_days=14
+2025-11-29 10:22:52 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1031 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:52 - INFO - bakezy.forecast - Forecast complete: product_id=1017 horizon_days=14 points=14
+2025-11-29 10:22:52 - INFO - bakezy.forecast - Starting forecast: product_id=1071 horizon_days=14
+2025-11-29 10:22:52 - INFO - bakezy.forecast - Forecast complete: product_id=1016 horizon_days=14 points=14
+2025-11-29 10:22:52 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1039 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:52 - INFO - bakezy.forecast - Starting forecast: product_id=1082 horizon_days=14
+2025-11-29 10:22:52 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1082 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:52 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1071 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:52 - INFO - bakezy.forecast - Forecast complete: product_id=1021 horizon_days=14 points=14
+2025-11-29 10:22:52 - INFO - bakezy.forecast - Starting forecast: product_id=1123 horizon_days=14
+2025-11-29 10:22:52 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1123 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:52 - INFO - bakezy.forecast - Forecast complete: product_id=1028 horizon_days=14 points=14
+2025-11-29 10:22:52 - INFO - bakezy.forecast - Starting forecast: product_id=2004 horizon_days=14
+2025-11-29 10:22:52 - INFO - bakezy.forecast - Forecast complete: product_id=1031 horizon_days=14 points=14
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Starting forecast: product_id=2005 horizon_days=14
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=2004 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Forecast complete: product_id=1071 horizon_days=14 points=14
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Starting forecast: product_id=3010 horizon_days=14
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=2005 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Forecast complete: product_id=1039 horizon_days=14 points=14
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Forecast complete: product_id=1082 horizon_days=14 points=14
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Starting forecast: product_id=3018 horizon_days=14
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Starting forecast: product_id=3037 horizon_days=14
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3010 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3037 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3018 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Forecast complete: product_id=1123 horizon_days=14 points=14
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Starting forecast: product_id=3148 horizon_days=14
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3148 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Forecast complete: product_id=2004 horizon_days=14 points=14
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Starting forecast: product_id=4121 horizon_days=14
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Forecast complete: product_id=2005 horizon_days=14 points=14
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Starting forecast: product_id=5001 horizon_days=14
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Forecast complete: product_id=3010 horizon_days=14 points=14
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=4121 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Starting forecast: product_id=5016 horizon_days=14
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=5001 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Forecast complete: product_id=3018 horizon_days=14 points=14
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Forecast complete: product_id=3037 horizon_days=14 points=14
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Starting forecast: product_id=6059 horizon_days=14
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Starting forecast: product_id=6143 horizon_days=14
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=5016 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6059 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Forecast complete: product_id=3148 horizon_days=14 points=14
+2025-11-29 10:22:53 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6143 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:54 - INFO - bakezy.forecast - Starting forecast: product_id=6158 horizon_days=14
+2025-11-29 10:22:54 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6158 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:54 - INFO - bakezy.forecast - Forecast complete: product_id=4121 horizon_days=14 points=14
+2025-11-29 10:22:54 - INFO - bakezy.forecast - Starting forecast: product_id=6272 horizon_days=14
+2025-11-29 10:22:54 - INFO - bakezy.forecast - Forecast complete: product_id=5001 horizon_days=14 points=14
+2025-11-29 10:22:54 - INFO - bakezy.forecast - Forecast complete: product_id=5016 horizon_days=14 points=14
+2025-11-29 10:22:54 - INFO - bakezy.forecast - Starting forecast: product_id=6416 horizon_days=14
+2025-11-29 10:22:54 - INFO - bakezy.forecast - Starting forecast: product_id=7002 horizon_days=14
+2025-11-29 10:22:54 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6272 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:54 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6416 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:54 - INFO - bakezy.forecast - Forecast complete: product_id=6059 horizon_days=14 points=14
+2025-11-29 10:22:54 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=7002 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:54 - INFO - bakezy.forecast - Forecast complete: product_id=6143 horizon_days=14 points=14
+2025-11-29 10:22:54 - INFO - bakezy.forecast - Starting forecast: product_id=7009 horizon_days=14
+2025-11-29 10:22:54 - INFO - bakezy.forecast - Starting forecast: product_id=7052 horizon_days=14
+2025-11-29 10:22:54 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=7052 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:54 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=7009 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:54 - INFO - bakezy.forecast - Forecast complete: product_id=6158 horizon_days=14 points=14
+2025-11-29 10:22:55 - INFO - bakezy.forecast - Starting forecast: product_id=5016 horizon_days=14
+2025-11-29 10:22:55 - INFO - bakezy.forecast - Forecast complete: product_id=6272 horizon_days=14 points=14
+2025-11-29 10:22:55 - INFO - bakezy.forecast - Starting forecast: product_id=1001 horizon_days=14
+2025-11-29 10:22:55 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=5016 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:55 - INFO - bakezy.forecast - Forecast complete: product_id=6416 horizon_days=14 points=14
+2025-11-29 10:22:55 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1001 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:55 - INFO - bakezy.forecast - Forecast complete: product_id=7002 horizon_days=14 points=14
+2025-11-29 10:22:55 - INFO - bakezy.forecast - Forecast complete: product_id=7052 horizon_days=14 points=14
+2025-11-29 10:22:55 - INFO - bakezy.forecast - Forecast complete: product_id=7009 horizon_days=14 points=14
+2025-11-29 10:22:55 - INFO - bakezy.forecast - Forecast complete: product_id=1001 horizon_days=14 points=14
+2025-11-29 10:22:55 - INFO - bakezy.forecast - Starting forecast: product_id=1007 horizon_days=14
+2025-11-29 10:22:55 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1007 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:55 - INFO - bakezy.forecast - Forecast complete: product_id=5016 horizon_days=14 points=14
+2025-11-29 10:22:55 - INFO - bakezy.forecast - Starting forecast: product_id=3010 horizon_days=14
+2025-11-29 10:22:55 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3010 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:55 - INFO - bakezy.forecast - Forecast complete: product_id=3010 horizon_days=14 points=14
+2025-11-29 10:22:55 - INFO - bakezy.forecast - Starting forecast: product_id=6158 horizon_days=14
+2025-11-29 10:22:55 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6158 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:55 - INFO - bakezy.forecast - Forecast complete: product_id=1007 horizon_days=14 points=14
+2025-11-29 10:22:55 - INFO - bakezy.forecast - Starting forecast: product_id=1009 horizon_days=14
+2025-11-29 10:22:55 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1009 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:56 - INFO - bakezy.forecast - Forecast complete: product_id=1009 horizon_days=14 points=14
+2025-11-29 10:22:56 - INFO - bakezy.forecast - Starting forecast: product_id=1015 horizon_days=14
+2025-11-29 10:22:56 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1015 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:56 - INFO - bakezy.forecast - Forecast complete: product_id=6158 horizon_days=14 points=14
+2025-11-29 10:22:56 - INFO - bakezy.forecast - Starting forecast: product_id=6143 horizon_days=14
+2025-11-29 10:22:56 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6143 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:56 - INFO - bakezy.forecast - Forecast complete: product_id=6143 horizon_days=14 points=14
+2025-11-29 10:22:56 - INFO - bakezy.forecast - Starting forecast: product_id=2005 horizon_days=14
+2025-11-29 10:22:56 - INFO - bakezy.forecast - Forecast complete: product_id=1015 horizon_days=14 points=14
+2025-11-29 10:22:56 - INFO - bakezy.forecast - Starting forecast: product_id=1016 horizon_days=14
+2025-11-29 10:22:56 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=2005 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:56 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1016 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:56 - INFO - bakezy.forecast - Forecast complete: product_id=2005 horizon_days=14 points=14
+2025-11-29 10:22:56 - INFO - bakezy.forecast - Starting forecast: product_id=2004 horizon_days=14
+2025-11-29 10:22:56 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=2004 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:57 - INFO - bakezy.forecast - Forecast complete: product_id=1016 horizon_days=14 points=14
+2025-11-29 10:22:57 - INFO - bakezy.forecast - Starting forecast: product_id=1017 horizon_days=14
+2025-11-29 10:22:57 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1017 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:57 - INFO - bakezy.forecast - Forecast complete: product_id=2004 horizon_days=14 points=14
+2025-11-29 10:22:57 - INFO - bakezy.forecast - Starting forecast: product_id=3148 horizon_days=14
+2025-11-29 10:22:57 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3148 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:57 - INFO - bakezy.forecast - Forecast complete: product_id=1017 horizon_days=14 points=14
+2025-11-29 10:22:57 - INFO - bakezy.forecast - Starting forecast: product_id=1021 horizon_days=14
+2025-11-29 10:22:57 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1021 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:57 - INFO - bakezy.forecast - Forecast complete: product_id=3148 horizon_days=14 points=14
+2025-11-29 10:22:57 - INFO - bakezy.forecast - Starting forecast: product_id=4121 horizon_days=14
+2025-11-29 10:22:57 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=4121 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:57 - INFO - bakezy.forecast - Forecast complete: product_id=1021 horizon_days=14 points=14
+2025-11-29 10:22:57 - INFO - bakezy.forecast - Starting forecast: product_id=1028 horizon_days=14
+2025-11-29 10:22:57 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1028 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:57 - INFO - bakezy.forecast - Forecast complete: product_id=4121 horizon_days=14 points=14
+2025-11-29 10:22:57 - INFO - bakezy.forecast - Starting forecast: product_id=6272 horizon_days=14
+2025-11-29 10:22:57 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6272 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:57 - INFO - bakezy.forecast - Forecast complete: product_id=1028 horizon_days=14 points=14
+2025-11-29 10:22:57 - INFO - bakezy.forecast - Starting forecast: product_id=1031 horizon_days=14
+2025-11-29 10:22:57 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1031 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:58 - INFO - bakezy.forecast - Forecast complete: product_id=6272 horizon_days=14 points=14
+2025-11-29 10:22:58 - INFO - bakezy.forecast - Starting forecast: product_id=3018 horizon_days=14
+2025-11-29 10:22:58 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3018 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:58 - INFO - bakezy.forecast - Forecast complete: product_id=1031 horizon_days=14 points=14
+2025-11-29 10:22:58 - INFO - bakezy.forecast - Starting forecast: product_id=1039 horizon_days=14
+2025-11-29 10:22:58 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1039 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:58 - INFO - bakezy.forecast - Forecast complete: product_id=3018 horizon_days=14 points=14
+2025-11-29 10:22:58 - INFO - bakezy.forecast - Starting forecast: product_id=6059 horizon_days=14
+2025-11-29 10:22:58 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6059 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:58 - INFO - bakezy.forecast - Forecast complete: product_id=1039 horizon_days=14 points=14
+2025-11-29 10:22:58 - INFO - bakezy.forecast - Starting forecast: product_id=1071 horizon_days=14
+2025-11-29 10:22:58 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1071 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:58 - INFO - bakezy.forecast - Forecast complete: product_id=6059 horizon_days=14 points=14
+2025-11-29 10:22:58 - INFO - bakezy.forecast - Starting forecast: product_id=5001 horizon_days=14
+2025-11-29 10:22:58 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=5001 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:58 - INFO - bakezy.forecast - Forecast complete: product_id=1071 horizon_days=14 points=14
+2025-11-29 10:22:58 - INFO - bakezy.forecast - Starting forecast: product_id=1082 horizon_days=14
+2025-11-29 10:22:58 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1082 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:58 - INFO - bakezy.forecast - Forecast complete: product_id=5001 horizon_days=14 points=14
+2025-11-29 10:22:58 - INFO - bakezy.forecast - Starting forecast: product_id=6416 horizon_days=14
+2025-11-29 10:22:58 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6416 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:59 - INFO - bakezy.forecast - Forecast complete: product_id=1082 horizon_days=14 points=14
+2025-11-29 10:22:59 - INFO - bakezy.forecast - Starting forecast: product_id=1123 horizon_days=14
+2025-11-29 10:22:59 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1123 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:59 - INFO - bakezy.forecast - Forecast complete: product_id=6416 horizon_days=14 points=14
+2025-11-29 10:22:59 - INFO - bakezy.forecast - Starting forecast: product_id=7052 horizon_days=14
+2025-11-29 10:22:59 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=7052 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:59 - INFO - bakezy.forecast - Forecast complete: product_id=1123 horizon_days=14 points=14
+2025-11-29 10:22:59 - INFO - bakezy.forecast - Starting forecast: product_id=2004 horizon_days=14
+2025-11-29 10:22:59 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=2004 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:59 - INFO - bakezy.forecast - Forecast complete: product_id=7052 horizon_days=14 points=14
+2025-11-29 10:22:59 - INFO - bakezy.forecast - Starting forecast: product_id=7002 horizon_days=14
+2025-11-29 10:22:59 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=7002 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:59 - INFO - bakezy.forecast - Forecast complete: product_id=2004 horizon_days=14 points=14
+2025-11-29 10:22:59 - INFO - bakezy.forecast - Starting forecast: product_id=2005 horizon_days=14
+2025-11-29 10:22:59 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=2005 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:59 - INFO - bakezy.forecast - Forecast complete: product_id=7002 horizon_days=14 points=14
+2025-11-29 10:22:59 - INFO - bakezy.forecast - Starting forecast: product_id=7009 horizon_days=14
+2025-11-29 10:22:59 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=7009 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:22:59 - INFO - bakezy.forecast - Forecast complete: product_id=2005 horizon_days=14 points=14
+2025-11-29 10:22:59 - INFO - bakezy.forecast - Starting forecast: product_id=3010 horizon_days=14
+2025-11-29 10:22:59 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3010 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:00 - INFO - bakezy.forecast - Forecast complete: product_id=7009 horizon_days=14 points=14
+2025-11-29 10:23:00 - INFO - bakezy.forecast - Starting forecast: product_id=3037 horizon_days=14
+2025-11-29 10:23:00 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3037 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:00 - INFO - bakezy.forecast - Forecast complete: product_id=3010 horizon_days=14 points=14
+2025-11-29 10:23:00 - INFO - bakezy.forecast - Starting forecast: product_id=3018 horizon_days=14
+2025-11-29 10:23:00 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3018 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:00 - INFO - bakezy.forecast - Forecast complete: product_id=3037 horizon_days=14 points=14
+2025-11-29 10:23:00 - INFO - bakezy.forecast - Starting forecast: product_id=1082 horizon_days=14
+2025-11-29 10:23:00 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1082 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:00 - INFO - bakezy.forecast - Forecast complete: product_id=3018 horizon_days=14 points=14
+2025-11-29 10:23:00 - INFO - bakezy.forecast - Starting forecast: product_id=3037 horizon_days=14
+2025-11-29 10:23:00 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3037 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:00 - INFO - bakezy.forecast - Forecast complete: product_id=1082 horizon_days=14 points=14
+2025-11-29 10:23:00 - INFO - bakezy.forecast - Starting forecast: product_id=1021 horizon_days=14
+2025-11-29 10:23:00 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1021 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:00 - INFO - bakezy.forecast - Forecast complete: product_id=3037 horizon_days=14 points=14
+2025-11-29 10:23:00 - INFO - bakezy.forecast - Starting forecast: product_id=3148 horizon_days=14
+2025-11-29 10:23:00 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3148 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:01 - INFO - bakezy.forecast - Forecast complete: product_id=1021 horizon_days=14 points=14
+2025-11-29 10:23:01 - INFO - bakezy.forecast - Starting forecast: product_id=1007 horizon_days=14
+2025-11-29 10:23:01 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1007 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:01 - INFO - bakezy.forecast - Forecast complete: product_id=3148 horizon_days=14 points=14
+2025-11-29 10:23:01 - INFO - bakezy.forecast - Starting forecast: product_id=4121 horizon_days=14
+2025-11-29 10:23:01 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=4121 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:01 - INFO - bakezy.forecast - Forecast complete: product_id=1007 horizon_days=14 points=14
+2025-11-29 10:23:01 - INFO - bakezy.forecast - Starting forecast: product_id=1123 horizon_days=14
+2025-11-29 10:23:01 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1123 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:01 - INFO - bakezy.forecast - Forecast complete: product_id=4121 horizon_days=14 points=14
+2025-11-29 10:23:01 - INFO - bakezy.forecast - Starting forecast: product_id=5001 horizon_days=14
+2025-11-29 10:23:01 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=5001 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:01 - INFO - bakezy.forecast - Forecast complete: product_id=1123 horizon_days=14 points=14
+2025-11-29 10:23:01 - INFO - bakezy.forecast - Starting forecast: product_id=1001 horizon_days=14
+2025-11-29 10:23:01 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1001 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:01 - INFO - bakezy.forecast - Forecast complete: product_id=5001 horizon_days=14 points=14
+2025-11-29 10:23:01 - INFO - bakezy.forecast - Starting forecast: product_id=5016 horizon_days=14
+2025-11-29 10:23:01 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=5016 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:01 - INFO - bakezy.forecast - Forecast complete: product_id=5016 horizon_days=14 points=14
+2025-11-29 10:23:01 - INFO - bakezy.forecast - Starting forecast: product_id=6059 horizon_days=14
+2025-11-29 10:23:01 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6059 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:01 - INFO - bakezy.forecast - Forecast complete: product_id=1001 horizon_days=14 points=14
+2025-11-29 10:23:01 - INFO - bakezy.forecast - Starting forecast: product_id=1039 horizon_days=14
+2025-11-29 10:23:01 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1039 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:02 - INFO - bakezy.forecast - Forecast complete: product_id=6059 horizon_days=14 points=14
+2025-11-29 10:23:02 - INFO - bakezy.forecast - Starting forecast: product_id=6143 horizon_days=14
+2025-11-29 10:23:02 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6143 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:02 - INFO - bakezy.forecast - Forecast complete: product_id=1039 horizon_days=14 points=14
+2025-11-29 10:23:02 - INFO - bakezy.forecast - Starting forecast: product_id=1016 horizon_days=14
+2025-11-29 10:23:02 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1016 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:02 - INFO - bakezy.forecast - Forecast complete: product_id=6143 horizon_days=14 points=14
+2025-11-29 10:23:02 - INFO - bakezy.forecast - Starting forecast: product_id=6158 horizon_days=14
+2025-11-29 10:23:02 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6158 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:02 - INFO - bakezy.forecast - Forecast complete: product_id=1016 horizon_days=14 points=14
+2025-11-29 10:23:02 - INFO - bakezy.forecast - Starting forecast: product_id=1009 horizon_days=14
+2025-11-29 10:23:02 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1009 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:02 - INFO - bakezy.forecast - Forecast complete: product_id=6158 horizon_days=14 points=14
+2025-11-29 10:23:02 - INFO - bakezy.forecast - Starting forecast: product_id=6272 horizon_days=14
+2025-11-29 10:23:02 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6272 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:02 - INFO - bakezy.forecast - Forecast complete: product_id=1009 horizon_days=14 points=14
+2025-11-29 10:23:02 - INFO - bakezy.forecast - Starting forecast: product_id=1071 horizon_days=14
+2025-11-29 10:23:02 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1071 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:02 - INFO - bakezy.forecast - Forecast complete: product_id=6272 horizon_days=14 points=14
+2025-11-29 10:23:02 - INFO - bakezy.forecast - Starting forecast: product_id=6416 horizon_days=14
+2025-11-29 10:23:02 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6416 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:02 - INFO - bakezy.forecast - Forecast complete: product_id=1071 horizon_days=14 points=14
+2025-11-29 10:23:02 - INFO - bakezy.forecast - Starting forecast: product_id=1015 horizon_days=14
+2025-11-29 10:23:02 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1015 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:03 - INFO - bakezy.forecast - Forecast complete: product_id=6416 horizon_days=14 points=14
+2025-11-29 10:23:03 - INFO - bakezy.forecast - Starting forecast: product_id=7002 horizon_days=14
+2025-11-29 10:23:03 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=7002 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:03 - INFO - bakezy.forecast - Forecast complete: product_id=1015 horizon_days=14 points=14
+2025-11-29 10:23:03 - INFO - bakezy.forecast - Starting forecast: product_id=1017 horizon_days=14
+2025-11-29 10:23:03 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1017 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:03 - INFO - bakezy.forecast - Forecast complete: product_id=7002 horizon_days=14 points=14
+2025-11-29 10:23:03 - INFO - bakezy.forecast - Starting forecast: product_id=7009 horizon_days=14
+2025-11-29 10:23:03 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=7009 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:03 - INFO - bakezy.forecast - Forecast complete: product_id=1017 horizon_days=14 points=14
+2025-11-29 10:23:03 - INFO - bakezy.forecast - Starting forecast: product_id=1028 horizon_days=14
+2025-11-29 10:23:03 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1028 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:03 - INFO - bakezy.forecast - Forecast complete: product_id=1028 horizon_days=14 points=14
+2025-11-29 10:23:03 - INFO - bakezy.forecast - Starting forecast: product_id=1031 horizon_days=14
+2025-11-29 10:23:03 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1031 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:03 - INFO - bakezy.forecast - Forecast complete: product_id=7009 horizon_days=14 points=14
+2025-11-29 10:23:03 - INFO - bakezy.forecast - Starting forecast: product_id=7052 horizon_days=14
+2025-11-29 10:23:03 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=7052 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:23:03 - INFO - bakezy.forecast - Forecast complete: product_id=1031 horizon_days=14 points=14
+2025-11-29 10:23:03 - INFO - bakezy.forecast - Forecast complete: product_id=7052 horizon_days=14 points=14
+2025-11-29 10:57:25 - INFO - bakezy.forecast - Starting forecast: product_id=1001 horizon_days=14
+2025-11-29 10:57:25 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1001 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:25 - INFO - bakezy.forecast - Forecast complete: product_id=1001 horizon_days=14 points=14
+2025-11-29 10:57:25 - INFO - bakezy.forecast - Starting forecast: product_id=1007 horizon_days=14
+2025-11-29 10:57:25 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1007 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:26 - INFO - bakezy.forecast - Forecast complete: product_id=1007 horizon_days=14 points=14
+2025-11-29 10:57:26 - INFO - bakezy.forecast - Starting forecast: product_id=1009 horizon_days=14
+2025-11-29 10:57:26 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1009 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:26 - INFO - bakezy.forecast - Forecast complete: product_id=1009 horizon_days=14 points=14
+2025-11-29 10:57:26 - INFO - bakezy.forecast - Starting forecast: product_id=1015 horizon_days=14
+2025-11-29 10:57:26 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1015 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:26 - INFO - bakezy.forecast - Forecast complete: product_id=1015 horizon_days=14 points=14
+2025-11-29 10:57:26 - INFO - bakezy.forecast - Starting forecast: product_id=1016 horizon_days=14
+2025-11-29 10:57:26 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1016 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:27 - INFO - bakezy.forecast - Forecast complete: product_id=1016 horizon_days=14 points=14
+2025-11-29 10:57:27 - INFO - bakezy.forecast - Starting forecast: product_id=1017 horizon_days=14
+2025-11-29 10:57:27 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1017 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:27 - INFO - bakezy.forecast - Forecast complete: product_id=1017 horizon_days=14 points=14
+2025-11-29 10:57:27 - INFO - bakezy.forecast - Starting forecast: product_id=1021 horizon_days=14
+2025-11-29 10:57:27 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1021 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:27 - INFO - bakezy.forecast - Forecast complete: product_id=1021 horizon_days=14 points=14
+2025-11-29 10:57:27 - INFO - bakezy.forecast - Starting forecast: product_id=1028 horizon_days=14
+2025-11-29 10:57:27 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1028 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:28 - INFO - bakezy.forecast - Forecast complete: product_id=1028 horizon_days=14 points=14
+2025-11-29 10:57:28 - INFO - bakezy.forecast - Starting forecast: product_id=1031 horizon_days=14
+2025-11-29 10:57:28 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1031 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:28 - INFO - bakezy.forecast - Forecast complete: product_id=1031 horizon_days=14 points=14
+2025-11-29 10:57:28 - INFO - bakezy.forecast - Starting forecast: product_id=1039 horizon_days=14
+2025-11-29 10:57:28 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1039 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:28 - INFO - bakezy.forecast - Forecast complete: product_id=1039 horizon_days=14 points=14
+2025-11-29 10:57:28 - INFO - bakezy.forecast - Starting forecast: product_id=1071 horizon_days=14
+2025-11-29 10:57:28 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1071 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:29 - INFO - bakezy.forecast - Forecast complete: product_id=1071 horizon_days=14 points=14
+2025-11-29 10:57:29 - INFO - bakezy.forecast - Starting forecast: product_id=1082 horizon_days=14
+2025-11-29 10:57:29 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1082 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:29 - INFO - bakezy.forecast - Forecast complete: product_id=1082 horizon_days=14 points=14
+2025-11-29 10:57:29 - INFO - bakezy.forecast - Starting forecast: product_id=1123 horizon_days=14
+2025-11-29 10:57:29 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1123 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:29 - INFO - bakezy.forecast - Forecast complete: product_id=1123 horizon_days=14 points=14
+2025-11-29 10:57:29 - INFO - bakezy.forecast - Starting forecast: product_id=2004 horizon_days=14
+2025-11-29 10:57:29 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=2004 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:30 - INFO - bakezy.forecast - Forecast complete: product_id=2004 horizon_days=14 points=14
+2025-11-29 10:57:30 - INFO - bakezy.forecast - Starting forecast: product_id=2005 horizon_days=14
+2025-11-29 10:57:30 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=2005 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:30 - INFO - bakezy.forecast - Forecast complete: product_id=2005 horizon_days=14 points=14
+2025-11-29 10:57:30 - INFO - bakezy.forecast - Starting forecast: product_id=3010 horizon_days=14
+2025-11-29 10:57:30 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3010 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:30 - INFO - bakezy.forecast - Forecast complete: product_id=3010 horizon_days=14 points=14
+2025-11-29 10:57:30 - INFO - bakezy.forecast - Starting forecast: product_id=3018 horizon_days=14
+2025-11-29 10:57:30 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3018 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:31 - INFO - bakezy.forecast - Forecast complete: product_id=3018 horizon_days=14 points=14
+2025-11-29 10:57:31 - INFO - bakezy.forecast - Starting forecast: product_id=3037 horizon_days=14
+2025-11-29 10:57:31 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3037 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:31 - INFO - bakezy.forecast - Forecast complete: product_id=3037 horizon_days=14 points=14
+2025-11-29 10:57:31 - INFO - bakezy.forecast - Starting forecast: product_id=3148 horizon_days=14
+2025-11-29 10:57:31 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3148 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:31 - INFO - bakezy.forecast - Forecast complete: product_id=3148 horizon_days=14 points=14
+2025-11-29 10:57:31 - INFO - bakezy.forecast - Starting forecast: product_id=4121 horizon_days=14
+2025-11-29 10:57:31 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=4121 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:32 - INFO - bakezy.forecast - Forecast complete: product_id=4121 horizon_days=14 points=14
+2025-11-29 10:57:32 - INFO - bakezy.forecast - Starting forecast: product_id=5001 horizon_days=14
+2025-11-29 10:57:32 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=5001 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:32 - INFO - bakezy.forecast - Forecast complete: product_id=5001 horizon_days=14 points=14
+2025-11-29 10:57:32 - INFO - bakezy.forecast - Starting forecast: product_id=5016 horizon_days=14
+2025-11-29 10:57:32 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=5016 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:32 - INFO - bakezy.forecast - Forecast complete: product_id=5016 horizon_days=14 points=14
+2025-11-29 10:57:32 - INFO - bakezy.forecast - Starting forecast: product_id=6059 horizon_days=14
+2025-11-29 10:57:32 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6059 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:33 - INFO - bakezy.forecast - Forecast complete: product_id=6059 horizon_days=14 points=14
+2025-11-29 10:57:33 - INFO - bakezy.forecast - Starting forecast: product_id=6143 horizon_days=14
+2025-11-29 10:57:33 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6143 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:33 - INFO - bakezy.forecast - Forecast complete: product_id=6143 horizon_days=14 points=14
+2025-11-29 10:57:33 - INFO - bakezy.forecast - Starting forecast: product_id=6158 horizon_days=14
+2025-11-29 10:57:33 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6158 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:33 - INFO - bakezy.forecast - Forecast complete: product_id=6158 horizon_days=14 points=14
+2025-11-29 10:57:33 - INFO - bakezy.forecast - Starting forecast: product_id=6272 horizon_days=14
+2025-11-29 10:57:33 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6272 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:34 - INFO - bakezy.forecast - Forecast complete: product_id=6272 horizon_days=14 points=14
+2025-11-29 10:57:34 - INFO - bakezy.forecast - Starting forecast: product_id=6416 horizon_days=14
+2025-11-29 10:57:34 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6416 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:34 - INFO - bakezy.forecast - Forecast complete: product_id=6416 horizon_days=14 points=14
+2025-11-29 10:57:34 - INFO - bakezy.forecast - Starting forecast: product_id=7002 horizon_days=14
+2025-11-29 10:57:34 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=7002 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:34 - INFO - bakezy.forecast - Forecast complete: product_id=7002 horizon_days=14 points=14
+2025-11-29 10:57:34 - INFO - bakezy.forecast - Starting forecast: product_id=7009 horizon_days=14
+2025-11-29 10:57:34 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=7009 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:35 - INFO - bakezy.forecast - Forecast complete: product_id=7009 horizon_days=14 points=14
+2025-11-29 10:57:35 - INFO - bakezy.forecast - Starting forecast: product_id=7052 horizon_days=14
+2025-11-29 10:57:35 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=7052 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:35 - INFO - bakezy.forecast - Forecast complete: product_id=7052 horizon_days=14 points=14
+2025-11-29 10:57:35 - INFO - bakezy.forecast - Starting forecast: product_id=5016 horizon_days=14
+2025-11-29 10:57:35 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=5016 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:35 - INFO - bakezy.forecast - Forecast complete: product_id=5016 horizon_days=14 points=14
+2025-11-29 10:57:35 - INFO - bakezy.forecast - Starting forecast: product_id=3010 horizon_days=14
+2025-11-29 10:57:35 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3010 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:36 - INFO - bakezy.forecast - Forecast complete: product_id=3010 horizon_days=14 points=14
+2025-11-29 10:57:36 - INFO - bakezy.forecast - Starting forecast: product_id=6158 horizon_days=14
+2025-11-29 10:57:36 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6158 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:36 - INFO - bakezy.forecast - Forecast complete: product_id=6158 horizon_days=14 points=14
+2025-11-29 10:57:36 - INFO - bakezy.forecast - Starting forecast: product_id=6143 horizon_days=14
+2025-11-29 10:57:36 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6143 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:36 - INFO - bakezy.forecast - Forecast complete: product_id=6143 horizon_days=14 points=14
+2025-11-29 10:57:36 - INFO - bakezy.forecast - Starting forecast: product_id=2005 horizon_days=14
+2025-11-29 10:57:36 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=2005 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:37 - INFO - bakezy.forecast - Forecast complete: product_id=2005 horizon_days=14 points=14
+2025-11-29 10:57:37 - INFO - bakezy.forecast - Starting forecast: product_id=2004 horizon_days=14
+2025-11-29 10:57:37 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=2004 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:37 - INFO - bakezy.forecast - Forecast complete: product_id=2004 horizon_days=14 points=14
+2025-11-29 10:57:37 - INFO - bakezy.forecast - Starting forecast: product_id=3148 horizon_days=14
+2025-11-29 10:57:37 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3148 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:37 - INFO - bakezy.forecast - Forecast complete: product_id=3148 horizon_days=14 points=14
+2025-11-29 10:57:37 - INFO - bakezy.forecast - Starting forecast: product_id=4121 horizon_days=14
+2025-11-29 10:57:37 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=4121 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:38 - INFO - bakezy.forecast - Forecast complete: product_id=4121 horizon_days=14 points=14
+2025-11-29 10:57:38 - INFO - bakezy.forecast - Starting forecast: product_id=6272 horizon_days=14
+2025-11-29 10:57:38 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6272 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:38 - INFO - bakezy.forecast - Forecast complete: product_id=6272 horizon_days=14 points=14
+2025-11-29 10:57:38 - INFO - bakezy.forecast - Starting forecast: product_id=3018 horizon_days=14
+2025-11-29 10:57:38 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3018 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:39 - INFO - bakezy.forecast - Forecast complete: product_id=3018 horizon_days=14 points=14
+2025-11-29 10:57:39 - INFO - bakezy.forecast - Starting forecast: product_id=6059 horizon_days=14
+2025-11-29 10:57:39 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6059 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:39 - INFO - bakezy.forecast - Forecast complete: product_id=6059 horizon_days=14 points=14
+2025-11-29 10:57:39 - INFO - bakezy.forecast - Starting forecast: product_id=5001 horizon_days=14
+2025-11-29 10:57:39 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=5001 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:39 - INFO - bakezy.forecast - Forecast complete: product_id=5001 horizon_days=14 points=14
+2025-11-29 10:57:39 - INFO - bakezy.forecast - Starting forecast: product_id=6416 horizon_days=14
+2025-11-29 10:57:39 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=6416 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:40 - INFO - bakezy.forecast - Forecast complete: product_id=6416 horizon_days=14 points=14
+2025-11-29 10:57:40 - INFO - bakezy.forecast - Starting forecast: product_id=7052 horizon_days=14
+2025-11-29 10:57:40 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=7052 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:40 - INFO - bakezy.forecast - Forecast complete: product_id=7052 horizon_days=14 points=14
+2025-11-29 10:57:40 - INFO - bakezy.forecast - Starting forecast: product_id=7002 horizon_days=14
+2025-11-29 10:57:40 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=7002 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:40 - INFO - bakezy.forecast - Forecast complete: product_id=7002 horizon_days=14 points=14
+2025-11-29 10:57:40 - INFO - bakezy.forecast - Starting forecast: product_id=7009 horizon_days=14
+2025-11-29 10:57:40 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=7009 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:41 - INFO - bakezy.forecast - Forecast complete: product_id=7009 horizon_days=14 points=14
+2025-11-29 10:57:41 - INFO - bakezy.forecast - Starting forecast: product_id=3037 horizon_days=14
+2025-11-29 10:57:41 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=3037 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:41 - INFO - bakezy.forecast - Forecast complete: product_id=3037 horizon_days=14 points=14
+2025-11-29 10:57:41 - INFO - bakezy.forecast - Starting forecast: product_id=1082 horizon_days=14
+2025-11-29 10:57:41 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1082 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:41 - INFO - bakezy.forecast - Forecast complete: product_id=1082 horizon_days=14 points=14
+2025-11-29 10:57:41 - INFO - bakezy.forecast - Starting forecast: product_id=1021 horizon_days=14
+2025-11-29 10:57:41 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1021 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:41 - INFO - bakezy.forecast - Forecast complete: product_id=1021 horizon_days=14 points=14
+2025-11-29 10:57:41 - INFO - bakezy.forecast - Starting forecast: product_id=1007 horizon_days=14
+2025-11-29 10:57:41 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1007 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:42 - INFO - bakezy.forecast - Forecast complete: product_id=1007 horizon_days=14 points=14
+2025-11-29 10:57:42 - INFO - bakezy.forecast - Starting forecast: product_id=1123 horizon_days=14
+2025-11-29 10:57:42 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1123 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:42 - INFO - bakezy.forecast - Forecast complete: product_id=1123 horizon_days=14 points=14
+2025-11-29 10:57:42 - INFO - bakezy.forecast - Starting forecast: product_id=1001 horizon_days=14
+2025-11-29 10:57:42 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1001 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:42 - INFO - bakezy.forecast - Forecast complete: product_id=1001 horizon_days=14 points=14
+2025-11-29 10:57:42 - INFO - bakezy.forecast - Starting forecast: product_id=1039 horizon_days=14
+2025-11-29 10:57:42 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1039 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:43 - INFO - bakezy.forecast - Forecast complete: product_id=1039 horizon_days=14 points=14
+2025-11-29 10:57:43 - INFO - bakezy.forecast - Starting forecast: product_id=1016 horizon_days=14
+2025-11-29 10:57:43 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1016 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:43 - INFO - bakezy.forecast - Forecast complete: product_id=1016 horizon_days=14 points=14
+2025-11-29 10:57:43 - INFO - bakezy.forecast - Starting forecast: product_id=1009 horizon_days=14
+2025-11-29 10:57:43 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1009 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:43 - INFO - bakezy.forecast - Forecast complete: product_id=1009 horizon_days=14 points=14
+2025-11-29 10:57:43 - INFO - bakezy.forecast - Starting forecast: product_id=1071 horizon_days=14
+2025-11-29 10:57:43 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1071 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:44 - INFO - bakezy.forecast - Forecast complete: product_id=1071 horizon_days=14 points=14
+2025-11-29 10:57:44 - INFO - bakezy.forecast - Starting forecast: product_id=1015 horizon_days=14
+2025-11-29 10:57:44 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1015 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:44 - INFO - bakezy.forecast - Forecast complete: product_id=1015 horizon_days=14 points=14
+2025-11-29 10:57:44 - INFO - bakezy.forecast - Starting forecast: product_id=1017 horizon_days=14
+2025-11-29 10:57:44 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1017 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:45 - INFO - bakezy.forecast - Forecast complete: product_id=1017 horizon_days=14 points=14
+2025-11-29 10:57:45 - INFO - bakezy.forecast - Starting forecast: product_id=1028 horizon_days=14
+2025-11-29 10:57:45 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1028 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:45 - INFO - bakezy.forecast - Forecast complete: product_id=1028 horizon_days=14 points=14
+2025-11-29 10:57:45 - INFO - bakezy.forecast - Starting forecast: product_id=1031 horizon_days=14
+2025-11-29 10:57:45 - INFO - bakezy.forecast - Loaded 365 sales records for product_id=1031 (from 2024-11-01 to 2025-10-31)
+2025-11-29 10:57:45 - INFO - bakezy.forecast - Forecast complete: product_id=1031 horizon_days=14 points=14
