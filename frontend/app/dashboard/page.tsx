@@ -229,12 +229,6 @@ export default function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      <header>
-        <h1 className="text-3xl font-semibold tracking-tight text-slate-900">
-          Daily Dough
-        </h1>
-      </header>
-
       <section className="grid gap-6 md:grid-cols-2 lg:grid-cols-4">
         {summaryCards.map((card) => (
           <div
