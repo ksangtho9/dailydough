@@ -42,6 +42,12 @@ class ForecastPointOut(BaseModel):
     yhat: float         # point forecast
     yhat_lower: float   # lower bound (P10-ish)
     yhat_upper: float   # upper bound (P90-ish)
+    # Profit metrics (optional - only included if product has price/cost)
+    revenue: float | None = None
+    cost: float | None = None
+    waste_cost: float | None = None
+    profit: float | None = None
+    waste_quantity: float | None = None
 
     class Config:
         from_attributes = True  # Pydantic v2 (replaces orm_mode)

@@ -44,18 +44,18 @@ def get_dashboard_summary(
         except Exception:
             continue
 
-        points = getattr(forecast, "points", forecast.get("points", []))
+        points = getattr(forecast, "points", [])
         match = next(
             (
                 p
                 for p in points
-                if str(getattr(p, "date", p.get("date"))) == tomorrow.isoformat()
+                if str(getattr(p, "date", None)) == tomorrow.isoformat()
             ),
             None,
         )
         if match is None:
             continue
-        yhat = getattr(match, "yhat", match.get("yhat"))
+        yhat = getattr(match, "yhat", None)
         if yhat is None:
             continue
         recommended_bake += max(0, int(round(float(yhat))))

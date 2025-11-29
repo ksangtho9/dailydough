@@ -57,6 +57,8 @@ class ProductBase(BaseModel):
     name: str
     sku: str | None = None
     category: str | None = None
+    price: float | None = None
+    cost_per_unit: float | None = None
 
 
 class ProductCreate(ProductBase):

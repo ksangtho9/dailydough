@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
 import { BAKERY_UPDATED_EVENT } from "@/lib/bakeries";
+import { TextShimmer } from "@/components/ui/text-shimmer";
 
 type Bakery = {
   id: number;
@@ -18,6 +19,11 @@ type Product = {
 type ForecastPoint = {
   ds: string;
   yhat: number;
+  revenue?: number | null;
+  cost?: number | null;
+  waste_cost?: number | null;
+  profit?: number | null;
+  waste_quantity?: number | null;
 };
 
 type PlanRow = {
@@ -27,6 +33,10 @@ type PlanRow = {
   horizonDays: number;
   totalUnits: number;
   avgPerDay: number;
+  totalProfit: number | null;
+  totalWasteCost: number | null;
+  totalWasteQuantity: number | null;
+  hasProfitData: boolean;
 };
 
 type RecommendationsMap = Record<number, PlanRow>;
@@ -140,6 +150,18 @@ export default function BakePlanPage() {
               );
               const avg = total / horizon;
 
+              // Calculate profit metrics if available
+              const hasProfitData = points.some((d) => d.profit !== null && d.profit !== undefined);
+              const totalProfit = hasProfitData
+                ? points.reduce((sum, d) => sum + (d.profit ?? 0), 0)
+                : null;
+              const totalWasteCost = hasProfitData
+                ? points.reduce((sum, d) => sum + (d.waste_cost ?? 0), 0)
+                : null;
+              const totalWasteQuantity = hasProfitData
+                ? points.reduce((sum, d) => sum + (d.waste_quantity ?? 0), 0)
+                : null;
+
               const bakeryName =
                 bakeries.find((b) => b.id === p.bakery_id)?.name || "—";
 
@@ -150,6 +172,10 @@ export default function BakePlanPage() {
                 horizonDays: horizon,
                 totalUnits: total,
                 avgPerDay: avg,
+                totalProfit,
+                totalWasteCost,
+                totalWasteQuantity,
+                hasProfitData,
               };
             } catch (err) {
               console.error("Failed forecast for product", p.id, err);
@@ -274,7 +300,11 @@ export default function BakePlanPage() {
         </div>
       </section>
 
-      {loading && <p>Loading…</p>}
+      {loading && (
+        <TextShimmer className="text-sm text-slate-500" duration={1.5}>
+          Loading bake plan...
+        </TextShimmer>
+      )}
       {error && <p className="text-sm text-red-600">Error: {error}</p>}
 
       {/* Table */}
@@ -289,18 +319,28 @@ export default function BakePlanPage() {
                   Total units (next {horizon}d)
                 </th>
                 <th className="px-4 py-2 text-right">Avg / day</th>
+                {planRows.some((r) => r.hasProfitData) && (
+                  <>
+                    <th className="px-4 py-2 text-right">Projected profit</th>
+                    <th className="px-4 py-2 text-right">Waste cost</th>
+                  </>
+                )}
               </tr>
             </thead>
             <tbody>
               {planRows.length === 0 && (
                 <tr>
                   <td
-                    colSpan={4}
+                    colSpan={planRows.some((r) => r.hasProfitData) ? 6 : 4}
                     className="px-4 py-6 text-center text-slate-500"
                   >
-                    {forecastsLoading
-                      ? "Building bake plan…"
-                      : "No forecast data yet for this selection."}
+                    {forecastsLoading ? (
+                      <TextShimmer className="text-sm" duration={1.5}>
+                        Building bake plan...
+                      </TextShimmer>
+                    ) : (
+                      "No forecast data yet for this selection."
+                    )}
                   </td>
                 </tr>
               )}
@@ -315,6 +355,52 @@ export default function BakePlanPage() {
                   <td className="px-4 py-2 text-right">
                     {row.avgPerDay.toFixed(1)}
                   </td>
+                  {planRows.some((r) => r.hasProfitData) && (
+                    <>
+                      <td className="px-4 py-2 text-right">
+                        {row.hasProfitData && row.totalProfit !== null ? (
+                          <span
+                            className={
+                              row.totalProfit >= 0
+                                ? "text-green-600 font-semibold"
+                                : "text-red-600 font-semibold"
+                            }
+                          >
+                            ${row.totalProfit.toFixed(2)}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-xs">—</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        {row.hasProfitData && row.totalWasteCost !== null ? (
+                          <span
+                            className={
+                              row.totalWasteCost > 0
+                                ? "text-amber-600 font-medium"
+                                : "text-slate-500"
+                            }
+                          >
+                            {row.totalWasteCost > 0 ? (
+                              <>
+                                ${row.totalWasteCost.toFixed(2)}
+                                {row.totalWasteQuantity !== null &&
+                                  row.totalWasteQuantity > 0 && (
+                                    <span className="text-xs text-slate-500 ml-1">
+                                      ({Math.round(row.totalWasteQuantity)} units)
+                                    </span>
+                                  )}
+                              </>
+                            ) : (
+                              <span className="text-slate-400">$0.00</span>
+                            )}
+                          </span>
+                        ) : (
+                          <span className="text-slate-400 text-xs">—</span>
+                        )}
+                      </td>
+                    </>
+                  )}
                 </tr>
               ))}
             </tbody>

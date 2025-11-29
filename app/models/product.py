@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, ForeignKey
+from sqlalchemy import Column, Integer, String, ForeignKey, Float
 from sqlalchemy.orm import relationship
 
 from app.database.database import Base
@@ -13,6 +13,8 @@ class Product(Base):
     name = Column(String, nullable=False, index=True)
     sku = Column(String, nullable=False, index=True)
     category = Column(String, nullable=True)
+    price = Column(Float, nullable=True)  # Selling price per unit
+    cost_per_unit = Column(Float, nullable=True)  # Production cost per unit
 
     bakery = relationship("Bakery", back_populates="products")
     sales_records = relationship("SalesRecord", back_populates="product")

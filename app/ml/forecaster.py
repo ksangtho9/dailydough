@@ -42,7 +42,11 @@ class ProductForecaster:
         train_result: TrainResult = self.trainer.train(ts, model_name=model_name)
 
         if train_result.model_name == "prophet":
-            forecast_df = train_result.model.predict(horizon_days)
+            # Pass historical delivery data if available for future predictions
+            historical_delivery = None
+            if "delivery" in ts.df.columns:
+                historical_delivery = ts.df["delivery"]
+            forecast_df = train_result.model.predict(horizon_days, historical_delivery=historical_delivery)
             # keep only future rows
             last_train_date = ts.df["ds"].max()
             forecast_df = forecast_df[forecast_df["ds"] > last_train_date].reset_index(drop=True)

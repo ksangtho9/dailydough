@@ -11,6 +11,7 @@ import {
   type CreateBakeryPayload,
 } from "@/lib/bakeries";
 import { Button } from "@/components/ui/button";
+import { TextShimmer } from "@/components/ui/text-shimmer";
 
 const DEFAULT_TIMEZONE = "America/Los_Angeles";
 const STORAGE_KEY = "current_bakery_id";
@@ -230,11 +231,15 @@ export default function BakeriesPage() {
               Existing bakeries
             </h2>
             <p className="text-xs text-slate-500">
-              {loading
-                ? "Loading..."
-                : `${bakeries.length} location${
-                    bakeries.length === 1 ? "" : "s"
-                  }`}
+              {loading ? (
+                <TextShimmer className="text-sm" duration={1.5}>
+                  Loading...
+                </TextShimmer>
+              ) : (
+                `${bakeries.length} location${
+                  bakeries.length === 1 ? "" : "s"
+                }`
+              )}
             </p>
           </div>
           <button
@@ -253,7 +258,11 @@ export default function BakeriesPage() {
         {!error && (
           <div className="overflow-x-auto">
             {loading ? (
-              <p className="px-4 py-6 text-sm text-slate-500">Loading…</p>
+              <div className="px-4 py-6">
+                <TextShimmer className="text-sm text-slate-500" duration={1.5}>
+                  Loading bakeries...
+                </TextShimmer>
+              </div>
             ) : bakeries.length === 0 ? (
               <div className="px-4 py-8 text-center text-sm text-slate-500">
                 No bakeries yet — add your first one above.

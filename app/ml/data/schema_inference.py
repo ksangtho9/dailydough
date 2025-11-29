@@ -47,6 +47,17 @@ ALIASES = {
         "sales qty",
         "salesqty",
     ],
+    "delivery": [
+        "delivery",
+        "production",
+        "productionqty",
+        "production qty",
+        "delivered",
+        "deliveryqty",
+        "delivery qty",
+        "prod qty",
+        "prodqty",
+    ],
     # Optional but helpful when auto-creating products
     "bakery_id": ["bakeryid", "locationid", "storeid"],
 }
@@ -68,6 +79,7 @@ def infer_column_roles(df: pd.DataFrame) -> Dict[str, Optional[str]]:
             "product_id": "SKU",
             "product_name": "Item",
             "quantity": "Qty Sold",
+            "delivery": "Production qty",
             "bakery_id": None,
         }
     """
@@ -79,6 +91,7 @@ def infer_column_roles(df: pd.DataFrame) -> Dict[str, Optional[str]]:
         "product_id": None,
         "product_name": None,
         "quantity": None,
+        "delivery": None,
         "bakery_id": None,
     }
     role_scores = {role: -1.0 for role in role_to_column}
@@ -107,6 +120,15 @@ def infer_column_roles(df: pd.DataFrame) -> Dict[str, Optional[str]]:
                     pass
 
             if role == "quantity":
+                numeric = pd.to_numeric(series, errors="coerce")
+                non_null_ratio = numeric.notna().mean()
+                if non_null_ratio > 0.8:
+                    score += 3.0
+                    non_negative_ratio = (numeric >= 0).mean()
+                    if non_negative_ratio > 0.9:
+                        score += 2.0
+
+            if role == "delivery":
                 numeric = pd.to_numeric(series, errors="coerce")
                 non_null_ratio = numeric.notna().mean()
                 if non_null_ratio > 0.8:

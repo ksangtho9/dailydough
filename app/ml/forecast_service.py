@@ -11,6 +11,7 @@ from typing import List
 from sqlalchemy.orm import Session
 
 from app.models import SalesRecord, Product
+from app.services.profit_calculator import ProfitCalculator
 from .preprocessing import SalesPreprocessor, RawSalesRecord
 from .forecaster import ProductForecaster, ForecastResult
 
@@ -41,6 +42,12 @@ class ForecastPoint:
     yhat: float        # point forecast
     yhat_lower: float  # lower bound
     yhat_upper: float  # upper bound
+    # Profit metrics (optional - only included if product has price/cost)
+    revenue: float | None = None
+    cost: float | None = None
+    waste_cost: float | None = None
+    profit: float | None = None
+    waste_quantity: float | None = None
 
 
 @dataclass
@@ -95,6 +102,7 @@ class ForecastService:
                 date=row.date,
                 product_id=row.product_id,
                 quantity=row.quantity_sold,
+                quantity_delivered=row.quantity_delivered,
             )
             for row in sales_rows
         ]
@@ -149,24 +157,47 @@ class ForecastService:
             logger.error("Forecast failed: 'ds' column missing in Prophet output")
             raise RuntimeError("Prophet forecast missing 'ds' column")
 
+        # Calculate profit metrics if product has price/cost
+        has_profit_data = product.price is not None and product.cost_per_unit is not None
+        
         for _, row in df_future.iterrows():
             ds_value = row["ds"]
             date_str = ds_value.date().isoformat()
 
             # Raw Prophet outputs
             yhat = float(row["yhat"])
-            yhat_lower = float(row["yhat_lower"])
-            yhat_upper = float(row["yhat_upper"])
+            yhat_lower = max(0.0, float(row["yhat_lower"]))
+            yhat_upper = max(0.0, float(row["yhat_upper"]))
 
             # Clamp non-negative
             yhat = max(0.0, yhat)
-            yhat_lower = max(0.0, yhat_lower)
-            yhat_upper = max(0.0, yhat_upper)
 
             # Round nicely
             yhat = round(yhat, 2)
             yhat_lower = round(yhat_lower, 2)
             yhat_upper = round(yhat_upper, 2)
+
+            # Calculate profit metrics if available
+            revenue = None
+            cost = None
+            waste_cost = None
+            profit = None
+            waste_quantity = None
+            
+            if has_profit_data:
+                # Use forecast quantity as production quantity (ideal scenario)
+                # In the future, could use yhat_upper for buffer or let user specify
+                profit_metrics = ProfitCalculator.calculate_forecast_profit(
+                    forecast_quantity=yhat,
+                    price=product.price,
+                    cost_per_unit=product.cost_per_unit,
+                    production_quantity=yhat,  # Produce exactly what we forecast
+                )
+                revenue = round(profit_metrics.revenue, 2)
+                cost = round(profit_metrics.cost, 2)
+                waste_cost = round(profit_metrics.waste_cost, 2)
+                profit = round(profit_metrics.profit, 2)
+                waste_quantity = round(profit_metrics.waste_quantity, 2)
 
             points.append(
                 ForecastPoint(
@@ -174,6 +205,11 @@ class ForecastService:
                     yhat=yhat,
                     yhat_lower=yhat_lower,
                     yhat_upper=yhat_upper,
+                    revenue=revenue,
+                    cost=cost,
+                    waste_cost=waste_cost,
+                    profit=profit,
+                    waste_quantity=waste_quantity,
                 )
             )
 

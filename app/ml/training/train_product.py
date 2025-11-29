@@ -75,6 +75,7 @@ def train_product(
                 date=row.date,
                 product_id=row.product_id,
                 quantity=row.quantity_sold,
+                quantity_delivered=row.quantity_delivered,
             )
             for row in sales_rows
         ]

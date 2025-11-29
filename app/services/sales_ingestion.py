@@ -12,7 +12,7 @@ from app.ml.data.schema_inference import infer_column_roles
 from app.models import Bakery, Product, SalesRecord
 
 REQUIRED_ROLES = ("date", "product_id", "product_name", "quantity")
-OPTIONAL_ROLES = ("bakery_id",)
+OPTIONAL_ROLES = ("bakery_id", "delivery")
 
 
 class SchemaInferenceError(Exception):
@@ -132,6 +132,16 @@ def _dataframe_to_rows(
                 if raw_bakery is not None and not pd.isna(raw_bakery):
                     bakery_id = int(float(raw_bakery))
 
+            # Parse delivery quantity if available
+            quantity_delivered: Optional[float] = None
+            if hasattr(record, "delivery"):
+                raw_delivery = getattr(record, "delivery")
+                if raw_delivery is not None and not pd.isna(raw_delivery):
+                    try:
+                        quantity_delivered = float(raw_delivery)
+                    except (ValueError, TypeError):
+                        pass  # Keep as None if parsing fails
+
             rows.append(
                 {
                     "line_number": line_no,
@@ -141,6 +151,7 @@ def _dataframe_to_rows(
                     "bakery_id": bakery_id,
                     "date": sale_date,
                     "quantity_sold": quantity,
+                    "quantity_delivered": quantity_delivered,
                 }
             )
         except Exception as exc:
@@ -276,6 +287,7 @@ def ingest_sales_csv(
                 product_id=product.id,
                 date=row["date"],
                 quantity_sold=row["quantity_sold"],
+                quantity_delivered=row.get("quantity_delivered"),
             )
             db.add(record)
             inserted += 1

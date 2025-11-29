@@ -10,6 +10,7 @@ import {
 } from "@/lib/bakeries";
 import { ForecastConfidenceBadge } from "@/components/ForecastConfidenceBadge";
 import type { ForecastMetrics } from "@/lib/metrics";
+import { TextShimmer } from "@/components/ui/text-shimmer";
 
 type Product = {
   id: number;
@@ -202,7 +203,11 @@ export default function ProductsPage() {
         </div>
       </header>
 
-      {loading && <p className="text-sm text-slate-500">Loading…</p>}
+      {loading && (
+        <TextShimmer className="text-sm text-slate-500" duration={1.5}>
+          Loading products...
+        </TextShimmer>
+      )}
       {error && <p className="text-sm text-red-600">Error: {error}</p>}
 
       {!loading && !error && (
@@ -349,9 +354,9 @@ export default function ProductsPage() {
 
                       <td className="px-4 py-2 align-middle text-right text-sm">
                         {recsLoading && rec === undefined && (
-                          <span className="text-xs text-slate-400">
-                            loading…
-                          </span>
+                          <TextShimmer className="text-xs text-slate-400" duration={1.5}>
+                            Generating forecast...
+                          </TextShimmer>
                         )}
                         {!recsLoading && rec === undefined && (
                           <span className="text-xs text-slate-400">—</span>

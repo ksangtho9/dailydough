@@ -42,6 +42,11 @@ def get_forecast_for_product(
             yhat=point.yhat,
             yhat_lower=point.yhat_lower,
             yhat_upper=point.yhat_upper,
+            revenue=getattr(point, "revenue", None),
+            cost=getattr(point, "cost", None),
+            waste_cost=getattr(point, "waste_cost", None),
+            profit=getattr(point, "profit", None),
+            waste_quantity=getattr(point, "waste_quantity", None),
         )
         for point in result.points
     ]

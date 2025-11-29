@@ -10,6 +10,7 @@ import {
 import { BAKERY_SELECTION_CHANGED_EVENT } from "@/lib/bakeries";
 import { TopProductsCard } from "@/components/TopProductsCard";
 import { GettingStartedChecklist } from "@/components/GettingStartedChecklist";
+import { TextShimmer } from "@/components/ui/text-shimmer";
 
 const STORAGE_KEY = "current_bakery_id";
 
@@ -301,9 +302,9 @@ export default function DashboardPage() {
 
             <div className="mt-4 overflow-x-auto">
               {planLoading && (
-                <p className="text-sm text-slate-500">
-                  Loading tomorrow&apos;s forecast…
-                </p>
+                <TextShimmer className="text-sm text-slate-500" duration={1.5}>
+                  Loading tomorrow&apos;s forecast...
+                </TextShimmer>
               )}
               {planError && (
                 <p className="text-sm text-red-600">{planError}</p>

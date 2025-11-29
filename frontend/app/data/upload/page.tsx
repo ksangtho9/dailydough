@@ -358,7 +358,7 @@ export default function DataUploadPage() {
           <p className="text-xs text-slate-500 max-w-md text-center">
             <strong>Required columns:</strong> Date, Product/SKU, and Sold quantity.
             The bakery is taken from your current selection, so you don&apos;t need a bakery_id column.
-            Extra columns like delivery or waste are ignored.
+            Optional delivery/production columns are used to improve forecasts. Waste columns are ignored.
           </p>
         </div>
       </section>

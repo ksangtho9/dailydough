@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { apiFetch } from "@/lib/api";
+import { TextShimmer } from "@/components/ui/text-shimmer";
 import {
   ResponsiveContainer,
   LineChart,
@@ -238,7 +239,11 @@ export default function ProductDetailPage() {
           Sales history & forecast
         </h3>
 
-        {loading && <p className="text-sm text-slate-500">Loading…</p>}
+        {loading && (
+          <TextShimmer className="text-sm text-slate-500" duration={1.5}>
+            Loading product data...
+          </TextShimmer>
+        )}
         {error && <p className="text-sm text-red-600">Error: {error}</p>}
 
         {!loading && !error && chartData.length === 0 && (

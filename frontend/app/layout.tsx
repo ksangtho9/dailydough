@@ -1,7 +1,8 @@
 // frontend/app/layout.tsx
 import "./globals.css";
 import type { Metadata } from "next";
-import { AppTopNav } from "@/components/AppTopNav";
+import { ConditionalNav } from "@/components/ConditionalNav";
+import { ConditionalMain } from "@/components/ConditionalMain";
 
 export const metadata: Metadata = {
   title: "Daily Dough",
@@ -16,8 +17,8 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className="min-h-screen bg-[#F8F1E8] text-slate-900">
-        <AppTopNav />
-        <main className="mx-auto max-w-6xl px-6 pt-28 pb-10">{children}</main>
+        <ConditionalNav />
+        <ConditionalMain>{children}</ConditionalMain>
       </body>
     </html>
   );

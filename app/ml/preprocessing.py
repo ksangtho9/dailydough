@@ -13,13 +13,14 @@ class RawSalesRecord:
     date: date
     product_id: int
     quantity: float
+    quantity_delivered: Optional[float] = None
 
 
 @dataclass
 class CleanedTimeSeries:
     """Normalized time series ready for modeling."""
     product_id: int
-    df: pd.DataFrame  # columns: ["ds", "y"] (Prophet-friendly)
+    df: pd.DataFrame  # columns: ["ds", "y"] and optionally ["delivery"] (Prophet-friendly)
 
 
 class SalesPreprocessor:
@@ -37,7 +38,7 @@ class SalesPreprocessor:
     def to_dataframe(self, records: List[RawSalesRecord]) -> pd.DataFrame:
         """Convert list of RawSalesRecord → pandas DataFrame."""
         if not records:
-            return pd.DataFrame(columns=["ds", "y", "product_id"])
+            return pd.DataFrame(columns=["ds", "y", "product_id", "delivery"])
 
         df = pd.DataFrame(
             [
@@ -45,6 +46,7 @@ class SalesPreprocessor:
                     "ds": r.date,
                     "y": r.quantity,
                     "product_id": r.product_id,
+                    "delivery": r.quantity_delivered if r.quantity_delivered is not None else 0.0,
                 }
                 for r in records
             ]
@@ -55,8 +57,8 @@ class SalesPreprocessor:
         # Always sort by product_id then date so the model sees a proper chronological series per product.
         # This ensures training works correctly regardless of CSV row order.
         df = (
-            df.groupby(["product_id", "ds"], as_index=False)["y"]
-              .sum()
+            df.groupby(["product_id", "ds"], as_index=False)
+              .agg({"y": "sum", "delivery": "sum"})
               .sort_values(["product_id", "ds"])
               .reset_index(drop=True)
         )
@@ -77,7 +79,7 @@ class SalesPreprocessor:
         df_prod = df[df["product_id"] == product_id].copy()
         if df_prod.empty:
             # nothing for this product
-            return pd.DataFrame(columns=["ds", "y", "product_id"])
+            return pd.DataFrame(columns=["ds", "y", "product_id", "delivery"])
 
         # IMPORTANT: CSV rows may be arbitrarily sorted by the user.
         # Always sort by date so the model sees a proper chronological series.
@@ -98,8 +100,13 @@ class SalesPreprocessor:
         # fill missing
         df_full["product_id"] = df_full["product_id"].fillna(product_id)
         df_full["y"] = df_full["y"].fillna(0.0)
+        # For delivery, fill with 0.0 if missing (treat as no delivery)
+        if "delivery" in df_full.columns:
+            df_full["delivery"] = df_full["delivery"].fillna(0.0)
+        else:
+            df_full["delivery"] = 0.0
 
-        return df_full[["ds", "y", "product_id"]]
+        return df_full[["ds", "y", "product_id", "delivery"]]
 
     def preprocess(
         self,
@@ -110,5 +117,9 @@ class SalesPreprocessor:
         df = self.to_dataframe(records)
         df_full = self.fill_missing_dates(df, product_id)
         # Hook for future steps (outlier removal, smoothing, etc.)
-        return CleanedTimeSeries(product_id=product_id, df=df_full[["ds", "y"]])
+        # Include delivery column if present
+        columns = ["ds", "y"]
+        if "delivery" in df_full.columns:
+            columns.append("delivery")
+        return CleanedTimeSeries(product_id=product_id, df=df_full[columns])
 

@@ -41,9 +41,9 @@ class ModelTrainer:
         df = self.feature_engineer.transform(df)
 
         if model_name == "prophet":
-            # Prophet only cares about ds, y
+            # Prophet needs ds, y, and optionally delivery as regressor
             model = ProphetSalesModel()
-            model.fit(df[["ds", "y"]])
+            model.fit(df)
             return TrainResult(model_name="prophet", model=model)
 
         elif model_name == "xgboost":

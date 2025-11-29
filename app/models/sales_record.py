@@ -13,6 +13,7 @@ class SalesRecord(Base):
 
     date = Column(Date, nullable=False, index=True)
     quantity_sold = Column(Float, nullable=False)
+    quantity_delivered = Column(Float, nullable=True)
 
     bakery = relationship("Bakery", back_populates="sales_records")
     product = relationship("Product", back_populates="sales_records")

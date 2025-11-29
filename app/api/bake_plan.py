@@ -51,19 +51,19 @@ def get_bake_plan(
         except Exception:
             continue
 
-        points = forecast.points if hasattr(forecast, "points") else forecast.get("points", [])
+        points = getattr(forecast, "points", [])
         match = next(
             (
                 p
                 for p in points
-                if str(getattr(p, "date", p.get("date"))) == plan_date.isoformat()
+                if str(getattr(p, "date", None)) == plan_date.isoformat()
             ),
             None,
         )
         if match is None:
             continue
 
-        qty = getattr(match, "yhat", match.get("yhat", 0))
+        qty = getattr(match, "yhat", 0)
         forecast_qty = max(0, int(round(qty)))
         if forecast_qty <= 0:
             continue
