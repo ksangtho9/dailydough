@@ -22,7 +22,8 @@ export function getConfidenceMeta(mape: number | null) {
   if (mape < 0.25) {
     return { label: "Medium confidence", level: "medium" as ConfidenceLevel };
   }
-  return { label: "Low confidence", level: "low" as ConfidenceLevel };
+  // Use softer language for low confidence
+  return { label: "Developing", level: "low" as ConfidenceLevel };
 }
 
 export function formatLastTrainedAt(value: string | null): string {

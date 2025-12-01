@@ -15,11 +15,23 @@ export function ForecastConfidenceBadge({ metrics }: Props) {
     "inline-flex items-center rounded-full px-2 py-0.5 text-[11px] font-medium",
     meta.level === "high" && "bg-emerald-100 text-emerald-700",
     meta.level === "medium" && "bg-amber-100 text-amber-700",
-    meta.level === "low" && "bg-red-100 text-red-700",
+    // Use softer amber/yellow color for low confidence instead of red
+    meta.level === "low" && "bg-amber-50 text-amber-600",
     meta.level === "none" && "bg-slate-100 text-slate-500",
   );
 
-  return <span className={className}>{meta.label}</span>;
+  return (
+    <span
+      className={className}
+      title={
+        meta.level === "none"
+          ? "Model not trained yet"
+          : "Training-time model confidence (based on training data fit, not real-world accuracy)"
+      }
+    >
+      {meta.label}
+    </span>
+  );
 }
 
 

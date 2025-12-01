@@ -150,8 +150,16 @@ export default function ProductDetailPage() {
 
   const salesTable = normalizeSales(salesRaw);
   const forecastTable = normalizeForecast(forecastRaw);
-  const accuracy = computeForecastAccuracy(salesTable, forecastTable);
-  const errorSeries = buildErrorSeries(salesTable, forecastTable);
+  const accuracy = computeForecastAccuracy(
+    salesTable,
+    forecastTable,
+    metrics?.last_trained_at ?? null
+  );
+  const errorSeries = buildErrorSeries(
+    salesTable,
+    forecastTable,
+    metrics?.last_trained_at ?? null
+  );
 
   return (
     <div className="space-y-6">
@@ -307,7 +315,7 @@ export default function ProductDetailPage() {
               {accuracy.mape !== null ? `${accuracy.mape.toFixed(1)}%` : "—"}
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              Average percentage error on days where actual & forecast overlap.
+              Average percentage error on days where actual & forecast overlap, excluding training data.
             </p>
           </div>
 
@@ -329,9 +337,9 @@ export default function ProductDetailPage() {
               {accuracy.n_points}
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              Overlapping days with both actual and forecast.{" "}
+              Overlapping days with both actual and forecast (after training).{" "}
               {accuracy.n_points === 0 &&
-                "You’ll see accuracy once you have historical forecasts overlapping with sales."}
+                "You'll see accuracy once you have post-training forecasts overlapping with sales."}
             </p>
           </div>
         </div>
@@ -560,11 +568,20 @@ function buildChartData(rawSales: any, rawForecast: any): ChartPoint[] {
 
 function computeForecastAccuracy(
   sales: SalesPoint[],
-  forecast: ForecastPoint[]
+  forecast: ForecastPoint[],
+  lastTrainedAt: string | null = null
 ): ForecastAccuracy {
   if (sales.length === 0 || forecast.length === 0) {
     return { mape: null, rmse: null, n_points: 0 };
   }
+
+  // If no training date, don't calculate accuracy (model not trained yet)
+  if (lastTrainedAt === null) {
+    return { mape: null, rmse: null, n_points: 0 };
+  }
+
+  // Extract date part from lastTrainedAt (ISO string, ignore time)
+  const trainingDateStr = lastTrainedAt.split("T")[0];
 
   const actualMap = new Map<string, number>();
   for (const s of sales) {
@@ -579,6 +596,12 @@ function computeForecastAccuracy(
   for (const f of forecast) {
     const actual = actualMap.get(f.ds);
     if (actual === undefined) continue;
+
+    // Only count dates AFTER the training date
+    // Compare dates as ISO strings (YYYY-MM-DD format)
+    if (f.ds <= trainingDateStr) {
+      continue; // Skip training data
+    }
 
     const yhat = f.yhat;
     const err = yhat - actual;
@@ -610,9 +633,18 @@ function computeForecastAccuracy(
 
 function buildErrorSeries(
   sales: SalesPoint[],
-  forecast: ForecastPoint[]
+  forecast: ForecastPoint[],
+  lastTrainedAt: string | null = null
 ): ErrorPoint[] {
   if (sales.length === 0 || forecast.length === 0) return [];
+
+  // If no training date, return empty series
+  if (lastTrainedAt === null) {
+    return [];
+  }
+
+  // Extract date part from lastTrainedAt (ISO string, ignore time)
+  const trainingDateStr = lastTrainedAt.split("T")[0];
 
   const actualMap = new Map<string, number>();
   for (const s of sales) {
@@ -624,6 +656,12 @@ function buildErrorSeries(
   for (const f of forecast) {
     const actual = actualMap.get(f.ds);
     if (actual === undefined) continue;
+
+    // Only count dates AFTER the training date
+    // Compare dates as ISO strings (YYYY-MM-DD format)
+    if (f.ds <= trainingDateStr) {
+      continue; // Skip training data
+    }
 
     const absError = Math.abs(f.yhat - actual);
     points.push({ date: f.ds, absError });

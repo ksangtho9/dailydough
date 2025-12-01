@@ -11,11 +11,43 @@ import { BAKERY_SELECTION_CHANGED_EVENT } from "@/lib/bakeries";
 import { TopProductsCard } from "@/components/TopProductsCard";
 import { GettingStartedChecklist } from "@/components/GettingStartedChecklist";
 import { TextShimmer } from "@/components/ui/text-shimmer";
+import { apiFetch } from "@/lib/api";
+import type { ForecastMetrics } from "@/lib/metrics";
+import { ForecastConfidenceBadge } from "@/components/ForecastConfidenceBadge";
 
 const STORAGE_KEY = "current_bakery_id";
 const DEV_MODE_KEY = "dashboard_dev_mode";
 
 type TabKey = "bake" | "accuracy" | "insights";
+
+type ProductWithMetrics = {
+  id: number;
+  name: string;
+  sku?: string | null;
+  bakery_id: number;
+  forecast_metrics?: ForecastMetrics | null;
+};
+
+type SalesPoint = {
+  date: string;
+  quantity: number;
+};
+
+type ForecastPoint = {
+  ds: string;
+  yhat: number;
+  yhat_lower: number;
+  yhat_upper: number;
+};
+
+type ProductAccuracy = {
+  productId: number;
+  productName: string;
+  mape: number | null;
+  rmse: number | null;
+  n_points: number;
+  lastTrainedAt: string | null;
+};
 
 function formatFriendlyDate(input?: string) {
   if (!input) return "Tomorrow";
@@ -26,6 +58,117 @@ function formatFriendlyDate(input?: string) {
     month: "long",
     day: "numeric",
   });
+}
+
+// Accuracy calculation utilities (from product detail page)
+function normalizeSales(rawSales: any): SalesPoint[] {
+  const sales: any[] = Array.isArray(rawSales)
+    ? rawSales
+    : rawSales?.sales || rawSales?.data || [];
+
+  const totals = new Map<string, number>();
+
+  for (const s of sales) {
+    if (!s) continue;
+    const date = s.date || s.ds;
+    if (!date) continue;
+
+    const qty = s.quantity ?? s.units_sold ?? s.qty ?? s.y ?? 0;
+    const current = totals.get(date) ?? 0;
+    totals.set(date, current + Number(qty));
+  }
+
+  return Array.from(totals.entries())
+    .map(([date, quantity]) => ({ date, quantity }))
+    .sort((a, b) => a.date.localeCompare(b.date));
+}
+
+function normalizeForecast(rawForecast: any): ForecastPoint[] {
+  if (!rawForecast) return [];
+
+  if (rawForecast.detail) {
+    return [];
+  }
+
+  let forecast: any[] = [];
+
+  if (Array.isArray(rawForecast)) {
+    forecast = rawForecast;
+  } else if (Array.isArray(rawForecast.forecast)) {
+    forecast = rawForecast.forecast;
+  } else if (Array.isArray(rawForecast.data)) {
+    forecast = rawForecast.data;
+  } else if (Array.isArray(rawForecast.points)) {
+    forecast = rawForecast.points;
+  }
+
+  return forecast
+    .map((f) => ({
+      ds: f.ds || f.date,
+      yhat: f.yhat ?? f.forecast ?? f.p50 ?? 0,
+      yhat_lower: f.yhat_lower ?? f.lower ?? f.p10 ?? 0,
+      yhat_upper: f.yhat_upper ?? f.upper ?? f.p90 ?? 0,
+    }))
+    .filter((f) => !!f.ds);
+}
+
+function computeForecastAccuracy(
+  sales: SalesPoint[],
+  forecast: ForecastPoint[],
+  lastTrainedAt: string | null = null
+): { mape: number | null; rmse: number | null; n_points: number } {
+  if (sales.length === 0 || forecast.length === 0) {
+    return { mape: null, rmse: null, n_points: 0 };
+  }
+
+  if (lastTrainedAt === null) {
+    return { mape: null, rmse: null, n_points: 0 };
+  }
+
+  const trainingDateStr = lastTrainedAt.split("T")[0];
+
+  const actualMap = new Map<string, number>();
+  for (const s of sales) {
+    actualMap.set(s.date, s.quantity);
+  }
+
+  let sqErrSum = 0;
+  let absPctSum = 0;
+  let nRmse = 0;
+  let nMape = 0;
+
+  for (const f of forecast) {
+    const actual = actualMap.get(f.ds);
+    if (actual === undefined) continue;
+
+    if (f.ds <= trainingDateStr) {
+      continue;
+    }
+
+    const yhat = f.yhat;
+    const err = yhat - actual;
+
+    sqErrSum += err * err;
+    nRmse += 1;
+
+    if (actual !== 0) {
+      absPctSum += Math.abs(err / actual);
+      nMape += 1;
+    }
+  }
+
+  if (nRmse === 0) {
+    return { mape: null, rmse: null, n_points: 0 };
+  }
+
+  const rmse = Math.sqrt(sqErrSum / nRmse);
+  const mape = nMape > 0 ? (absPctSum / nMape) * 100 : null;
+
+  return {
+    mape,
+    rmse,
+    n_points: nRmse,
+  };
 }
 
 function generateMockBakePlan(bakeryId: number): BakePlanResponse {
@@ -69,6 +212,12 @@ export default function DashboardPage() {
   const [sortMode, setSortMode] = useState("sku");
   const [devMode, setDevMode] = useState(false);
   const [selectedForecastDate, setSelectedForecastDate] = useState<string | null>(null);
+  
+  // Accuracy tab state
+  const [products, setProducts] = useState<ProductWithMetrics[]>([]);
+  const [productsAccuracy, setProductsAccuracy] = useState<ProductAccuracy[]>([]);
+  const [accuracyLoading, setAccuracyLoading] = useState(false);
+  const [accuracyError, setAccuracyError] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -193,6 +342,98 @@ export default function DashboardPage() {
     };
   }, [bakeryId]);
 
+  // Load accuracy data when accuracy tab is active
+  useEffect(() => {
+    if (bakeryId == null || activeTab !== "accuracy") {
+      setProducts([]);
+      setProductsAccuracy([]);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadAccuracyData() {
+      setAccuracyLoading(true);
+      setAccuracyError(null);
+
+      try {
+        // Fetch products with forecast metrics
+        const productsData = await apiFetch<ProductWithMetrics[]>(
+          `/api/products/?bakery_id=${bakeryId}`
+        );
+
+        if (cancelled) return;
+
+        setProducts(productsData);
+
+        // For each product, fetch sales and forecast data to calculate accuracy
+        const accuracyPromises = productsData.map(async (product) => {
+          try {
+            // Fetch sales data
+            const salesData = await apiFetch<any>(
+              `/api/sales/product/${product.id}`
+            );
+
+            // Fetch forecast data (for a longer horizon to capture historical forecasts)
+            const forecastData = await apiFetch<any>(
+              `/api/forecast/product/${product.id}`,
+              {
+                method: "POST",
+                body: JSON.stringify({ days: 30 }), // Get more historical forecast points
+              }
+            );
+
+            const sales = normalizeSales(salesData);
+            const forecast = normalizeForecast(forecastData);
+            const lastTrainedAt = product.forecast_metrics?.last_trained_at ?? null;
+            const accuracy = computeForecastAccuracy(sales, forecast, lastTrainedAt);
+
+            return {
+              productId: product.id,
+              productName: product.name,
+              mape: accuracy.mape,
+              rmse: accuracy.rmse,
+              n_points: accuracy.n_points,
+              lastTrainedAt,
+            } as ProductAccuracy;
+          } catch (err) {
+            console.error(`Failed to load accuracy for product ${product.id}:`, err);
+            return {
+              productId: product.id,
+              productName: product.name,
+              mape: null,
+              rmse: null,
+              n_points: 0,
+              lastTrainedAt: product.forecast_metrics?.last_trained_at ?? null,
+            } as ProductAccuracy;
+          }
+        });
+
+        const accuracyResults = await Promise.all(accuracyPromises);
+
+        if (!cancelled) {
+          setProductsAccuracy(accuracyResults);
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setAccuracyError(err?.message ?? "Failed to load accuracy data.");
+          setProducts([]);
+          setProductsAccuracy([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setAccuracyLoading(false);
+        }
+      }
+    }
+
+    loadAccuracyData();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [bakeryId, activeTab]);
+
   // In dev mode, use real API data (based on uploaded sales data)
   // No longer using mock data - dev mode now allows date selection and uses real forecasts
   const displayBakePlan = bakePlan;
@@ -224,6 +465,26 @@ export default function DashboardPage() {
     });
   }, [displayBakePlan]);
 
+  // Calculate aggregate accuracy statistics
+  const accuracyStats = useMemo(() => {
+    const validAccuracies = productsAccuracy.filter((p) => p.mape !== null);
+    const mapeValues = validAccuracies.map((p) => p.mape!);
+    const rmseValues = validAccuracies.map((p) => p.rmse!).filter((r) => r !== null);
+    const totalDataPoints = validAccuracies.reduce((sum, p) => sum + p.n_points, 0);
+    const highRiskCount = validAccuracies.filter((p) => p.mape! > 25).length;
+    const goodAccuracyCount = validAccuracies.filter((p) => p.mape! <= 10).length;
+
+    return {
+      avgMape: mapeValues.length > 0 ? mapeValues.reduce((a, b) => a + b, 0) / mapeValues.length : null,
+      avgRmse: rmseValues.length > 0 ? rmseValues.reduce((a, b) => a + b, 0) / rmseValues.length : null,
+      totalDataPoints,
+      highRiskCount,
+      goodAccuracyCount,
+      totalProducts: productsAccuracy.length,
+      trainedProducts: validAccuracies.length,
+    };
+  }, [productsAccuracy]);
+
   const summaryCards = [
     {
       title: "Recommended Bake",
@@ -251,7 +512,7 @@ export default function DashboardPage() {
         dashboardSummary?.high_risk_items != null
           ? dashboardSummary.high_risk_items
           : "—",
-      helper: "MAPE > 25%",
+      helper: "Products with post-training MAPE > 25%",
       accent: "bg-[#FFECEC] border border-rose-100",
     },
     {
@@ -260,7 +521,7 @@ export default function DashboardPage() {
         dashboardSummary?.forecast_accuracy_pct != null
           ? `${dashboardSummary.forecast_accuracy_pct.toFixed(1)}%`
           : "—",
-      helper: "Avg MAPE (lower is better)",
+      helper: "Post-training avg MAPE (lower is better)",
       accent: "bg-[#E9F8EF] border border-emerald-100",
     },
   ];
@@ -510,17 +771,172 @@ export default function DashboardPage() {
       )}
 
       {activeTab === "accuracy" && (
-        <section className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm min-h-[250px] space-y-4">
-          <div>
-            <h3 className="text-lg font-semibold text-slate-900">
-              Model accuracy
-            </h3>
-            <p className="text-sm text-slate-600">
-              Track how forecasts compare to actuals over time. Accuracy
-              breakdown by SKU is coming soon.
-            </p>
-          </div>
-        </section>
+        <div className="space-y-6">
+          {/* Summary Cards */}
+          <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-xl border bg-white p-4 shadow-sm">
+              <p className="text-xs uppercase text-slate-500">
+                Average MAPE
+              </p>
+              <p className="mt-2 text-2xl font-semibold">
+                {accuracyStats.avgMape !== null
+                  ? `${accuracyStats.avgMape.toFixed(1)}%`
+                  : "—"}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Mean absolute percentage error across all products
+              </p>
+            </div>
+
+            <div className="rounded-xl border bg-white p-4 shadow-sm">
+              <p className="text-xs uppercase text-slate-500">
+                Average RMSE
+              </p>
+              <p className="mt-2 text-2xl font-semibold">
+                {accuracyStats.avgRmse !== null
+                  ? accuracyStats.avgRmse.toFixed(1)
+                  : "—"}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Root mean squared error in units
+              </p>
+            </div>
+
+            <div className="rounded-xl border bg-white p-4 shadow-sm">
+              <p className="text-xs uppercase text-slate-500">
+                Products Trained
+              </p>
+              <p className="mt-2 text-2xl font-semibold">
+                {accuracyStats.trainedProducts} / {accuracyStats.totalProducts}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Products with accuracy data
+              </p>
+            </div>
+
+            <div className="rounded-xl border bg-white p-4 shadow-sm">
+              <p className="text-xs uppercase text-slate-500">
+                High Risk Items
+              </p>
+              <p className="mt-2 text-2xl font-semibold">
+                {accuracyStats.highRiskCount}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Products with MAPE &gt; 25%
+              </p>
+            </div>
+          </section>
+
+          {/* Products Table */}
+          <section className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
+            <div className="mb-4">
+              <h3 className="text-lg font-semibold text-slate-900">
+                Product Accuracy
+              </h3>
+              <p className="text-sm text-slate-600">
+                Accuracy metrics for each product, calculated on post-training data only.
+              </p>
+            </div>
+
+            {accuracyLoading && (
+              <div className="py-8">
+                <TextShimmer className="text-sm text-slate-500" duration={1.5}>
+                  Loading accuracy data...
+                </TextShimmer>
+              </div>
+            )}
+
+            {accuracyError && (
+              <div className="py-8">
+                <p className="text-sm text-red-600">Error: {accuracyError}</p>
+              </div>
+            )}
+
+            {!accuracyLoading && !accuracyError && productsAccuracy.length === 0 && (
+              <div className="py-8">
+                <p className="text-sm text-slate-500">
+                  No products found. Create products and train models to see accuracy metrics.
+                </p>
+              </div>
+            )}
+
+            {!accuracyLoading && !accuracyError && productsAccuracy.length > 0 && (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-sm">
+                  <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                    <tr>
+                      <th className="px-4 py-3 text-left">Product</th>
+                      <th className="px-4 py-3 text-right">MAPE</th>
+                      <th className="px-4 py-3 text-right">RMSE</th>
+                      <th className="px-4 py-3 text-right">Data Points</th>
+                      <th className="px-4 py-3 text-center">
+                        <span className="tooltip" title="Training-time model confidence based on training data fit">
+                          Status
+                        </span>
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {productsAccuracy.map((product, idx) => {
+                      const productWithMetrics = products.find(
+                        (p) => p.id === product.productId
+                      );
+                      return (
+                        <tr
+                          key={product.productId}
+                          className={`border-b border-slate-100 ${
+                            idx % 2 === 1 ? "bg-slate-50/50" : "bg-white"
+                          }`}
+                        >
+                          <td className="px-4 py-3">
+                            <Link
+                              href={`/products/${product.productId}`}
+                              className="font-medium text-slate-900 hover:text-amber-700 hover:underline"
+                            >
+                              {product.productName}
+                            </Link>
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-900">
+                            {product.mape !== null
+                              ? `${product.mape.toFixed(1)}%`
+                              : "—"}
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-600">
+                            {product.rmse !== null
+                              ? product.rmse.toFixed(1)
+                              : "—"}
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-600">
+                            {product.n_points}
+                          </td>
+                          <td className="px-4 py-3 text-center">
+                            {productWithMetrics && (
+                              <ForecastConfidenceBadge
+                                metrics={productWithMetrics.forecast_metrics ?? null}
+                              />
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {!accuracyLoading && !accuracyError && productsAccuracy.length > 0 && (
+              <div className="mt-4 text-xs text-slate-500 space-y-1">
+                <p>
+                  💡 Accuracy (MAPE/RMSE) is calculated only on dates after model training, excluding the initial training data.
+                  Click on any product to see detailed accuracy metrics and charts.
+                </p>
+                <p>
+                  📊 Status badge shows training-time model confidence (based on how well the model fit the training data), not real-world post-training accuracy.
+                </p>
+              </div>
+            )}
+          </section>
+        </div>
       )}
 
       {activeTab === "insights" && (
