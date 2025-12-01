@@ -143,6 +143,7 @@ class ForecastService:
         cleaned_ts = self.preprocessor.preprocess(
             records=raw_records,
             product_id=product_id,
+            shelf_life_days=getattr(product, "shelf_life_days", 1) or 1,
         )
 
         # 3) Forecast via Prophet
@@ -190,13 +191,15 @@ class ForecastService:
             waste_quantity = None
             
             if has_profit_data:
-                # Use forecast quantity as production quantity (ideal scenario)
-                # In the future, could use yhat_upper for buffer or let user specify
+                # Use forecast quantity as production quantity (ideal scenario).
+                # For multi-day shelf life products, overproduction is treated as
+                # carryover rather than same-day waste in this single-day view.
                 profit_metrics = ProfitCalculator.calculate_forecast_profit(
                     forecast_quantity=yhat,
                     price=product.price,
                     cost_per_unit=product.cost_per_unit,
                     production_quantity=yhat,  # Produce exactly what we forecast
+                    shelf_life_days=getattr(product, "shelf_life_days", 1) or 1,
                 )
                 revenue = round(profit_metrics.revenue, 2)
                 cost = round(profit_metrics.cost, 2)

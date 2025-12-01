@@ -14,7 +14,10 @@ import { API_BASE_URL } from "@/lib/api";
 import { BAKERY_SELECTION_CHANGED_EVENT } from "@/lib/bakeries";
 
 const REQUIRED_ROLES = ["date", "product_id", "product_name", "quantity"] as const;
-type Role = (typeof REQUIRED_ROLES)[number];
+const OPTIONAL_ROLES = ["shelf_life"] as const;
+const ALL_ROLES = [...REQUIRED_ROLES, ...OPTIONAL_ROLES] as const;
+
+type Role = (typeof ALL_ROLES)[number];
 
 type UploadResult = {
   filename: string;
@@ -31,7 +34,7 @@ type SchemaInferenceDetail = {
   code: string;
   message: string;
   inferred_mapping: Record<string, string | null>;
-  missing_roles: Role[];
+  missing_roles: (typeof REQUIRED_ROLES)[number][];
   available_columns: string[];
 };
 
@@ -42,6 +45,7 @@ const ROLE_LABEL: Record<Role, string> = {
   product_id: "Product ID",
   product_name: "Product Name",
   quantity: "Quantity",
+  shelf_life: "Shelf life (optional)",
 };
 
 const ROLE_DESCRIPTION: Record<Role, string> = {
@@ -49,10 +53,12 @@ const ROLE_DESCRIPTION: Record<Role, string> = {
   product_id: "SKU / external identifier (e.g., Product Code, SKU, product_id)",
   product_name: "Human readable product name (e.g., Product Name)",
   quantity: "Units sold for that date (e.g., Sales Qty, quantity, qty)",
+  shelf_life:
+    "Boolean or numeric shelf-life flag. TRUE/Yes/Y/1 or values >1 → 2 days; other non-empty values → 1 day.",
 };
 
 const createEmptyMapping = (): MappingState =>
-  REQUIRED_ROLES.reduce(
+  ALL_ROLES.reduce(
     (acc, role) => {
       acc[role] = "";
       return acc;
@@ -216,7 +222,7 @@ export default function DataUploadPage() {
               setMapping(() => {
                 const inferred = detail.inferred_mapping ?? {};
                 const next = createEmptyMapping();
-                for (const role of REQUIRED_ROLES) {
+                for (const role of ALL_ROLES) {
                   const value = inferred[role];
                   next[role] = typeof value === "string" ? value : "";
                 }
@@ -347,7 +353,7 @@ export default function DataUploadPage() {
   };
 
   const mappingIsComplete = useMemo(() => {
-    const values = Object.values(mapping).filter(Boolean);
+    const values = REQUIRED_ROLES.map((role) => mapping[role]).filter(Boolean);
     return values.length === REQUIRED_ROLES.length;
   }, [mapping]);
 
@@ -741,10 +747,19 @@ export default function DataUploadPage() {
           </div>
 
           <div className="mt-4 grid gap-4 md:grid-cols-2">
-            {REQUIRED_ROLES.map((role) => (
+            {ALL_ROLES.map((role) => (
               <div key={role} className="rounded-xl border border-slate-100 p-4">
                 <label className="text-sm font-medium text-slate-700">
                   {ROLE_LABEL[role]}
+                  {REQUIRED_ROLES.includes(role as (typeof REQUIRED_ROLES)[number]) ? (
+                    <span className="ml-1 text-[10px] font-semibold uppercase text-rose-600">
+                      *
+                    </span>
+                  ) : (
+                    <span className="ml-1 text-[10px] font-normal uppercase text-slate-400">
+                      optional
+                    </span>
+                  )}
                 </label>
                 <p className="text-xs text-slate-500 mb-2">
                   {ROLE_DESCRIPTION[role]}

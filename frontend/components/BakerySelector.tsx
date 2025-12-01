@@ -5,6 +5,8 @@ import {
   fetchBakeries,
   type Bakery,
   BAKERY_UPDATED_EVENT,
+  BAKERY_SELECTION_CHANGED_EVENT,
+  emitBakerySelectionChanged,
 } from "@/lib/bakeries";
 
 const STORAGE_KEY = "current_bakery_id";
@@ -57,13 +59,39 @@ export function BakerySelector() {
       loadBakeries();
     }
 
+    function handleSelectionChanged(e: Event) {
+      const custom = e as CustomEvent<{ value: string | null }>;
+      const value = custom.detail?.value ?? null;
+      setSelectedId((current) => {
+        if (value === null) {
+          if (typeof window !== "undefined") {
+            window.localStorage.removeItem(STORAGE_KEY);
+          }
+          return "";
+        }
+        if (current === value) return current;
+        if (typeof window !== "undefined") {
+          window.localStorage.setItem(STORAGE_KEY, value);
+        }
+        return value;
+      });
+    }
+
     if (typeof window !== "undefined") {
       window.addEventListener(BAKERY_UPDATED_EVENT, handleRefresh);
+      window.addEventListener(
+        BAKERY_SELECTION_CHANGED_EVENT,
+        handleSelectionChanged
+      );
     }
 
     return () => {
       if (typeof window !== "undefined") {
         window.removeEventListener(BAKERY_UPDATED_EVENT, handleRefresh);
+        window.removeEventListener(
+          BAKERY_SELECTION_CHANGED_EVENT,
+          handleSelectionChanged
+        );
       }
     };
   }, [loadBakeries]);
@@ -73,6 +101,7 @@ export function BakerySelector() {
     if (typeof window !== "undefined") {
       window.localStorage.setItem(STORAGE_KEY, value);
     }
+    emitBakerySelectionChanged(value);
   }
 
   if (loading) {

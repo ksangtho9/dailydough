@@ -16,6 +16,9 @@ def create_product(
         name=obj_in.name,
         sku=obj_in.sku,
         category=obj_in.category,
+        price=obj_in.price,
+        cost_per_unit=obj_in.cost_per_unit,
+        shelf_life_days=obj_in.shelf_life_days or 1,
     )
     db.add(db_obj)
     db.commit()
@@ -69,6 +72,16 @@ def update_product(
         db_obj.sku = obj_in.sku
     if obj_in.category is not None:
         db_obj.category = obj_in.category
+    if obj_in.price is not None:
+        db_obj.price = obj_in.price
+    if obj_in.cost_per_unit is not None:
+        db_obj.cost_per_unit = obj_in.cost_per_unit
+    if getattr(obj_in, "shelf_life_days", None) is not None:
+        # Enforce business rule: shelf life is 1 or 2 days max
+        value = int(obj_in.shelf_life_days)  # type: ignore[arg-type]
+        if value < 1 or value > 2:
+            value = 1
+        db_obj.shelf_life_days = value
 
     db.add(db_obj)
     db.commit()

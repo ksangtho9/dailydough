@@ -48,3 +48,31 @@ export async function apiFetch<T>(
 
   return res.json() as Promise<T>;
 }
+
+// Product API helpers
+export async function updateProduct(
+  productId: number,
+  data: { name?: string; sku?: string; category?: string; price?: number | null; cost_per_unit?: number | null }
+): Promise<any> {
+  return apiFetch(`/api/v1/products/${productId}`, {
+    method: "PUT",
+    body: JSON.stringify(data),
+  });
+}
+
+export async function deleteProduct(productId: number): Promise<{ success: boolean }> {
+  return apiFetch(`/api/v1/products/${productId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function deleteAllProducts(bakeryId: number): Promise<{
+  deleted_products: number;
+  deleted_sales: number;
+  deleted_metrics: number;
+}> {
+  const params = new URLSearchParams({ bakery_id: String(bakeryId) }).toString();
+  return apiFetch(`/api/v1/products?${params}`, {
+    method: "DELETE",
+  });
+}

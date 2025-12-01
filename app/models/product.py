@@ -15,6 +15,13 @@ class Product(Base):
     category = Column(String, nullable=True)
     price = Column(Float, nullable=True)  # Selling price per unit
     cost_per_unit = Column(Float, nullable=True)  # Production cost per unit
+    # Shelf life in days for this product. Most products are 1-day; some can be carried
+    # over to the next day (2 days max as per business rules).
+    shelf_life_days = Column(
+        Integer,
+        nullable=False,
+        server_default="1",  # Existing rows default to 1-day shelf life
+    )
 
     bakery = relationship("Bakery", back_populates="products")
     sales_records = relationship("SalesRecord", back_populates="product")

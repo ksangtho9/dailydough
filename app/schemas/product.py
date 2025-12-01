@@ -7,6 +7,8 @@ class ProductBase(BaseModel):
     category: str | None = None
     price: float | None = None
     cost_per_unit: float | None = None
+    # Shelf life in days (1 = same-day only, 2 = can be sold next day)
+    shelf_life_days: int = 1
 
 
 class ProductCreate(ProductBase):
@@ -19,6 +21,7 @@ class ProductUpdate(BaseModel):
     category: str | None = None
     price: float | None = None
     cost_per_unit: float | None = None
+    shelf_life_days: int | None = None
 
 
 class Product(ProductBase):

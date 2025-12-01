@@ -4,6 +4,7 @@ import json
 from dataclasses import dataclass
 from io import StringIO
 from typing import Dict, List, Optional, Tuple
+import logging
 
 import pandas as pd
 from sqlalchemy.orm import Session
@@ -12,7 +13,12 @@ from app.ml.data.schema_inference import infer_column_roles
 from app.models import Bakery, Product, SalesRecord
 
 REQUIRED_ROLES = ("date", "product_id", "product_name", "quantity")
-OPTIONAL_ROLES = ("bakery_id", "delivery")
+# Optional roles include bakery_id & delivery quantity; we now also support an
+# optional shelf_life column for per-product shelf life configuration.
+OPTIONAL_ROLES = ("bakery_id", "delivery", "shelf_life")
+
+
+logger = logging.getLogger("bakezy.sales_ingestion")
 
 
 class SchemaInferenceError(Exception):
@@ -95,6 +101,7 @@ def _dataframe_to_rows(
     errors: List[str] = []
 
     has_bakery_column = "bakery_id" in df.columns
+    has_shelf_life_column = "shelf_life" in df.columns
 
     for line_no, record in enumerate(df.itertuples(index=False), start=2):
         try:
@@ -142,6 +149,39 @@ def _dataframe_to_rows(
                     except (ValueError, TypeError):
                         pass  # Keep as None if parsing fails
 
+            # Parse shelf life in days if available. This is product-level metadata
+            # but we capture it per-row and later only apply it when auto-creating
+            # new products.
+            #
+            # Supported formats:
+            # - Numeric shelf_life column (e.g. 1 or 2): values >1 → 2, values <=1 → 1
+            # - Boolean-ish \"More than 1 Day Shelf Life\" style column:
+            #     * TRUE/Yes/Y/1 → 2 days
+            #     * anything else non-empty → 1 day
+            shelf_life_days: Optional[int] = None
+            if has_shelf_life_column and hasattr(record, "shelf_life"):
+                raw_shelf_life = getattr(record, "shelf_life")
+                if raw_shelf_life is not None and not pd.isna(raw_shelf_life):
+                    try:
+                        # First try numeric interpretation. We support both:
+                        # - Boolean-style 0/1 flags (1 → 2 days, 0 → 1 day)
+                        # - Direct numeric shelf-life in days (1 or 2)
+                        numeric_val = float(raw_shelf_life)
+                        if numeric_val in (0.0, 1.0):
+                            # Treat as boolean flag: 1 means \"more than 1 day\"
+                            value = 2 if numeric_val >= 1.0 else 1
+                        else:
+                            # Treat as direct shelf-life days: >1 → 2 days
+                            value = 2 if numeric_val > 1 else 1
+                        value = max(1, min(2, int(value)))
+                        shelf_life_days = value
+                    except (ValueError, TypeError):
+                        # Fallback: treat as string/boolean-style flag
+                        text = str(raw_shelf_life).strip().lower()
+                        if text:
+                            true_like = {"true", "yes", "y", "t"}
+                            shelf_life_days = 2 if text in true_like else 1
+
             rows.append(
                 {
                     "line_number": line_no,
@@ -152,6 +192,7 @@ def _dataframe_to_rows(
                     "date": sale_date,
                     "quantity_sold": quantity,
                     "quantity_delivered": quantity_delivered,
+                    "shelf_life_days": shelf_life_days,
                 }
             )
         except Exception as exc:
@@ -171,8 +212,42 @@ def ingest_sales_csv(
     replace_mode: bool = False,
 ) -> SalesIngestionResult:
     df_raw = _read_dataframe(file_bytes)
-    explicit_mapping = _load_column_mapping(column_mapping_json, list(df_raw.columns))
-    mapping = explicit_mapping or infer_column_roles(df_raw)
+
+    # --- Column role mapping (supports optional roles like shelf_life) ---
+    columns_list = list(df_raw.columns)
+    explicit_mapping = _load_column_mapping(column_mapping_json, columns_list)
+
+    if explicit_mapping is not None:
+        # Run auto-inference as a baseline so we can preserve optional roles
+        # (e.g., shelf_life) even when the UI only sends required roles.
+        auto_mapping = infer_column_roles(df_raw)
+
+        mapping: Dict[str, Optional[str]] = {}
+        # Merge explicit + auto:
+        # - required roles: always take explicit when provided
+        # - optional roles: take explicit when provided, otherwise fall back
+        #   to auto-inferred column if present.
+        for role in REQUIRED_ROLES + OPTIONAL_ROLES:
+            if role in explicit_mapping:
+                mapping[role] = explicit_mapping[role]
+            else:
+                # For optional roles only, preserve auto inference
+                if role in OPTIONAL_ROLES:
+                    mapping[role] = auto_mapping.get(role)
+                else:
+                    mapping[role] = auto_mapping.get(role)
+    else:
+        mapping = infer_column_roles(df_raw)
+
+    # Dev/diagnostic logging to help verify how shelf life is wired up.
+    try:
+        logger.info(
+            "Sales CSV column-role mapping: %s",
+            {role: col for role, col in mapping.items() if col is not None},
+        )
+    except Exception:
+        # Never break ingestion because of logging issues.
+        pass
     missing_roles = [role for role in REQUIRED_ROLES if not mapping.get(role)]
     if missing_roles:
         raise SchemaInferenceError(
@@ -196,6 +271,20 @@ def ingest_sales_csv(
     else:
         forced_bakery_id = demo_bakery_id
     rows, parse_errors = _dataframe_to_rows(df_internal, forced_bakery_id)
+
+    # More detailed diagnostics for shelf_life_days parsing to help debug issues
+    # like \"all products appearing as same-day\" after uploads. This keeps the
+    # logging lightweight and safe for production.
+    try:
+        sample = rows[:10]
+        shelf_values = [row.get("shelf_life_days") for row in sample]
+        logger.info(
+            "Parsed shelf_life_days for first %d rows: %s",
+            len(sample),
+            shelf_values,
+        )
+    except Exception:
+        pass
     if not rows and parse_errors:
         raise ValueError("; ".join(parse_errors))
 
@@ -278,11 +367,16 @@ def ingest_sales_csv(
                 )
                 continue
 
+            shelf_life_days = row.get("shelf_life_days") or 1
+            if shelf_life_days < 1 or shelf_life_days > 2:
+                shelf_life_days = 1
+
             product = Product(
                 bakery_id=csv_bakery_id,
                 name=csv_product_name,
                 sku=csv_product_sku
                 or (str(csv_product_id) if csv_product_id is not None else None),
+                shelf_life_days=shelf_life_days,
             )
             
             # Do NOT set product.id = csv_product_id
@@ -298,6 +392,27 @@ def ingest_sales_csv(
                 products_by_name[csv_product_name.strip().lower()] = product
             created_products += 1
             product_was_created = True
+        else:
+            # Existing product: if we have a non-default shelf_life_days from the CSV,
+            # allow it to upgrade products from 1 → 2 days (but never beyond 2).
+            row_shelf_life = row.get("shelf_life_days")
+            if row_shelf_life is not None:
+                try:
+                    new_value = int(row_shelf_life)
+                except (TypeError, ValueError):
+                    new_value = None
+
+                if new_value is not None:
+                    if new_value < 1:
+                        new_value = 1
+                    if new_value > 2:
+                        new_value = 2
+
+                    if (
+                        getattr(product, "shelf_life_days", 1) == 1
+                        and new_value > 1
+                    ):
+                        product.shelf_life_days = new_value
 
         # If replace_mode, delete existing record for this (date, product_id, bakery_id) first
         if replace_mode:

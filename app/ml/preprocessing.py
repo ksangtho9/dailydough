@@ -21,6 +21,8 @@ class CleanedTimeSeries:
     """Normalized time series ready for modeling."""
     product_id: int
     df: pd.DataFrame  # columns: ["ds", "y"] and optionally ["delivery"] (Prophet-friendly)
+    # Static product-level metadata that models or downstream services can use.
+    shelf_life_days: int = 1
 
 
 class SalesPreprocessor:
@@ -112,6 +114,7 @@ class SalesPreprocessor:
         self,
         records: List[RawSalesRecord],
         product_id: int,
+        shelf_life_days: int = 1,
     ) -> CleanedTimeSeries:
         """Main entrypoint: raw records → CleanedTimeSeries."""
         df = self.to_dataframe(records)
@@ -121,5 +124,9 @@ class SalesPreprocessor:
         columns = ["ds", "y"]
         if "delivery" in df_full.columns:
             columns.append("delivery")
-        return CleanedTimeSeries(product_id=product_id, df=df_full[columns])
+        return CleanedTimeSeries(
+            product_id=product_id,
+            df=df_full[columns],
+            shelf_life_days=shelf_life_days or 1,
+        )
 

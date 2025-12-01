@@ -3,7 +3,10 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
-import { BAKERY_UPDATED_EVENT } from "@/lib/bakeries";
+import {
+  BAKERY_UPDATED_EVENT,
+  BAKERY_SELECTION_CHANGED_EVENT,
+} from "@/lib/bakeries";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 
 type Bakery = {
@@ -95,6 +98,36 @@ export default function BakePlanPage() {
 
     loadBasics();
   }, [router, loadBasics]);
+
+  // Keep selected bakery in sync with global selection changes
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    function handleSelectionChange(e: Event) {
+      const custom = e as CustomEvent<{ value: string | null }>;
+      const value = custom.detail?.value ?? null;
+
+      if (!value) {
+        setSelectedBakeryId("all");
+        window.localStorage.removeItem(BAKERY_STORAGE_KEY);
+        return;
+      }
+
+      setSelectedBakeryId(value);
+      window.localStorage.setItem(BAKERY_STORAGE_KEY, value);
+    }
+
+    window.addEventListener(
+      BAKERY_SELECTION_CHANGED_EVENT,
+      handleSelectionChange
+    );
+    return () => {
+      window.removeEventListener(
+        BAKERY_SELECTION_CHANGED_EVENT,
+        handleSelectionChange
+      );
+    };
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") return;

@@ -3,7 +3,7 @@
 import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, deleteAllProducts } from "@/lib/api";
 import {
   BAKERY_UPDATED_EVENT,
   BAKERY_SELECTION_CHANGED_EVENT,
@@ -17,6 +17,7 @@ type Product = {
   name: string;
   sku?: string | null;
   bakery_id?: number | null;
+  shelf_life_days?: number | null;
   forecast_metrics?: ForecastMetrics | null;
 };
 
@@ -33,6 +34,9 @@ type ForecastPoint = {
 
 type RecommendationsMap = Record<number, number | null>;
 
+type SortBy = "id" | "p50";
+type SortDir = "asc" | "desc";
+
 const BAKERY_STORAGE_KEY = "current_bakery_id";
 
 export default function ProductsPage() {
@@ -48,6 +52,9 @@ export default function ProductsPage() {
   const [recommendations, setRecommendations] =
     useState<RecommendationsMap>({});
   const [recsLoading, setRecsLoading] = useState(false);
+
+  const [sortBy, setSortBy] = useState<SortBy>("id");
+  const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   // Stable date label
   const todayLabel = new Date().toLocaleDateString("en-US", {
@@ -78,6 +85,28 @@ export default function ProductsPage() {
 
       setBakeries(bakeryData);
       setProducts(productData);
+
+      // Log distinct shelf-life values to help verify CSV ingestion / backend wiring
+      try {
+        const distinctShelfLives = Array.from(
+          new Set(
+            productData
+              .map((p) => p.shelf_life_days)
+              .filter((v): v is number => v != null)
+          )
+        ).sort((a, b) => a - b);
+        console.log("[ProductsPage] Distinct shelf_life_days:", distinctShelfLives);
+        console.log(
+          "[ProductsPage] Sample products with shelf_life_days:",
+          productData.slice(0, 5).map((p) => ({
+            id: p.id,
+            name: p.name,
+            shelf_life_days: p.shelf_life_days,
+          }))
+        );
+      } catch (logErr) {
+        console.error("[ProductsPage] Failed to log shelf life summary", logErr);
+      }
 
       if (productData.length > 0) {
         setRecsLoading(true);
@@ -157,6 +186,42 @@ export default function ProductsPage() {
             String(p.bakery_id) === selectedBakeryId
         );
 
+  const sortedProducts = [...filteredProducts].sort((a, b) => {
+    if (sortBy === "id") {
+      const diff = a.id - b.id;
+      return sortDir === "asc" ? diff : -diff;
+    }
+
+    const aP50 = recommendations[a.id] ?? null;
+    const bP50 = recommendations[b.id] ?? null;
+
+    // Place null/undefined at the end regardless of direction
+    if (aP50 == null && bP50 == null) return 0;
+    if (aP50 == null) return 1;
+    if (bP50 == null) return -1;
+
+    const diff = aP50 - bP50;
+    return sortDir === "asc" ? diff : -diff;
+  });
+
+  function toggleSort(key: SortBy) {
+    setSortBy((currentKey) => {
+      if (currentKey === key) {
+        // Toggle direction
+        setSortDir((currentDir) => (currentDir === "asc" ? "desc" : "asc"));
+        return currentKey;
+      }
+      // Switch key, reset to ascending
+      setSortDir("asc");
+      return key;
+    });
+  }
+
+  function renderSortIndicator(key: SortBy) {
+    if (sortBy !== key) return null;
+    return <span className="ml-1 text-[10px]">{sortDir === "asc" ? "▲" : "▼"}</span>;
+  }
+
   function handleBakeryChange(value: string) {
     setSelectedBakeryId(value);
 
@@ -213,10 +278,48 @@ export default function ProductsPage() {
             )}
           </div>
 
-          {/* Tiny legend for tomorrow bake */}
-          <p className="text-[11px] text-slate-500">
-            Tomorrow&apos;s bake uses P50 from your forecast.
-          </p>
+          {/* Tiny legend + bulk actions */}
+          <div className="flex flex-col items-end gap-1">
+            <p className="text-[11px] text-slate-500">
+              Tomorrow&apos;s bake uses P50 from your forecast.
+            </p>
+
+            {filteredProducts.length > 0 && selectedBakeryId !== "all" && (
+              <button
+                type="button"
+                className="rounded-full border border-red-200 bg-red-50 px-3 py-1 text-[11px] font-medium text-red-700 shadow-sm hover:bg-red-100"
+                onClick={async () => {
+                  if (
+                    !window.confirm(
+                      "This will delete ALL products, sales, and forecast data for the current bakery. This cannot be undone. Continue?"
+                    )
+                  ) {
+                    return;
+                  }
+                  try {
+                    const bakeryIdNum = Number(selectedBakeryId);
+                    if (Number.isNaN(bakeryIdNum)) {
+                      alert("Current bakery selection is invalid.");
+                      return;
+                    }
+                    const result = await deleteAllProducts(bakeryIdNum);
+                    console.log("[ProductsPage] Deleted all products for bakery", {
+                      selectedBakeryId,
+                      ...result,
+                    });
+                    await loadProductsAndRecs();
+                  } catch (err) {
+                    console.error("Failed to delete all products", err);
+                    alert(
+                      "Failed to delete all products for this bakery. See console for details."
+                    );
+                  }
+                }}
+              >
+                Delete all products for this bakery
+              </button>
+            )}
+          </div>
         </div>
       </header>
 
@@ -244,13 +347,24 @@ export default function ProductsPage() {
             <table className="min-w-full text-sm">
               <thead className="border-b bg-slate-50 text-xs uppercase tracking-wide text-slate-500">
                 <tr>
-                  <th className="px-4 py-2 text-left">ID</th>
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort("id")}
+                  >
+                    ID
+                    {renderSortIndicator("id")}
+                  </th>
                   <th className="px-4 py-2 text-left">Name</th>
                   <th className="px-4 py-2 text-left">SKU</th>
                   <th className="px-4 py-2 text-left">Bakery</th>
+                  <th className="px-4 py-2 text-left">Shelf life</th>
                   <th className="px-4 py-2 text-left">Confidence</th>
-                  <th className="px-4 py-2 text-right">
+                  <th
+                    className="px-4 py-2 text-right cursor-pointer select-none"
+                    onClick={() => toggleSort("p50")}
+                  >
                     Tomorrow&apos;s bake (P50)
+                    {renderSortIndicator("p50")}
                   </th>
                 </tr>
               </thead>
@@ -322,7 +436,7 @@ export default function ProductsPage() {
                   )}
 
                 {/* Show products */}
-                {filteredProducts.map((p, idx) => {
+                {sortedProducts.map((p, idx) => {
                   const rec = recommendations[p.id];
                   const bakeryName =
                     bakeries.find((b) => b.id === p.bakery_id)?.name || "—";
@@ -361,6 +475,16 @@ export default function ProductsPage() {
                         <span className="inline-flex items-center rounded-full bg-slate-100 px-2 py-0.5 text-[11px] text-slate-700">
                           {bakeryName}
                         </span>
+                      </td>
+
+                      <td className="px-4 py-2 align-middle text-sm text-slate-700">
+                        {(() => {
+                          const value = p.shelf_life_days;
+                          if (value == null) return "—";
+                          if (value <= 1) return "Same-day";
+                          if (value === 2) return "2 days";
+                          return `~${value} days`;
+                        })()}
                       </td>
 
                       <td className="px-4 py-2 align-middle text-sm">

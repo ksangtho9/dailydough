@@ -6,6 +6,7 @@ from typing import List, Optional
 import pandas as pd
 
 from app.models import Product, SalesRecord
+from app.services.inventory_tracker import compute_inventory_timeseries
 
 
 @dataclass
@@ -124,28 +125,56 @@ class ProfitCalculator:
                 days_with_data=0,
             )
         
+        # Decide whether to use shelf-life-aware inventory tracking.
+        shelf_life_days = getattr(product, "shelf_life_days", 1) or 1
         has_delivery_data = any(
             record.quantity_delivered is not None for record in sales_records
         )
-        
+
         total_revenue = 0.0
         total_cost = 0.0
         total_waste_cost = 0.0
         total_waste_quantity = 0.0
-        
-        for record in sales_records:
-            metrics = ProfitCalculator.calculate_daily_profit(
-                quantity_sold=record.quantity_sold,
-                quantity_delivered=record.quantity_delivered,
-                price=product.price,
-                cost_per_unit=product.cost_per_unit,
+
+        if shelf_life_days > 1:
+            # Use shelf-life-aware inventory tracking for multi-day products.
+            inv_states = compute_inventory_timeseries(
+                sales_records, shelf_life_days=shelf_life_days
             )
-            total_revenue += metrics.revenue
-            total_cost += metrics.cost
-            total_waste_cost += metrics.waste_cost
-            total_waste_quantity += metrics.waste_quantity
-        
-        days_with_data = len(sales_records)
+
+            for state in inv_states:
+                # Revenue is based on units actually sold that day.
+                metrics_revenue = (state.quantity_sold * (product.price or 0.0))
+
+                # Production cost is based on units delivered (or inferred from sales
+                # when delivery is missing).
+                unit_cost = product.cost_per_unit or 0.0
+                metrics_cost = state.quantity_delivered * unit_cost
+
+                # Waste cost only counts items that have exceeded shelf life.
+                metrics_waste_cost = state.waste_quantity * unit_cost
+
+                total_revenue += metrics_revenue
+                total_cost += metrics_cost
+                total_waste_cost += metrics_waste_cost
+                total_waste_quantity += state.waste_quantity
+
+            days_with_data = len(inv_states)
+        else:
+            # Original per-day calculation for 1-day shelf life (backwards compatible).
+            for record in sales_records:
+                metrics = ProfitCalculator.calculate_daily_profit(
+                    quantity_sold=record.quantity_sold,
+                    quantity_delivered=record.quantity_delivered,
+                    price=product.price,
+                    cost_per_unit=product.cost_per_unit,
+                )
+                total_revenue += metrics.revenue
+                total_cost += metrics.cost
+                total_waste_cost += metrics.waste_cost
+                total_waste_quantity += metrics.waste_quantity
+
+            days_with_data = len(sales_records)
         total_profit = total_revenue - total_cost - total_waste_cost
         average_daily_profit = total_profit / days_with_data if days_with_data > 0 else 0.0
         
@@ -154,11 +183,16 @@ class ProfitCalculator:
             (total_profit / total_revenue * 100) if total_revenue > 0 else 0.0
         )
         
-        total_produced = (
-            sum(r.quantity_delivered for r in sales_records if r.quantity_delivered is not None)
-            if has_delivery_data
-            else sum(r.quantity_sold for r in sales_records)
-        )
+        if shelf_life_days > 1 and has_delivery_data:
+            total_produced = sum(
+                r.quantity_delivered or 0.0 for r in sales_records
+            )
+        elif has_delivery_data:
+            total_produced = sum(
+                r.quantity_delivered or 0.0 for r in sales_records
+            )
+        else:
+            total_produced = sum(r.quantity_sold for r in sales_records)
         waste_percent = (
             (total_waste_quantity / total_produced * 100) if total_produced > 0 else 0.0
         )
@@ -182,6 +216,7 @@ class ProfitCalculator:
         price: Optional[float],
         cost_per_unit: Optional[float],
         production_quantity: Optional[float] = None,
+        shelf_life_days: int = 1,
     ) -> ProfitMetrics:
         """
         Calculate projected profit for a forecast period.
@@ -199,11 +234,36 @@ class ProfitCalculator:
         # (ideal scenario - no waste, but also no buffer for stockouts)
         if production_quantity is None:
             production_quantity = forecast_quantity
-        
-        return ProfitCalculator.calculate_daily_profit(
-            quantity_sold=forecast_quantity,  # Assume we sell what we forecast
-            quantity_delivered=production_quantity,
-            price=price,
-            cost_per_unit=cost_per_unit,
+
+        # For 1-day shelf life, treat any overproduction as waste (original behavior).
+        # For multi-day shelf life, we treat overproduction as carryover (no immediate waste)
+        # in this single-period profit view, since those units can be sold on subsequent days.
+        shelf_life_days = shelf_life_days or 1
+        if shelf_life_days <= 1:
+            return ProfitCalculator.calculate_daily_profit(
+                quantity_sold=forecast_quantity,  # Assume we sell what we forecast
+                quantity_delivered=production_quantity,
+                price=price,
+                cost_per_unit=cost_per_unit,
+            )
+
+        # Multi-day shelf life: no same-day waste penalty for producing above forecast.
+        has_delivery_data = True
+        price = price or 0.0
+        cost_per_unit = cost_per_unit or 0.0
+
+        revenue = forecast_quantity * price
+        cost = production_quantity * cost_per_unit
+        waste_quantity = 0.0
+        waste_cost = 0.0
+        profit = revenue - cost - waste_cost
+
+        return ProfitMetrics(
+            revenue=revenue,
+            cost=cost,
+            waste_cost=waste_cost,
+            profit=profit,
+            waste_quantity=waste_quantity,
+            has_delivery_data=has_delivery_data,
         )
 

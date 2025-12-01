@@ -60,6 +60,21 @@ ALIASES = {
     ],
     # Optional but helpful when auto-creating products
     "bakery_id": ["bakeryid", "locationid", "storeid"],
+    # Optional per-product shelf life metadata. This can come from a numeric
+    # column like `shelf_life` (values 1 or 2) or from a boolean-style flag
+    # such as `More than 1 Day Shelf Life`.
+    "shelf_life": [
+        "shelflife",
+        "shelf_life",
+        "shelf life",
+        "morethan1dayshelflife",
+        "morethan1dayshelflife?",
+        "morethanonedayshelflife",
+        "morethanonedayshelflife?",
+        "morethan1dayshelf",
+        "more than 1 day shelf life",
+        "more than one day shelf life",
+    ],
 }
 
 NORMALIZED_ALIASES = {
@@ -93,6 +108,7 @@ def infer_column_roles(df: pd.DataFrame) -> Dict[str, Optional[str]]:
         "quantity": None,
         "delivery": None,
         "bakery_id": None,
+        "shelf_life": None,
     }
     role_scores = {role: -1.0 for role in role_to_column}
 

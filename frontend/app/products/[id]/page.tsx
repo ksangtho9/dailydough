@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, updateProduct, deleteProduct } from "@/lib/api";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 import {
   ResponsiveContainer,
@@ -25,6 +25,9 @@ type Product = {
   id: number;
   name: string;
   sku?: string | null;
+  price?: number | null;
+  cost_per_unit?: number | null;
+  shelf_life_days?: number | null;
 };
 
 type SalesPoint = {
@@ -74,6 +77,17 @@ export default function ProductDetailPage() {
   const [recommendedLow, setRecommendedLow] = useState<number | null>(null);
   const [recommendedHigh, setRecommendedHigh] = useState<number | null>(null);
 
+  // Product editing state
+  const [isEditing, setIsEditing] = useState(false);
+  const [editPrice, setEditPrice] = useState<string>("");
+  const [editCost, setEditCost] = useState<string>("");
+  const [editShelfLife, setEditShelfLife] = useState<string>("1");
+  const [updateError, setUpdateError] = useState<string | null>(null);
+  const [updateSuccess, setUpdateSuccess] = useState(false);
+  const [isUpdating, setIsUpdating] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+
   useEffect(() => {
     if (!productId) return;
     if (typeof window === "undefined") return;
@@ -89,12 +103,32 @@ export default function ProductDetailPage() {
         setLoading(true);
         setError(null);
 
-        // Product name for header
-        const productsData = await apiFetch<Product[]>("/api/products/");
-        const found = productsData.find(
-          (p) => String(p.id) === String(productId)
-        );
-        if (found) setProduct(found);
+        // Fetch product from v1 endpoint (has auth and includes price/cost)
+        try {
+          const productData = await apiFetch<Product>(`/api/v1/products/${productId}`);
+          setProduct(productData);
+          setEditPrice(productData.price?.toString() || "");
+          setEditCost(productData.cost_per_unit?.toString() || "");
+          setEditShelfLife(
+            productData.shelf_life_days != null
+              ? String(productData.shelf_life_days)
+              : "1"
+          );
+        } catch (err: any) {
+          // Fallback to base endpoint if v1 fails
+          const productsData = await apiFetch<Product[]>("/api/products/");
+          const found = productsData.find(
+            (p) => String(p.id) === String(productId)
+          );
+          if (found) {
+            setProduct(found);
+            setEditPrice(found.price?.toString() || "");
+            setEditCost(found.cost_per_unit?.toString() || "");
+            setEditShelfLife(
+              found.shelf_life_days != null ? String(found.shelf_life_days) : "1"
+            );
+          }
+        }
 
         // Sales + forecast
         const salesData = await apiFetch<any>(
@@ -238,6 +272,218 @@ export default function ProductDetailPage() {
           </p>
           <p>Training points: {metrics?.n_points ?? 0}</p>
           <p>Last trained: {formatLastTrainedAt(metrics?.last_trained_at ?? null)}</p>
+        </div>
+      </section>
+
+      {/* Product Settings */}
+      <section className="rounded-xl border bg-white p-4">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-sm font-semibold text-slate-700">Product Settings</h3>
+          {!isEditing && (
+            <button
+              onClick={() => setIsEditing(true)}
+              className="text-sm text-blue-600 hover:text-blue-700 hover:underline"
+            >
+              Edit
+            </button>
+          )}
+        </div>
+
+        {isEditing ? (
+          <div className="space-y-4">
+            <div className="grid gap-4 md:grid-cols-3">
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  Price (per unit)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={editPrice}
+                  onChange={(e) => setEditPrice(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  Cost (per unit)
+                </label>
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  value={editCost}
+                  onChange={(e) => setEditCost(e.target.value)}
+                  placeholder="0.00"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  Shelf life (days)
+                </label>
+                <select
+                  value={editShelfLife}
+                  onChange={(e) => setEditShelfLife(e.target.value)}
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                >
+                  <option value="1">1 day (same-day only)</option>
+                  <option value="2">2 days (can sell next day)</option>
+                </select>
+                <p className="mt-1 text-[11px] text-slate-500">
+                  Multi-day products aren&apos;t counted as waste until they pass their shelf life.
+                </p>
+              </div>
+            </div>
+
+            {updateError && (
+              <p className="text-sm text-red-600">{updateError}</p>
+            )}
+            {updateSuccess && (
+              <p className="text-sm text-green-600">Product updated successfully!</p>
+            )}
+
+            <div className="flex gap-2">
+              <button
+                onClick={async () => {
+                  if (!productId) return;
+                  setIsUpdating(true);
+                  setUpdateError(null);
+                  setUpdateSuccess(false);
+                  try {
+                    const priceValue = editPrice === "" ? null : parseFloat(editPrice);
+                    const costValue = editCost === "" ? null : parseFloat(editCost);
+                    const shelfLifeValue = parseInt(editShelfLife, 10);
+                    
+                    if (priceValue !== null && priceValue < 0) {
+                      setUpdateError("Price cannot be negative");
+                      setIsUpdating(false);
+                      return;
+                    }
+                    if (costValue !== null && costValue < 0) {
+                      setUpdateError("Cost cannot be negative");
+                      setIsUpdating(false);
+                      return;
+                    }
+                    if (Number.isNaN(shelfLifeValue) || shelfLifeValue < 1 || shelfLifeValue > 2) {
+                      setUpdateError("Shelf life must be 1 or 2 days");
+                      setIsUpdating(false);
+                      return;
+                    }
+
+                    const updated = await updateProduct(Number(productId), {
+                      price: priceValue,
+                      cost_per_unit: costValue,
+                      shelf_life_days: shelfLifeValue,
+                    });
+                    setProduct(updated);
+                    setUpdateSuccess(true);
+                    setIsEditing(false);
+                    setTimeout(() => setUpdateSuccess(false), 3000);
+                  } catch (err: any) {
+                    setUpdateError(err.message || "Failed to update product");
+                  } finally {
+                    setIsUpdating(false);
+                  }
+                }}
+                disabled={isUpdating}
+                className="px-4 py-2 bg-blue-600 text-white text-sm rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {isUpdating ? "Saving..." : "Save"}
+              </button>
+              <button
+                onClick={() => {
+                  setIsEditing(false);
+                  setEditPrice(product?.price?.toString() || "");
+                  setEditCost(product?.cost_per_unit?.toString() || "");
+                  setEditShelfLife(
+                    product?.shelf_life_days != null
+                      ? String(product.shelf_life_days)
+                      : "1"
+                  );
+                  setUpdateError(null);
+                  setUpdateSuccess(false);
+                }}
+                disabled={isUpdating}
+                className="px-4 py-2 bg-slate-200 text-slate-700 text-sm rounded-md hover:bg-slate-300 disabled:opacity-50"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        ) : (
+          <div className="grid gap-4 md:grid-cols-3">
+            <div>
+              <p className="text-xs text-slate-500 mb-1">Price (per unit)</p>
+              <p className="text-sm font-medium text-slate-900">
+                {product?.price !== null && product?.price !== undefined
+                  ? `$${product.price.toFixed(2)}`
+                  : "Not set"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 mb-1">Cost (per unit)</p>
+              <p className="text-sm font-medium text-slate-900">
+                {product?.cost_per_unit !== null && product?.cost_per_unit !== undefined
+                  ? `$${product.cost_per_unit.toFixed(2)}`
+                  : "Not set"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 mb-1">Shelf life</p>
+              <p className="text-sm font-medium text-slate-900">
+                {product?.shelf_life_days === 2 ? "2 days" : "1 day"}
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Delete button */}
+        <div className="mt-6 pt-4 border-t border-slate-200">
+          {!showDeleteConfirm ? (
+            <button
+              onClick={() => setShowDeleteConfirm(true)}
+              className="text-sm text-red-600 hover:text-red-700 hover:underline"
+            >
+              Delete Product
+            </button>
+          ) : (
+            <div className="space-y-2">
+              <p className="text-sm text-slate-700">
+                Are you sure you want to delete this product? This action cannot be undone.
+              </p>
+              <div className="flex gap-2">
+                <button
+                  onClick={async () => {
+                    if (!productId) return;
+                    setIsDeleting(true);
+                    try {
+                      await deleteProduct(Number(productId));
+                      router.push("/products");
+                    } catch (err: any) {
+                      setUpdateError(err.message || "Failed to delete product");
+                      setShowDeleteConfirm(false);
+                    } finally {
+                      setIsDeleting(false);
+                    }
+                  }}
+                  disabled={isDeleting}
+                  className="px-4 py-2 bg-red-600 text-white text-sm rounded-md hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  {isDeleting ? "Deleting..." : "Yes, Delete"}
+                </button>
+                <button
+                  onClick={() => setShowDeleteConfirm(false)}
+                  disabled={isDeleting}
+                  className="px-4 py-2 bg-slate-200 text-slate-700 text-sm rounded-md hover:bg-slate-300 disabled:opacity-50"
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       </section>
 

@@ -25,11 +25,19 @@ def create_product(
             detail="Bakery not found",
         )
 
+    # Enforce shelf life defaults and bounds at the API layer as well
+    shelf_life_days = product_in.shelf_life_days or 1
+    if shelf_life_days < 1 or shelf_life_days > 2:
+        shelf_life_days = 1
+
     product = Product(
         bakery_id=product_in.bakery_id,
         name=product_in.name,
         sku=product_in.sku,
         category=product_in.category,
+        price=product_in.price,
+        cost_per_unit=product_in.cost_per_unit,
+        shelf_life_days=shelf_life_days,
     )
     db.add(product)
     db.commit()
