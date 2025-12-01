@@ -84,9 +84,14 @@ class ForecastService:
             logger.warning(f"Forecast failed: product_id={product_id} not found")
             raise ValueError("Product not found")
 
+        # Load sales records for this product, filtering by both product_id and bakery_id
+        # to ensure complete bakery isolation
         sales_rows = (
             db.query(SalesRecord)
-            .filter(SalesRecord.product_id == product_id)
+            .filter(
+                SalesRecord.product_id == product_id,
+                SalesRecord.bakery_id == product.bakery_id,  # Ensure bakery isolation
+            )
             .order_by(SalesRecord.date.asc())
             .all()
         )

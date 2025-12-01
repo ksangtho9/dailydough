@@ -62,9 +62,18 @@ export default function ProductsPage() {
       setLoading(true);
       setError(null);
 
+      // Build products API URL with bakery_id if a specific bakery is selected
+      let productsUrl = "/api/products/";
+      if (selectedBakeryId !== "all" && selectedBakeryId) {
+        const bakeryIdNum = Number(selectedBakeryId);
+        if (!Number.isNaN(bakeryIdNum)) {
+          productsUrl = `/api/products/?bakery_id=${bakeryIdNum}`;
+        }
+      }
+
       const [bakeryData, productData] = await Promise.all([
         apiFetch<Bakery[]>("/api/bakeries/"),
-        apiFetch<Product[]>("/api/products/"),
+        apiFetch<Product[]>(productsUrl),
       ]);
 
       setBakeries(bakeryData);
@@ -84,7 +93,7 @@ export default function ProductsPage() {
       setLoading(false);
       setRecsLoading(false);
     }
-  }, []);
+  }, [selectedBakeryId]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -99,9 +108,8 @@ export default function ProductsPage() {
     if (storedBakeryId) {
       setSelectedBakeryId(storedBakeryId);
     }
-
-    loadProductsAndRecs();
-  }, [router, loadProductsAndRecs]);
+    // Don't call loadProductsAndRecs here - let the selectedBakeryId effect handle it
+  }, [router]);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -130,6 +138,15 @@ export default function ProductsPage() {
         handleSelectionChange
       );
   }, []);
+
+  // Load products when component mounts or selected bakery changes
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const token = localStorage.getItem("access_token");
+    if (!token) return; // Don't load if not authenticated
+    
+    loadProductsAndRecs();
+  }, [selectedBakeryId, loadProductsAndRecs]);
 
   const filteredProducts =
     selectedBakeryId === "all"
@@ -405,7 +422,18 @@ async function fetchRecommendations(
           recs[p.id] = null;
         }
       } catch (err) {
-        console.error("Failed to load forecast for product", p.id, err);
+        // Handle expected errors silently (no sales data, product not found)
+        const errorMessage = err instanceof Error ? err.message : String(err);
+        const isExpectedError =
+          errorMessage.includes("No sales data") ||
+          errorMessage.includes("Product not found") ||
+          errorMessage.includes("404") ||
+          (errorMessage.includes("400") && errorMessage.includes("sales data"));
+
+        if (!isExpectedError) {
+          // Only log unexpected errors
+          console.error("Failed to load forecast for product", p.id, err);
+        }
         recs[p.id] = null;
       }
     })

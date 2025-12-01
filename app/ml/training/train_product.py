@@ -51,9 +51,14 @@ def train_product(
         if product is None:
             raise ValueError(f"Product {product_id} not found")
 
+        # Load sales records for this product, filtering by both product_id and bakery_id
+        # to ensure complete bakery isolation
         sales_rows = (
             db.query(SalesRecord)
-            .filter(SalesRecord.product_id == product_id)
+            .filter(
+                SalesRecord.product_id == product_id,
+                SalesRecord.bakery_id == product.bakery_id,  # Ensure bakery isolation
+            )
             .order_by(SalesRecord.date.asc())
             .all()
         )

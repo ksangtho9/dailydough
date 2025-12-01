@@ -205,15 +205,25 @@ def ingest_sales_csv(
     existing_products_used: set[int] = set()
     row_errors: List[str] = []
 
+    # Filter products by bakery_id to scope lookup to the current bakery
+    # This prevents matching products from other bakeries
     product_query = db.query(Product)
     if target_bakery:
         product_query = product_query.filter(Product.bakery_id == target_bakery.id)
+    elif forced_bakery_id is not None:
+        # When using context_bakery_id or demo_bakery_id, also filter by bakery_id
+        product_query = product_query.filter(Product.bakery_id == forced_bakery_id)
     existing_products = product_query.all()
-    products_by_id = {p.id: p for p in existing_products}
+    # Build lookup dictionaries scoped to this bakery
+    # Only use SKU and name for matching - CSV product_id should NOT be used as DB primary key
     products_by_sku: Dict[str, Product] = {}
+    products_by_name: Dict[str, Product] = {}
     for product in existing_products:
         if product.sku:
             products_by_sku[product.sku.strip().lower()] = product
+        if product.name:
+            # Use lowercase for case-insensitive matching
+            products_by_name[product.name.strip().lower()] = product
 
     for row in rows:
         idx = row["line_number"]
@@ -239,12 +249,16 @@ def ingest_sales_csv(
             if isinstance(csv_product_sku, str) and csv_product_sku.strip()
             else None
         )
-
-        product = (
-            products_by_id.get(csv_product_id) if csv_product_id is not None else None
-        )
-        if product is None and sku_key:
+        
+        # Try to match by SKU first (most reliable), then by name
+        # Do NOT match by csv_product_id as database ID - it can collide across bakeries
+        product = None
+        if sku_key:
             product = products_by_sku.get(sku_key)
+        
+        if product is None and csv_product_name:
+            name_key = csv_product_name.strip().lower()
+            product = products_by_name.get(name_key)
 
         product_was_created = False
 
@@ -270,15 +284,18 @@ def ingest_sales_csv(
                 sku=csv_product_sku
                 or (str(csv_product_id) if csv_product_id is not None else None),
             )
-
-            if csv_product_id is not None:
-                product.id = csv_product_id
+            
+            # Do NOT set product.id = csv_product_id
+            # Let the database auto-generate unique IDs to prevent collisions across bakeries
 
             db.add(product)
-            if csv_product_id is not None:
-                products_by_id[csv_product_id] = product
+            db.flush()  # Flush to get the auto-generated ID before adding to lookup dicts
+            
+            # Update lookup dictionaries with the newly created product
             if sku_key:
                 products_by_sku[sku_key] = product
+            if csv_product_name:
+                products_by_name[csv_product_name.strip().lower()] = product
             created_products += 1
             product_was_created = True
 

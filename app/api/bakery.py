@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from app.database.database import get_db
-from app.models import Bakery, SalesRecord
+from app.models import Bakery, SalesRecord, Product, ForecastMetrics
 from app.user_schemas import BakeryCreate, BakeryOut
 from app.services.sales_ingestion import (
     SchemaInferenceError,
@@ -164,11 +164,32 @@ def delete_sales_for_bakery(
     if product_id:
         query = query.filter(SalesRecord.product_id == product_id)
 
+    # Get affected product IDs before deletion for ForecastMetrics cleanup
+    affected_product_ids = set(query.with_entities(SalesRecord.product_id).distinct().all())
+    affected_product_ids = {pid[0] for pid in affected_product_ids}
+
     # Count before deletion
     count = query.count()
 
-    # Delete records
+    # Delete sales records
     query.delete(synchronize_session=False)
+
+    # Clean up ForecastMetrics for affected products
+    # If all sales are deleted (no filters), clean up all ForecastMetrics for this bakery
+    if not date_from and not date_to and not product_id:
+        # Delete all ForecastMetrics for all products in this bakery
+        products_in_bakery = db.query(Product.id).filter(Product.bakery_id == bakery_id).all()
+        product_ids_in_bakery = {pid[0] for pid in products_in_bakery}
+        if product_ids_in_bakery:
+            db.query(ForecastMetrics).filter(
+                ForecastMetrics.product_id.in_(product_ids_in_bakery)
+            ).delete(synchronize_session=False)
+    elif affected_product_ids:
+        # Delete ForecastMetrics only for products that had their sales deleted
+        db.query(ForecastMetrics).filter(
+            ForecastMetrics.product_id.in_(affected_product_ids)
+        ).delete(synchronize_session=False)
+
     db.commit()
 
     return {
@@ -179,4 +200,49 @@ def delete_sales_for_bakery(
             "date_to": str(date_to) if date_to else None,
             "product_id": product_id,
         },
+    }
+
+
+@router.delete("/{bakery_id}/forecast-metrics", status_code=status.HTTP_200_OK)
+def delete_forecast_metrics_for_bakery(
+    bakery_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Delete all ForecastMetrics for all products in a bakery.
+    This effectively resets the model state for the bakery, allowing fresh training
+    when new data is uploaded. Useful when starting fresh or after major data changes.
+    """
+    # Verify bakery exists
+    bakery = db.query(Bakery).filter(Bakery.id == bakery_id).first()
+    if not bakery:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bakery not found",
+        )
+
+    # Get all product IDs for this bakery
+    products_in_bakery = db.query(Product.id).filter(Product.bakery_id == bakery_id).all()
+    product_ids_in_bakery = [pid[0] for pid in products_in_bakery]
+
+    if not product_ids_in_bakery:
+        return {
+            "deleted_count": 0,
+            "bakery_id": bakery_id,
+            "message": "No products found for this bakery",
+        }
+
+    # Delete all ForecastMetrics for products in this bakery
+    deleted_count = (
+        db.query(ForecastMetrics)
+        .filter(ForecastMetrics.product_id.in_(product_ids_in_bakery))
+        .delete(synchronize_session=False)
+    )
+
+    db.commit()
+
+    return {
+        "deleted_count": deleted_count,
+        "bakery_id": bakery_id,
+        "message": f"Deleted forecast metrics for {deleted_count} product(s) in bakery",
     }

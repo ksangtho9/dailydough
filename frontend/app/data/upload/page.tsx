@@ -83,6 +83,8 @@ export default function DataUploadPage() {
   const [deleteError, setDeleteError] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState(false);
   const [deleteCount, setDeleteCount] = useState<number | null>(null);
+  const [deleteAllConfirm, setDeleteAllConfirm] = useState(false);
+  const [deleteAllLoading, setDeleteAllLoading] = useState(false);
 
   const hasFile = Boolean(file);
 
@@ -249,6 +251,48 @@ export default function DataUploadPage() {
     },
     [authHeaders, file, bakeryId, uploadMode],
   );
+
+  const handleDeleteAll = useCallback(async () => {
+    if (!bakeryId) {
+      setDeleteError("Please select a bakery before deleting data.");
+      return;
+    }
+
+    setDeleteAllLoading(true);
+    setDeleteError(null);
+
+    try {
+      // Delete all sales data (no query parameters = delete all)
+      const response = await fetch(
+        `${API_BASE_URL}/api/bakeries/${bakeryId}/sales`,
+        {
+          method: "DELETE",
+          headers: authHeaders(),
+        },
+      );
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({ detail: "Delete failed" }));
+        setDeleteError(errorData.detail || "Failed to delete all data");
+        return;
+      }
+
+      const data = await response.json();
+      setDeleteCount(data.deleted_count);
+      setDeleteAllConfirm(false);
+      // Clear filter fields too
+      setDeleteDateFrom("");
+      setDeleteDateTo("");
+      setDeleteProductId("");
+      // Clear deleteError on success
+      setDeleteError(null);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : "Failed to delete all data.";
+      setDeleteError(message);
+    } finally {
+      setDeleteAllLoading(false);
+    }
+  }, [authHeaders, bakeryId]);
 
   const handleDelete = useCallback(async () => {
     if (!bakeryId) {
@@ -462,14 +506,103 @@ export default function DataUploadPage() {
 
       {/* Delete Data Section */}
       {bakeryId && (
-        <section className="rounded-2xl border border-red-100 bg-red-50/50 p-5 shadow-sm">
-          <div className="flex items-start gap-3">
-            <Trash2 className="h-5 w-5 text-red-600 mt-0.5" />
-            <div className="flex-1">
-              <h2 className="text-lg font-semibold text-slate-900">Delete Sales Data</h2>
-              <p className="text-sm text-slate-600 mt-1">
-                Permanently delete sales records. Use filters to delete specific data, or leave all fields empty to delete all sales for this bakery.
-              </p>
+        <section className="space-y-4">
+          {/* Delete All Data Section */}
+          <div className="rounded-2xl border-2 border-red-300 bg-red-50 p-6 shadow-sm">
+            <div className="flex items-start gap-3">
+              <AlertTriangle className="h-6 w-6 text-red-600 mt-0.5 flex-shrink-0" />
+              <div className="flex-1">
+                <h2 className="text-xl font-semibold text-slate-900">Delete All Data & Reset Model</h2>
+                <p className="text-sm text-slate-700 mt-2">
+                  Permanently delete all sales data for this bakery. This will also reset all forecast models and metrics.
+                  You can re-upload data afterward to train fresh models.
+                </p>
+                <div className="mt-4 flex items-center gap-4">
+                  {!deleteAllConfirm ? (
+                    <>
+                      <button
+                        type="button"
+                        onClick={() => setDeleteAllConfirm(true)}
+                        disabled={deleteAllLoading || deleteLoading}
+                        className="inline-flex items-center gap-2 rounded-full border-2 border-red-600 bg-red-600 px-6 py-3 text-sm font-semibold text-white shadow-sm transition hover:bg-red-700 hover:border-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                      >
+                        <Trash2 className="h-5 w-5" />
+                        Delete All Data
+                      </button>
+                      <p className="text-xs font-medium text-red-700">
+                        ⚠️ This action cannot be undone
+                      </p>
+                    </>
+                  ) : (
+                    <div className="flex-1 rounded-lg border-2 border-red-300 bg-red-100 p-4">
+                      <div className="flex items-start gap-3">
+                        <AlertTriangle className="h-5 w-5 text-red-700 mt-0.5 flex-shrink-0" />
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold text-red-900 mb-2">
+                            Confirm: Delete All Data & Reset Model
+                          </p>
+                          <div className="text-sm text-red-800 mb-4">
+                            <p className="mb-2">This will permanently delete:</p>
+                            <ul className="list-disc list-inside mt-2 space-y-1 mb-2">
+                              <li>All sales records for this bakery</li>
+                              <li>All forecast model metrics and accuracy data</li>
+                            </ul>
+                            <p>The model will be reset and can be retrained when you upload new data.</p>
+                          </div>
+                          <div className="flex items-center gap-3">
+                            <button
+                              type="button"
+                              onClick={handleDeleteAll}
+                              disabled={deleteAllLoading}
+                              className="inline-flex items-center gap-2 rounded-full bg-red-700 px-6 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-red-800 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              {deleteAllLoading ? "Deleting..." : "Yes, Delete Everything"}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setDeleteAllConfirm(false);
+                                setDeleteError(null);
+                              }}
+                              disabled={deleteAllLoading}
+                              className="rounded-full border-2 border-slate-300 bg-white px-6 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+                
+                {/* Error message for delete all - only show if deleteAll was attempted */}
+                {deleteError && (deleteAllConfirm || deleteAllLoading) && (
+                  <div className="mt-3 rounded-lg border border-red-200 bg-red-100 px-3 py-2 text-sm text-red-700">
+                    {deleteError}
+                  </div>
+                )}
+                
+                {/* Success message for delete all - only show if deleteAll was used */}
+                {deleteCount !== null && !deleteDateFrom && !deleteDateTo && !deleteProductId && deleteAllConfirm === false && (
+                  <div className="mt-3 rounded-lg border border-green-200 bg-green-100 px-3 py-2 text-sm text-green-700">
+                    Successfully deleted {deleteCount.toLocaleString()} record(s) and reset all forecast models.
+                    You can now upload new data to train fresh models.
+                  </div>
+                )}
+              </div>
+            </div>
+          </div>
+
+          {/* Filtered Delete Section */}
+          <div className="rounded-2xl border border-red-100 bg-red-50/50 p-5 shadow-sm">
+            <div className="flex items-start gap-3">
+              <Trash2 className="h-5 w-5 text-red-600 mt-0.5" />
+              <div className="flex-1">
+                <h2 className="text-lg font-semibold text-slate-900">Delete Sales Data (Filtered)</h2>
+                <p className="text-sm text-slate-600 mt-1">
+                  Delete specific sales records using filters. Leave all fields empty to delete all sales for this bakery.
+                </p>
 
               <div className="mt-4 grid gap-4 md:grid-cols-3">
                 <div>
@@ -508,13 +641,14 @@ export default function DataUploadPage() {
                 </div>
               </div>
 
-              {deleteError && (
+              {/* Only show messages if deleteAll was not used */}
+              {deleteError && deleteAllConfirm === false && !deleteAllLoading && (
                 <div className="mt-3 rounded-lg border border-red-200 bg-red-100 px-3 py-2 text-sm text-red-700">
                   {deleteError}
                 </div>
               )}
 
-              {deleteCount !== null && (
+              {deleteCount !== null && (deleteDateFrom || deleteDateTo || deleteProductId || deleteConfirm) && (
                 <div className="mt-3 rounded-lg border border-green-200 bg-green-100 px-3 py-2 text-sm text-green-700">
                   Successfully deleted {deleteCount.toLocaleString()} record(s).
                 </div>
@@ -577,6 +711,7 @@ export default function DataUploadPage() {
                   </div>
                 </div>
               )}
+              </div>
             </div>
           </div>
         </section>
