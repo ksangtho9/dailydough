@@ -447,7 +447,7 @@ export default function DashboardPage() {
 
   const tableRows = useMemo(() => {
     if (!displayBakePlan) return [];
-    return displayBakePlan.items.map((item, index) => {
+    const rows = displayBakePlan.items.map((item, index) => {
       const normal = item.forecast_quantity;
       const low = Math.max(0, Math.round(normal * 0.9));
       const high = Math.round(normal * 1.1);
@@ -463,7 +463,32 @@ export default function DashboardPage() {
         risk,
       };
     });
-  }, [displayBakePlan]);
+
+    // Apply sorting based on sortMode
+    const sorted = [...rows].sort((a, b) => {
+      switch (sortMode) {
+        case "sku":
+          // Sort by SKU alphabetically, null/empty values go to the end
+          const aSku = a.sku || "";
+          const bSku = b.sku || "";
+          if (!aSku && !bSku) return 0;
+          if (!aSku) return 1;
+          if (!bSku) return -1;
+          return aSku.localeCompare(bSku);
+        case "product_name":
+          return a.product_name.localeCompare(b.product_name);
+        case "demand":
+          return b.forecast_quantity - a.forecast_quantity; // Highest first
+        case "category":
+          // Category sorting not implemented yet, keep original order
+          return 0;
+        default:
+          return 0;
+      }
+    });
+
+    return sorted;
+  }, [displayBakePlan, sortMode]);
 
   // Calculate aggregate accuracy statistics
   const accuracyStats = useMemo(() => {
@@ -645,7 +670,8 @@ export default function DashboardPage() {
                   onChange={(e) => setSortMode(e.target.value)}
                   className="rounded-full border border-slate-200 bg-white px-3 py-1 text-xs font-medium text-slate-700 focus:outline-none"
                 >
-                  <option value="sku">SKU Name (A-Z)</option>
+                  <option value="sku">SKU</option>
+                  <option value="product_name">Product Name (A-Z)</option>
                   <option value="demand">Highest demand</option>
                   <option value="category">Category</option>
                 </select>

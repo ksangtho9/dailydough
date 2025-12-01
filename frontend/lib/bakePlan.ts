@@ -4,6 +4,7 @@ export type BakePlanItem = {
   product_id: number;
   product_name: string;
   forecast_quantity: number;
+  sku?: string | null;
 };
 
 export type BakePlanResponse = {

@@ -6,6 +6,8 @@ from typing import List, Optional
 
 import pandas as pd
 
+from .spike_detector import SpikeDetector, SpikeConfig
+
 
 @dataclass
 class RawSalesRecord:
@@ -31,11 +33,12 @@ class SalesPreprocessor:
     - Loading raw records (from DB or CSV)
     - Sorting & deduplicating
     - Filling missing dates
-    - Basic outlier handling hooks
+    - Spike detection and handling
     """
 
-    def __init__(self, min_date: Optional[date] = None):
+    def __init__(self, min_date: Optional[date] = None, spike_config: Optional[SpikeConfig] = None):
         self.min_date = min_date
+        self.spike_detector = SpikeDetector(config=spike_config) if spike_config else None
 
     def to_dataframe(self, records: List[RawSalesRecord]) -> pd.DataFrame:
         """Convert list of RawSalesRecord → pandas DataFrame."""
@@ -119,11 +122,39 @@ class SalesPreprocessor:
         """Main entrypoint: raw records → CleanedTimeSeries."""
         df = self.to_dataframe(records)
         df_full = self.fill_missing_dates(df, product_id)
-        # Hook for future steps (outlier removal, smoothing, etc.)
+        
+        # Spike detection and handling
+        if self.spike_detector is not None and not df_full.empty and "y" in df_full.columns:
+            # Detect spikes
+            spike_result = self.spike_detector.detect(df_full, value_col="y")
+            
+            # Add spike flags and severity
+            df_full["is_spike"] = spike_result.is_spike.astype(int)
+            df_full["spike_severity"] = spike_result.severity_score
+            
+            # Preserve original values in a separate column
+            df_full["y_original"] = spike_result.original_values
+            
+            # Use smoothed values for training (replace y with smoothed values)
+            df_full["y"] = spike_result.smoothed_values
+            
+            # Handle NaN values if spikes were removed
+            if df_full["y"].isna().any():
+                df_full["y"] = df_full["y"].bfill().ffill().fillna(0.0)
+        else:
+            # No spike detection - initialize spike columns with zeros
+            df_full["is_spike"] = 0
+            df_full["spike_severity"] = 0.0
+            df_full["y_original"] = df_full["y"] if "y" in df_full.columns else 0.0
+        
         # Include delivery column if present
         columns = ["ds", "y"]
         if "delivery" in df_full.columns:
             columns.append("delivery")
+        # Always include spike-related columns for analysis
+        if "is_spike" in df_full.columns:
+            columns.extend(["is_spike", "spike_severity", "y_original"])
+        
         return CleanedTimeSeries(
             product_id=product_id,
             df=df_full[columns],

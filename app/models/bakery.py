@@ -27,3 +27,18 @@ class Bakery(Base):
         back_populates="bakery",
         cascade="all, delete-orphan",
     )
+    events = relationship(
+        "Event",
+        back_populates="bakery",
+        cascade="all, delete-orphan",
+    )
+    promotions = relationship(
+        "Promotion",
+        back_populates="bakery",
+        cascade="all, delete-orphan",
+    )
+    weather_data = relationship(
+        "WeatherData",
+        back_populates="bakery",
+        cascade="all, delete-orphan",
+    )

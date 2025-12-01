@@ -38,21 +38,39 @@ class ProductForecaster:
         ts: CleanedTimeSeries,
         horizon_days: int = 14,
         model_name: ModelName = "prophet",
+        holidays_df: Optional[pd.DataFrame] = None,
+        weather_df: Optional[pd.DataFrame] = None,
+        promotions_df: Optional[pd.DataFrame] = None,
+        events_df: Optional[pd.DataFrame] = None,
+        product_info: Optional[dict] = None,
+        future_regressors: Optional[pd.DataFrame] = None,
     ) -> ForecastResult:
-        train_result: TrainResult = self.trainer.train(ts, model_name=model_name)
+        train_result: TrainResult = self.trainer.train(
+            ts,
+            model_name=model_name,
+            holidays_df=holidays_df,
+            weather_df=weather_df,
+            promotions_df=promotions_df,
+            events_df=events_df,
+            product_info=product_info,
+        )
 
         if train_result.model_name == "prophet":
             # Pass historical delivery data if available for future predictions
             historical_delivery = None
             if "delivery" in ts.df.columns:
                 historical_delivery = ts.df["delivery"]
-            forecast_df = train_result.model.predict(horizon_days, historical_delivery=historical_delivery)
+            forecast_df = train_result.model.predict(
+                horizon_days,
+                historical_delivery=historical_delivery,
+                future_regressors=future_regressors,
+            )
             # keep only future rows
             last_train_date = ts.df["ds"].max()
             forecast_df = forecast_df[forecast_df["ds"] > last_train_date].reset_index(drop=True)
 
         elif train_result.model_name == "xgboost":
-            # For now, we’ll leave the XGBoost future feature generation as a TODO
+            # For now, we'll leave the XGBoost future feature generation as a TODO
             # because it depends on how you design lag & calendar features.
             # Placeholder empty df:
             forecast_df = pd.DataFrame()

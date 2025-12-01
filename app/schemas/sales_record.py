@@ -48,6 +48,16 @@ class ForecastPointOut(BaseModel):
     waste_cost: float | None = None
     profit: float | None = None
     waste_quantity: float | None = None
+    # Cost-optimized production recommendation
+    optimal_quantity: float | None = None
+    expected_stockout_cost: float | None = None
+    expected_waste_cost: float | None = None
+    expected_total_cost: float | None = None
+    # Spike prediction
+    is_predicted_spike: bool = False  # Whether this day is predicted to have a spike
+    spike_probability: float | None = None  # Probability of spike (0-1)
+    spike_magnitude: float | None = None  # Expected magnitude if spike occurs
+    spike_confidence: float | None = None  # Confidence in spike prediction
 
     class Config:
         from_attributes = True  # Pydantic v2 (replaces orm_mode)

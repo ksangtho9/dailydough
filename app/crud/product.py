@@ -19,6 +19,7 @@ def create_product(
         price=obj_in.price,
         cost_per_unit=obj_in.cost_per_unit,
         shelf_life_days=obj_in.shelf_life_days or 1,
+        stockout_cost_ratio=getattr(obj_in, "stockout_cost_ratio", None) or 2.0,
     )
     db.add(db_obj)
     db.commit()
@@ -82,6 +83,11 @@ def update_product(
         if value < 1 or value > 2:
             value = 1
         db_obj.shelf_life_days = value
+    if getattr(obj_in, "stockout_cost_ratio", None) is not None:
+        value = float(obj_in.stockout_cost_ratio)  # type: ignore[arg-type]
+        if value < 0.1:  # Minimum reasonable ratio
+            value = 0.1
+        db_obj.stockout_cost_ratio = value
 
     db.add(db_obj)
     db.commit()

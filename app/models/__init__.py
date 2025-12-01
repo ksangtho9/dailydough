@@ -3,5 +3,17 @@ from .bakery import Bakery
 from .product import Product
 from .sales_record import SalesRecord
 from .forecast_metrics import ForecastMetrics
+from .event import Event
+from .promotion import Promotion
+from .weather_data import WeatherData
 
-__all__ = ["User", "Bakery", "Product", "SalesRecord", "ForecastMetrics"]
+__all__ = [
+    "User",
+    "Bakery",
+    "Product",
+    "SalesRecord",
+    "ForecastMetrics",
+    "Event",
+    "Promotion",
+    "WeatherData",
+]

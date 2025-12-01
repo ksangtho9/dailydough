@@ -8,6 +8,7 @@ class BakePlanItem(BaseModel):
     product_id: int
     product_name: str
     forecast_quantity: int
+    sku: str | None = None
 
 
 class BakePlanResponse(BaseModel):

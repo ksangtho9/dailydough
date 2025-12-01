@@ -28,6 +28,7 @@ type Product = {
   price?: number | null;
   cost_per_unit?: number | null;
   shelf_life_days?: number | null;
+  stockout_cost_ratio?: number | null;
 };
 
 type SalesPoint = {
@@ -40,6 +41,10 @@ type ForecastPoint = {
   yhat: number;
   yhat_lower: number;
   yhat_upper: number;
+  optimal_quantity?: number | null;
+  expected_stockout_cost?: number | null;
+  expected_waste_cost?: number | null;
+  expected_total_cost?: number | null;
 };
 
 type ChartPoint = {
@@ -76,12 +81,14 @@ export default function ProductDetailPage() {
   const [recommendedP50, setRecommendedP50] = useState<number | null>(null);
   const [recommendedLow, setRecommendedLow] = useState<number | null>(null);
   const [recommendedHigh, setRecommendedHigh] = useState<number | null>(null);
+  const [optimalQuantity, setOptimalQuantity] = useState<number | null>(null);
 
   // Product editing state
   const [isEditing, setIsEditing] = useState(false);
   const [editPrice, setEditPrice] = useState<string>("");
   const [editCost, setEditCost] = useState<string>("");
   const [editShelfLife, setEditShelfLife] = useState<string>("1");
+  const [editStockoutRatio, setEditStockoutRatio] = useState<string>("2.0");
   const [updateError, setUpdateError] = useState<string | null>(null);
   const [updateSuccess, setUpdateSuccess] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
@@ -114,6 +121,11 @@ export default function ProductDetailPage() {
               ? String(productData.shelf_life_days)
               : "1"
           );
+          setEditStockoutRatio(
+            productData.stockout_cost_ratio != null
+              ? String(productData.stockout_cost_ratio)
+              : "2.0"
+          );
         } catch (err: any) {
           // Fallback to base endpoint if v1 fails
           const productsData = await apiFetch<Product[]>("/api/products/");
@@ -126,6 +138,11 @@ export default function ProductDetailPage() {
             setEditCost(found.cost_per_unit?.toString() || "");
             setEditShelfLife(
               found.shelf_life_days != null ? String(found.shelf_life_days) : "1"
+            );
+            setEditStockoutRatio(
+              found.stockout_cost_ratio != null
+                ? String(found.stockout_cost_ratio)
+                : "2.0"
             );
           }
         }
@@ -167,6 +184,7 @@ export default function ProductDetailPage() {
           setRecommendedP50(first.yhat);
           setRecommendedLow(first.yhat_lower);
           setRecommendedHigh(first.yhat_upper);
+          setOptimalQuantity(first.optimal_quantity ?? null);
         }
       } catch (err: any) {
         console.error(err);
@@ -217,7 +235,17 @@ export default function ProductDetailPage() {
       </header>
 
       {/* How many to bake */}
-      <section className="grid gap-4 md:grid-cols-3">
+      <section className="grid gap-4 md:grid-cols-4">
+        <div className="rounded-xl border bg-white p-4 border-blue-200 bg-blue-50">
+          <p className="text-xs uppercase text-blue-700 font-semibold">OPTIMAL BAKE</p>
+          <p className="mt-2 text-2xl font-semibold text-blue-900">
+            {optimalQuantity !== null ? Math.round(optimalQuantity) : recommendedP50 !== null ? Math.round(recommendedP50) : "—"}
+          </p>
+          <p className="mt-1 text-xs text-blue-600">
+            Cost-optimized recommendation (minimizes stockouts + waste)
+          </p>
+        </div>
+
         <div className="rounded-xl border bg-white p-4">
           <p className="text-xs uppercase text-slate-700">RECOMMENDED BAKE</p>
           <p className="mt-2 text-2xl font-semibold text-slate-900">
@@ -291,7 +319,7 @@ export default function ProductDetailPage() {
 
         {isEditing ? (
           <div className="space-y-4">
-            <div className="grid gap-4 md:grid-cols-3">
+            <div className="grid gap-4 md:grid-cols-4">
               <div>
                 <label className="block text-xs font-medium text-slate-700 mb-1">
                   Price (per unit)
@@ -336,6 +364,23 @@ export default function ProductDetailPage() {
                   Multi-day products aren&apos;t counted as waste until they pass their shelf life.
                 </p>
               </div>
+              <div>
+                <label className="block text-xs font-medium text-slate-700 mb-1">
+                  Stockout cost ratio
+                </label>
+                <input
+                  type="number"
+                  step="0.1"
+                  min="0.1"
+                  value={editStockoutRatio}
+                  onChange={(e) => setEditStockoutRatio(e.target.value)}
+                  placeholder="2.0"
+                  className="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+                />
+                <p className="mt-1 text-[11px] text-slate-500">
+                  How much more expensive stockouts are vs waste (default: 2.0 = 2x)
+                </p>
+              </div>
             </div>
 
             {updateError && (
@@ -356,6 +401,7 @@ export default function ProductDetailPage() {
                     const priceValue = editPrice === "" ? null : parseFloat(editPrice);
                     const costValue = editCost === "" ? null : parseFloat(editCost);
                     const shelfLifeValue = parseInt(editShelfLife, 10);
+                    const stockoutRatioValue = editStockoutRatio === "" ? 2.0 : parseFloat(editStockoutRatio);
                     
                     if (priceValue !== null && priceValue < 0) {
                       setUpdateError("Price cannot be negative");
@@ -372,11 +418,17 @@ export default function ProductDetailPage() {
                       setIsUpdating(false);
                       return;
                     }
+                    if (Number.isNaN(stockoutRatioValue) || stockoutRatioValue < 0.1) {
+                      setUpdateError("Stockout cost ratio must be at least 0.1");
+                      setIsUpdating(false);
+                      return;
+                    }
 
                     const updated = await updateProduct(Number(productId), {
                       price: priceValue,
                       cost_per_unit: costValue,
                       shelf_life_days: shelfLifeValue,
+                      stockout_cost_ratio: stockoutRatioValue,
                     });
                     setProduct(updated);
                     setUpdateSuccess(true);
@@ -403,6 +455,11 @@ export default function ProductDetailPage() {
                       ? String(product.shelf_life_days)
                       : "1"
                   );
+                  setEditStockoutRatio(
+                    product?.stockout_cost_ratio != null
+                      ? String(product.stockout_cost_ratio)
+                      : "2.0"
+                  );
                   setUpdateError(null);
                   setUpdateSuccess(false);
                 }}
@@ -414,7 +471,7 @@ export default function ProductDetailPage() {
             </div>
           </div>
         ) : (
-          <div className="grid gap-4 md:grid-cols-3">
+          <div className="grid gap-4 md:grid-cols-4">
             <div>
               <p className="text-xs text-slate-500 mb-1">Price (per unit)</p>
               <p className="text-sm font-medium text-slate-900">
@@ -435,6 +492,14 @@ export default function ProductDetailPage() {
               <p className="text-xs text-slate-500 mb-1">Shelf life</p>
               <p className="text-sm font-medium text-slate-900">
                 {product?.shelf_life_days === 2 ? "2 days" : "1 day"}
+              </p>
+            </div>
+            <div>
+              <p className="text-xs text-slate-500 mb-1">Stockout cost ratio</p>
+              <p className="text-sm font-medium text-slate-900">
+                {product?.stockout_cost_ratio != null
+                  ? `${product.stockout_cost_ratio.toFixed(1)}x`
+                  : "2.0x (default)"}
               </p>
             </div>
           </div>
@@ -780,6 +845,10 @@ function normalizeForecast(rawForecast: any): ForecastPoint[] {
       yhat: f.yhat ?? f.forecast ?? f.p50 ?? 0,
       yhat_lower: f.yhat_lower ?? f.lower ?? f.p10 ?? 0,
       yhat_upper: f.yhat_upper ?? f.upper ?? f.p90 ?? 0,
+      optimal_quantity: f.optimal_quantity ?? null,
+      expected_stockout_cost: f.expected_stockout_cost ?? null,
+      expected_waste_cost: f.expected_waste_cost ?? null,
+      expected_total_cost: f.expected_total_cost ?? null,
     }))
     .filter((f) => !!f.ds);
 }

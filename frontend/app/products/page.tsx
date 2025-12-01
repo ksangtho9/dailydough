@@ -34,7 +34,7 @@ type ForecastPoint = {
 
 type RecommendationsMap = Record<number, number | null>;
 
-type SortBy = "id" | "p50";
+type SortBy = "id" | "sku" | "p50";
 type SortDir = "asc" | "desc";
 
 const BAKERY_STORAGE_KEY = "current_bakery_id";
@@ -189,6 +189,17 @@ export default function ProductsPage() {
   const sortedProducts = [...filteredProducts].sort((a, b) => {
     if (sortBy === "id") {
       const diff = a.id - b.id;
+      return sortDir === "asc" ? diff : -diff;
+    }
+
+    if (sortBy === "sku") {
+      // Sort by SKU alphabetically, null/empty values go to the end
+      const aSku = a.sku || "";
+      const bSku = b.sku || "";
+      if (!aSku && !bSku) return 0;
+      if (!aSku) return sortDir === "asc" ? 1 : -1;
+      if (!bSku) return sortDir === "asc" ? -1 : 1;
+      const diff = aSku.localeCompare(bSku);
       return sortDir === "asc" ? diff : -diff;
     }
 
@@ -355,7 +366,13 @@ export default function ProductsPage() {
                     {renderSortIndicator("id")}
                   </th>
                   <th className="px-4 py-2 text-left">Name</th>
-                  <th className="px-4 py-2 text-left">SKU</th>
+                  <th
+                    className="px-4 py-2 text-left cursor-pointer select-none"
+                    onClick={() => toggleSort("sku")}
+                  >
+                    SKU
+                    {renderSortIndicator("sku")}
+                  </th>
                   <th className="px-4 py-2 text-left">Bakery</th>
                   <th className="px-4 py-2 text-left">Shelf life</th>
                   <th className="px-4 py-2 text-left">Confidence</th>

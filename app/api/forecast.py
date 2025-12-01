@@ -1,11 +1,17 @@
 import logging
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
+from pydantic import BaseModel
+from typing import Optional
 
 from app.database.database import get_db
 from app.api.auth import get_current_user
 from app.ml.inference.forecast_service import get_forecast_for_product
 from app.schemas import sales_record
+
+
+class ForecastRequest(BaseModel):
+    days: Optional[int] = 14
 
 logger = logging.getLogger("bakezy.forecast.api")
 
@@ -22,7 +28,7 @@ router = APIRouter(
 )
 def forecast_product_sales(
     product_id: int,
-    horizon_days: int = 14,  # can override via query param
+    request: ForecastRequest,
     db: Session = Depends(get_db),
     current_user = Depends(get_current_user),
 ):
@@ -40,6 +46,8 @@ def forecast_product_sales(
     # just validates product existence & sales data.
 
     try:
+        horizon_days = request.days or 14
+        
         forecast_result = get_forecast_for_product(
             product_id=product_id,
             days_ahead=horizon_days,
@@ -76,6 +84,16 @@ def forecast_product_sales(
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=msg,
+        ) from e
+    except Exception as e:
+        # Catch any other exceptions (RuntimeError, AttributeError, etc.)
+        # that might occur during forecast generation
+        logger.exception(
+            "Forecast API: unexpected error for product_id=%d: %s", product_id, str(e)
+        )
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error generating forecast: {str(e)}",
         ) from e
 
     return forecast_result

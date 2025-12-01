@@ -47,6 +47,14 @@ def get_forecast_for_product(
             waste_cost=getattr(point, "waste_cost", None),
             profit=getattr(point, "profit", None),
             waste_quantity=getattr(point, "waste_quantity", None),
+            optimal_quantity=getattr(point, "optimal_quantity", None),
+            expected_stockout_cost=getattr(point, "expected_stockout_cost", None),
+            expected_waste_cost=getattr(point, "expected_waste_cost", None),
+            expected_total_cost=getattr(point, "expected_total_cost", None),
+            is_predicted_spike=getattr(point, "is_predicted_spike", False),
+            spike_probability=getattr(point, "spike_probability", None),
+            spike_magnitude=getattr(point, "spike_magnitude", None),
+            spike_confidence=getattr(point, "spike_confidence", None),
         )
         for point in result.points
     ]

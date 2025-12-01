@@ -30,6 +30,11 @@ class ModelTrainer:
         self,
         ts: CleanedTimeSeries,
         model_name: ModelName = "prophet",
+        holidays_df: Optional[pd.DataFrame] = None,
+        weather_df: Optional[pd.DataFrame] = None,
+        promotions_df: Optional[pd.DataFrame] = None,
+        events_df: Optional[pd.DataFrame] = None,
+        product_info: Optional[dict] = None,
     ) -> TrainResult:
         """
         High-level training routine for a single product time series.
@@ -38,7 +43,14 @@ class ModelTrainer:
 
         # Feature engineering
         df["ds"] = pd.to_datetime(df["ds"])
-        df = self.feature_engineer.transform(df)
+        df = self.feature_engineer.transform(
+            df,
+            holidays_df=holidays_df,
+            weather_df=weather_df,
+            promotions_df=promotions_df,
+            events_df=events_df,
+            product_info=product_info,
+        )
 
         if model_name == "prophet":
             # Prophet needs ds, y, and optionally delivery as regressor
