@@ -52,7 +52,7 @@ export async function apiFetch<T>(
 // Product API helpers
 export async function updateProduct(
   productId: number,
-  data: { name?: string; sku?: string; category?: string; price?: number | null; cost_per_unit?: number | null }
+  data: { name?: string; sku?: string; category?: string; price?: number | null; cost_per_unit?: number | null; shelf_life_days?: number | null; stockout_cost_ratio?: number | null }
 ): Promise<any> {
   return apiFetch(`/api/v1/products/${productId}`, {
     method: "PUT",
