@@ -5,11 +5,14 @@ from datetime import date, timedelta
 from typing import List
 
 from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import exc as sa_exc
 from sqlalchemy.orm import Session
 
 from app.database.database import get_db
-from app.models import Bakery, Product
+from app.models import Bakery, Product, DailyForecast
 from app.ml.inference.forecast_service import get_forecast_for_product
+from app.services.daily_forecast_service import upsert_product_daily_forecasts
+from app.core.config import settings
 from app.schemas.bake_plan import BakePlanItem, BakePlanResponse
 
 logger = logging.getLogger("bakezy.bake_plan")
@@ -51,85 +54,76 @@ def get_bake_plan(
         len(products),
     )
 
+    # Try to use precomputed daily forecasts for the plan date, falling back
+    # to on-demand forecasting only for products that are missing rows.
+    precomputed_rows = (
+        db.query(DailyForecast)
+        .filter(
+            DailyForecast.bakery_id == bakery_id,
+            DailyForecast.date == plan_date,
+        )
+        .all()
+    )
+    precomputed_by_product = {row.product_id: row for row in precomputed_rows}
+
     for product in products:
-        try:
-            forecast = get_forecast_for_product(
-                product_id=product.id,
-                days_ahead=14,
-                db=db,
-            )
-            logger.debug(
-                "Forecast generated successfully for product_id=%d, product_name=%s",
-                product.id,
-                product.name,
-            )
-        except Exception as e:
-            logger.warning(
-                "Failed to generate forecast for product_id=%d, product_name=%s: %s",
-                product.id,
-                product.name,
-                str(e),
-                exc_info=True,
-            )
-            continue
+        row = precomputed_by_product.get(product.id)
 
-        # Validate forecast response structure
-        if not hasattr(forecast, "points"):
-            logger.warning(
-                "Forecast response missing 'points' attribute for product_id=%d",
-                product.id,
-            )
-            continue
-        
-        points = forecast.points
-        if not points or len(points) == 0:
-            logger.warning(
-                "Forecast returned empty points list for product_id=%d",
-                product.id,
-            )
-            continue
-
-        # Find matching forecast point for the plan date
-        # Compare date objects directly instead of string conversion
-        match = None
-        for p in points:
-            point_date = getattr(p, "date", None)
-            if point_date is None:
-                continue
-            # Handle both date objects and date strings
-            if isinstance(point_date, date):
-                if point_date == plan_date:
-                    match = p
-                    break
-            elif isinstance(point_date, str):
-                try:
-                    parsed_date = date.fromisoformat(point_date)
-                    if parsed_date == plan_date:
-                        match = p
-                        break
-                except (ValueError, TypeError):
-                    logger.debug(
-                        "Could not parse date string '%s' for product_id=%d",
-                        point_date,
-                        product.id,
+        if row is None and not settings.disable_on_demand_analytics_forecasts:
+            # Fallback: run a single on-demand forecast for this product,
+            # then store its daily points for future requests.
+            try:
+                forecast = get_forecast_for_product(
+                    product_id=product.id,
+                    days_ahead=14,
+                    db=db,
+                )
+                upsert_product_daily_forecasts(
+                    db,
+                    product=product,
+                    forecast=forecast,
+                )
+                row = (
+                    db.query(DailyForecast)
+                    .filter(
+                        DailyForecast.bakery_id == bakery_id,
+                        DailyForecast.product_id == product.id,
+                        DailyForecast.date == plan_date,
                     )
+                    .one_or_none()
+                )
+            except sa_exc.OperationalError as e:
+                # Handle SQLite \"database is locked\" errors gracefully by rolling
+                # back the current transaction and skipping this product.
+                msg = str(e.orig) if getattr(e, "orig", None) is not None else str(e)
+                if "database is locked" in msg:
+                    logger.warning(
+                        "Bake plan: database is locked while upserting daily forecasts for "
+                        "product_id=%d, skipping this product for bakery_id=%d, plan_date=%s",
+                        product.id,
+                        bakery_id,
+                        plan_date.isoformat(),
+                        exc_info=True,
+                    )
+                    db.rollback()
                     continue
+                # Re-raise other OperationalError instances
+                raise
+            except Exception as e:
+                logger.warning(
+                    "Failed to generate forecast for product_id=%d, product_name=%s: %s",
+                    product.id,
+                    product.name,
+                    str(e),
+                    exc_info=True,
+                )
+                db.rollback()
+                continue
 
-        if match is None:
-            # Log available dates for debugging
-            available_dates = [
-                getattr(p, "date", None) for p in points[:5]  # First 5 dates
-            ]
-            logger.debug(
-                "No forecast match found for product_id=%d, plan_date=%s. "
-                "Available forecast dates (first 5): %s",
-                product.id,
-                plan_date.isoformat(),
-                available_dates,
-            )
+        if row is None:
             continue
 
-        qty = getattr(match, "yhat", 0)
+        qty = float(row.yhat or 0.0)
         forecast_qty = max(0, int(round(qty)))
         if forecast_qty <= 0:
             logger.debug(

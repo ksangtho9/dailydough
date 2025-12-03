@@ -9,14 +9,16 @@ from app.database.database import Base, engine
 
 app = FastAPI(title=settings.app_name)
 
-origins = [
-    "http://localhost:3000",
-    "http://127.0.0.1:3000",
-]
-
+# CORS configuration
+# For local development, we want the Next.js frontend at
+# http://localhost:3000 or http://127.0.0.1:3000 to call the API without
+# \"Failed to fetch\" / CORS issues. This is intentionally permissive for dev.
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+    ],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

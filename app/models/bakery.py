@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, UTC
 
 from sqlalchemy import Column, DateTime, Integer, String
 from sqlalchemy.orm import relationship
@@ -13,7 +13,11 @@ class Bakery(Base):
     name = Column(String, nullable=False, unique=True)
     location = Column(String, nullable=True)
     timezone = Column(String, nullable=True, default="UTC")
-    created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(UTC),
+        nullable=False,
+    )
 
     # relationships
     products = relationship(

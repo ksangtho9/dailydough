@@ -53,7 +53,8 @@ export default function ProductsPage() {
     useState<RecommendationsMap>({});
   const [recsLoading, setRecsLoading] = useState(false);
 
-  const [sortBy, setSortBy] = useState<SortBy>("id");
+  // Default sort: by SKU so it matches the order from your data spreadsheet.
+  const [sortBy, setSortBy] = useState<SortBy>("sku");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
 
   // Stable date label
@@ -109,9 +110,20 @@ export default function ProductsPage() {
       }
 
       if (productData.length > 0) {
+        // Fetch recommendations in the background so the table renders quickly.
+        // The shimmer UI will show while per-product forecasts are loading.
         setRecsLoading(true);
-        const recs = await fetchRecommendations(productData);
-        setRecommendations(recs);
+        fetchRecommendations(productData)
+          .then((recs) => {
+            setRecommendations(recs);
+          })
+          .catch((err) => {
+            console.error("Failed to load recommendations", err);
+            // Keep any existing recommendations; rows will just show "—".
+          })
+          .finally(() => {
+            setRecsLoading(false);
+          });
       } else {
         setRecommendations({});
       }
@@ -120,7 +132,6 @@ export default function ProductsPage() {
       setError(err.message || "Failed to load products");
     } finally {
       setLoading(false);
-      setRecsLoading(false);
     }
   }, [selectedBakeryId]);
 

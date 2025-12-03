@@ -25,6 +25,7 @@ class ForecastMetrics(Base):
     )
     mape = Column(Float, nullable=True)
     rmse = Column(Float, nullable=True)
+    wape = Column(Float, nullable=True)
     n_points = Column(Integer, nullable=False, default=0)
     model_type = Column(String, nullable=False, default="prophet")
     status = Column(String, nullable=False, default="ok")

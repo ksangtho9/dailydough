@@ -6,9 +6,9 @@ from pathlib import Path
 
 
 from dataclasses import dataclass
-from typing import List
+from typing import Dict, List, Optional, Tuple
 
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 import pandas as pd
 import numpy as np
@@ -87,6 +87,30 @@ class ForecastService:
     - preprocessing
     - Prophet forecaster
     """
+
+    # ------------------------------------------------------------------
+    # Simple in-process forecast cache
+    #
+    # This keeps recently computed forecasts in memory so that repeated
+    # calls for the same product / horizon can be served instantly
+    # without re-running the full Prophet / cmdstanpy pipeline.
+    #
+    # Cache key:
+    #   (product_id, bakery_id, horizon_days, last_trained_at_iso)
+    #
+    # We include `last_trained_at` so that whenever a model is retrained
+    # (or metrics are updated), the cache automatically invalidates.
+    # ------------------------------------------------------------------
+
+    # Max age for cache entries in seconds (default: 1 hour)
+    _CACHE_TTL_SECONDS: int = 60 * 60
+    # Soft limit on number of entries; if exceeded we evict the oldest.
+    _CACHE_MAX_ENTRIES: int = 512
+    # Internal cache storage
+    _forecast_cache: Dict[
+        Tuple[int, int, int, Optional[str]],
+        Tuple[datetime, "ProductForecast"],
+    ] = {}
 
     def __init__(self):
         # Enable spike detection by default
@@ -214,17 +238,39 @@ class ForecastService:
             logger.warning(f"Forecast failed: product_id={product_id} not found")
             raise ValueError("Product not found")
 
-        # Load sales records for this product, filtering by both product_id and bakery_id
-        # to ensure complete bakery isolation
-        sales_rows = (
+        # Load sales records for this product.
+        #
+        # We *prefer* filtering by both product_id and bakery_id to enforce bakery
+        # isolation. However, some historical imports may have inconsistent
+        # bakery_id values on SalesRecord rows (for example, if data was migrated
+        # before bakery support was added). In those cases we fall back to
+        # product_id-only filtering so that genuine historical data is not
+        # mistakenly treated as “no sales”.
+        sales_query = (
             db.query(SalesRecord)
             .filter(
                 SalesRecord.product_id == product_id,
-                SalesRecord.bakery_id == product.bakery_id,  # Ensure bakery isolation
+                SalesRecord.bakery_id == product.bakery_id,
             )
             .order_by(SalesRecord.date.asc())
-            .all()
         )
+        sales_rows = sales_query.all()
+
+        if not sales_rows:
+            # Fallback: re-query by product_id only. We log this so we can
+            # diagnose any data-quality issues while still serving forecasts.
+            logger.warning(
+                "No sales rows found for product_id=%d with bakery_id=%d; "
+                "falling back to product_id-only sales lookup",
+                product_id,
+                product.bakery_id,
+            )
+            sales_rows = (
+                db.query(SalesRecord)
+                .filter(SalesRecord.product_id == product_id)
+                .order_by(SalesRecord.date.asc())
+                .all()
+            )
 
         if not sales_rows:
             logger.warning(
@@ -362,6 +408,13 @@ class ForecastService:
     ) -> ProductForecast:
         """
         Main entrypoint for forecasting.
+        
+        Uses ALL available historical data for maximum model accuracy.
+        
+        Args:
+            db: Database session
+            product_id: Product ID to forecast
+            horizon_days: Number of days to forecast ahead
         """
         logger.info(
             "Starting forecast: product_id=%d horizon_days=%d",
@@ -369,8 +422,57 @@ class ForecastService:
             horizon_days,
         )
 
-        # 1) Load raw sales from DB
+        # 0) Load raw sales from DB (and product meta for cache key)
         product, raw_records = self._load_sales_for_product(db, product_id)
+
+        # Build a cache key that is stable for a given product / bakery /
+        # horizon and invalidates automatically when the model is
+        # retrained (via ForecastMetrics.last_trained_at).
+        last_trained_at_iso: Optional[str] = None
+        try:
+            metrics = getattr(product, "forecast_metrics", None)
+            if metrics is not None and getattr(metrics, "last_trained_at", None) is not None:
+                # Normalise to an ISO string so it is hashable and stable
+                last_trained_at_iso = metrics.last_trained_at.isoformat()
+        except Exception:
+            # If anything goes wrong while reading metrics, we simply
+            # skip the cache key extension; correctness matters more
+            # than caching in this edge case.
+            last_trained_at_iso = None
+
+        cache_key: Tuple[int, int, int, Optional[str]] = (
+            product.id,
+            getattr(product, "bakery_id", 0) or 0,
+            int(horizon_days),
+            last_trained_at_iso,
+        )
+
+        # Look for a fresh cached forecast
+        now = datetime.now(timezone.utc)
+        cached = self._forecast_cache.get(cache_key)
+        if cached is not None:
+            created_at, cached_forecast = cached
+            age_seconds = (now - created_at).total_seconds()
+            if age_seconds <= self._CACHE_TTL_SECONDS:
+                logger.info(
+                    "Forecast cache hit: product_id=%d bakery_id=%d horizon_days=%d age=%.1fs",
+                    product.id,
+                    getattr(product, "bakery_id", 0) or 0,
+                    horizon_days,
+                    age_seconds,
+                )
+                return cached_forecast
+            else:
+                # Expired entry – remove it so the cache doesn't grow without bound.
+                self._forecast_cache.pop(cache_key, None)
+
+        logger.info(
+            "Forecast cache miss: product_id=%d bakery_id=%d horizon_days=%d last_trained_at=%s",
+            product.id,
+            getattr(product, "bakery_id", 0) or 0,
+            horizon_days,
+            last_trained_at_iso,
+        )
 
         # 2) Preprocess → CleanedTimeSeries (fill missing days, sort, etc.)
         cleaned_ts = self.preprocessor.preprocess(
@@ -408,6 +510,7 @@ class ForecastService:
         )
 
         # Update cleaned_ts with enhanced features
+        # All historical data is used for maximum model accuracy
         cleaned_ts.df = df
 
         # 2.8) Generate future regressor values for forecast period
@@ -604,10 +707,40 @@ class ForecastService:
             horizon_days,
             len(points),
         )
-
-        return ProductForecast(
+        result = ProductForecast(
             product_id=product.id,
             product_name=product.name,
             horizon_days=horizon_days,
             points=points,
         )
+
+        # Store in cache for subsequent requests.
+        try:
+            # Simple size-based eviction: if we exceed the soft limit,
+            # drop the oldest entry (by created_at).
+            if len(self._forecast_cache) >= self._CACHE_MAX_ENTRIES:
+                oldest_key = None
+                oldest_time = now
+                for k, (created_at, _) in self._forecast_cache.items():
+                    if created_at <= oldest_time:
+                        oldest_time = created_at
+                        oldest_key = k
+                if oldest_key is not None:
+                    self._forecast_cache.pop(oldest_key, None)
+
+            self._forecast_cache[cache_key] = (now, result)
+            logger.info(
+                "Stored forecast in cache: product_id=%d bakery_id=%d horizon_days=%d",
+                product.id,
+                getattr(product, "bakery_id", 0) or 0,
+                horizon_days,
+            )
+        except Exception as e:
+            # Cache must never break the main forecast path.
+            logger.warning(
+                "Failed to store forecast in cache for product_id=%d: %s",
+                product.id,
+                str(e),
+            )
+
+        return result

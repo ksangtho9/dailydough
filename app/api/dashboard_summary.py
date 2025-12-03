@@ -9,8 +9,9 @@ from sqlalchemy.orm import Session
 
 from app.database.database import get_db
 from app.ml.inference.forecast_service import get_forecast_for_product
-from app.models import Bakery, Product, ForecastMetrics, SalesRecord
+from app.models import Bakery, Product, ForecastMetrics, SalesRecord, DailyForecast
 from app.schemas.dashboard_summary import DashboardSummaryResponse
+from app.core.config import settings
 
 router = APIRouter(tags=["dashboard-summary"])
 
@@ -124,32 +125,52 @@ def get_dashboard_summary(
     )
 
     tomorrow = date.today() + timedelta(days=1)
-    recommended_bake = 0
-    for product in products:
-        try:
-            forecast = get_forecast_for_product(
-                product_id=product.id,
-                days_ahead=14,
-                db=db,
-            )
-        except Exception:
-            continue
 
-        points = getattr(forecast, "points", [])
-        match = next(
-            (
-                p
-                for p in points
-                if str(getattr(p, "date", None)) == tomorrow.isoformat()
-            ),
-            None,
+    # First choice: use precomputed daily forecasts so we don't need to run
+    # heavy forecasting logic on dashboard requests.
+    daily_rows = (
+        db.query(DailyForecast)
+        .filter(
+            DailyForecast.bakery_id == bakery_id,
+            DailyForecast.date == tomorrow,
         )
-        if match is None:
-            continue
-        yhat = getattr(match, "yhat", None)
-        if yhat is None:
-            continue
-        recommended_bake += max(0, int(round(float(yhat))))
+        .all()
+    )
+
+    if daily_rows:
+        recommended_bake = sum(
+            max(0, int(round(float(row.yhat or 0.0)))) for row in daily_rows
+        )
+    elif not settings.disable_on_demand_analytics_forecasts:
+        # Fallback: if no precomputed forecasts exist yet (e.g. before models
+        # have been trained), fall back to on-demand forecasts so the dashboard
+        # still shows something, at the cost of extra compute.
+        recommended_bake = 0
+        for product in products:
+            try:
+                forecast = get_forecast_for_product(
+                    product_id=product.id,
+                    days_ahead=14,
+                    db=db,
+                )
+            except Exception:
+                continue
+
+            points = getattr(forecast, "points", [])
+            match = next(
+                (
+                    p
+                    for p in points
+                    if str(getattr(p, "date", None)) == tomorrow.isoformat()
+                ),
+                None,
+            )
+            if match is None:
+                continue
+            yhat = getattr(match, "yhat", None)
+            if yhat is None:
+                continue
+            recommended_bake += max(0, int(round(float(yhat))))
 
     if recommended_bake == 0:
         recommended_bake_value = None

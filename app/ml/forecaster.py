@@ -45,6 +45,8 @@ class ProductForecaster:
         product_info: Optional[dict] = None,
         future_regressors: Optional[pd.DataFrame] = None,
     ) -> ForecastResult:
+        # For forecasting (inference), don't optimize hyperparameters - use defaults
+        # Hyperparameter optimization should only run during explicit training
         train_result: TrainResult = self.trainer.train(
             ts,
             model_name=model_name,
@@ -53,6 +55,7 @@ class ProductForecaster:
             promotions_df=promotions_df,
             events_df=events_df,
             product_info=product_info,
+            optimize_with_wape=False,  # Disable optimization for fast inference
         )
 
         if train_result.model_name == "prophet":

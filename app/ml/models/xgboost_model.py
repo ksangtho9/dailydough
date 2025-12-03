@@ -20,6 +20,7 @@ class XGBoostConfig:
     learning_rate: float = 0.05
     subsample: float = 0.8
     colsample_bytree: float = 0.8
+    use_wape_loss: bool = False  # Use WAPE-approximating objective
 
 
 class XGBoostSalesModel:
@@ -46,6 +47,32 @@ class XGBoostSalesModel:
         y = df["y"].values
         return X, y
 
+    def _wape_objective(self, y_pred: np.ndarray, dtrain) -> Tuple[np.ndarray, np.ndarray]:
+        """
+        Custom objective function that approximates WAPE behavior.
+        
+        WAPE weights errors by actual values. Since we can't use actual values
+        in the gradient calculation, we use a weighted squared error where
+        weights are based on predictions (approximating actuals).
+        
+        This encourages the model to focus more on getting high-value predictions right.
+        """
+        y_true = dtrain.get_label()
+        epsilon = 1e-8
+        
+        # Calculate residuals
+        residuals = y_pred - y_true
+        
+        # Use absolute values as weights (approximates WAPE weighting)
+        # Clip to avoid division by zero
+        weights = np.abs(y_true) + epsilon
+        
+        # Weighted squared error gradient
+        grad = 2 * residuals / weights
+        hess = 2 / weights
+        
+        return grad, hess
+    
     def fit(self, df: pd.DataFrame) -> None:
         """
         df should contain:
@@ -53,13 +80,20 @@ class XGBoostSalesModel:
         - (optional) feature columns (lag features, calendar, etc.)
         """
         X, y = self._split_features_target(df)
+        
+        # Determine objective function
+        if self.config.use_wape_loss:
+            objective = self._wape_objective
+        else:
+            objective = "reg:squarederror"
+        
         model = XGBRegressor(
             max_depth=self.config.max_depth,
             n_estimators=self.config.n_estimators,
             learning_rate=self.config.learning_rate,
             subsample=self.config.subsample,
             colsample_bytree=self.config.colsample_bytree,
-            objective="reg:squarederror",
+            objective=objective,
         )
         model.fit(X, y)
         self.model = model

@@ -42,8 +42,37 @@ export async function apiFetch<T>(
   }
 
   if (!res.ok) {
-    const text = await res.text();
-    throw new Error(`API error ${res.status}: ${text}`);
+    let message = `API error ${res.status}`;
+
+    try {
+      const contentType = res.headers.get("content-type") || "";
+
+      if (contentType.includes("application/json")) {
+        const data: any = await res.json();
+        const detail =
+          data?.detail ?? data?.error ?? data?.message ?? data?.msg;
+
+        if (detail) {
+          if (typeof detail === "string") {
+            message += `: ${detail}`;
+          } else {
+            message += `: ${JSON.stringify(detail)}`;
+          }
+        } else {
+          message += `: ${JSON.stringify(data)}`;
+        }
+      } else {
+        const text = await res.text();
+        if (text) {
+          message += `: ${text}`;
+        }
+      }
+    } catch {
+      // If anything goes wrong while parsing the error body,
+      // fall back to a generic message.
+    }
+
+    throw new Error(message);
   }
 
   return res.json() as Promise<T>;

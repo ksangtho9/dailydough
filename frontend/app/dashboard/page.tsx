@@ -276,16 +276,10 @@ export default function DashboardPage() {
     
     setPlanLoading(true);
     setPlanError(null);
-    const dateToUse = targetDate || selectedForecastDate || undefined;
-    console.log("[Dashboard] Loading bake plan for bakery:", bakeryId, "date:", dateToUse || "default (tomorrow)");
+      const dateToUse = targetDate || selectedForecastDate || undefined;
     
     try {
       const data = await fetchBakePlan(bakeryId, dateToUse);
-      console.log("[Dashboard] Bake plan loaded successfully:", {
-        itemsCount: data.items.length,
-        date: data.date,
-        bakeryName: data.bakery_name,
-      });
       setBakePlan(data);
     } catch (err: any) {
       const errorMessage = err?.message ?? "Failed to load bake plan.";
@@ -357,59 +351,10 @@ export default function DashboardPage() {
       setAccuracyError(null);
 
       try {
-        // Fetch products with forecast metrics
-        const productsData = await apiFetch<ProductWithMetrics[]>(
-          `/api/products/?bakery_id=${bakeryId}`
+        // New, fast path: fetch per-product accuracy metrics in a single call
+        const accuracyResults = await apiFetch<ProductAccuracy[]>(
+          `/api/forecast-accuracy/bakery/${bakeryId}`
         );
-
-        if (cancelled) return;
-
-        setProducts(productsData);
-
-        // For each product, fetch sales and forecast data to calculate accuracy
-        const accuracyPromises = productsData.map(async (product) => {
-          try {
-            // Fetch sales data
-            const salesData = await apiFetch<any>(
-              `/api/sales/product/${product.id}`
-            );
-
-            // Fetch forecast data (for a longer horizon to capture historical forecasts)
-            const forecastData = await apiFetch<any>(
-              `/api/forecast/product/${product.id}`,
-              {
-                method: "POST",
-                body: JSON.stringify({ days: 30 }), // Get more historical forecast points
-              }
-            );
-
-            const sales = normalizeSales(salesData);
-            const forecast = normalizeForecast(forecastData);
-            const lastTrainedAt = product.forecast_metrics?.last_trained_at ?? null;
-            const accuracy = computeForecastAccuracy(sales, forecast, lastTrainedAt);
-
-            return {
-              productId: product.id,
-              productName: product.name,
-              mape: accuracy.mape,
-              rmse: accuracy.rmse,
-              n_points: accuracy.n_points,
-              lastTrainedAt,
-            } as ProductAccuracy;
-          } catch (err) {
-            console.error(`Failed to load accuracy for product ${product.id}:`, err);
-            return {
-              productId: product.id,
-              productName: product.name,
-              mape: null,
-              rmse: null,
-              n_points: 0,
-              lastTrainedAt: product.forecast_metrics?.last_trained_at ?? null,
-            } as ProductAccuracy;
-          }
-        });
-
-        const accuracyResults = await Promise.all(accuracyPromises);
 
         if (!cancelled) {
           setProductsAccuracy(accuracyResults);
@@ -442,13 +387,16 @@ export default function DashboardPage() {
 
   const totalUnits = useMemo(() => {
     if (!displayBakePlan) return null;
-    return displayBakePlan.items.reduce((sum, item) => sum + item.forecast_quantity, 0);
+    return displayBakePlan.items.reduce(
+      (sum, item) => sum + Math.round(item.forecast_quantity),
+      0
+    );
   }, [displayBakePlan]);
 
   const tableRows = useMemo(() => {
     if (!displayBakePlan) return [];
     const rows = displayBakePlan.items.map((item, index) => {
-      const normal = item.forecast_quantity;
+      const normal = Math.round(item.forecast_quantity);
       const low = Math.max(0, Math.round(normal * 0.9));
       const high = Math.round(normal * 1.1);
       const waste = 7 + (index % 3) * 0.6;
@@ -514,10 +462,10 @@ export default function DashboardPage() {
     {
       title: "Recommended Bake",
       value:
-        dashboardSummary?.recommended_bake != null
-          ? dashboardSummary.recommended_bake.toLocaleString()
-          : totalUnits !== null
-            ? totalUnits.toLocaleString()
+        totalUnits !== null
+          ? totalUnits.toLocaleString()
+          : dashboardSummary?.recommended_bake != null
+            ? dashboardSummary.recommended_bake.toLocaleString()
             : "—",
       helper: "Total units",
       accent: "bg-white shadow-sm",
@@ -678,7 +626,6 @@ export default function DashboardPage() {
                 <button
                   type="button"
                   onClick={() => {
-                    console.log("[Dashboard] Manual refresh triggered");
                     const dateToUse = devMode ? (selectedForecastDate || undefined) : undefined;
                     loadPlan(dateToUse);
                   }}

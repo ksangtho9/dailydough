@@ -8,6 +8,7 @@ from app.database.database import get_db
 from app.api.auth import get_current_user
 from app.ml.inference.forecast_service import get_forecast_for_product
 from app.schemas import sales_record
+from app.models.product import Product
 
 
 class ForecastRequest(BaseModel):
@@ -73,10 +74,35 @@ def forecast_product_sales(
             logger.warning(
                 "Forecast API: no sales data (product_id=%d)", product_id
             )
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="No sales data available for this product.",
-            ) from e
+            # Instead of returning a 400 error for expected "no data yet" cases,
+            # respond with an empty forecast so clients can render a graceful
+            # "no forecast available" state without treating it as a failure.
+            product = (
+                db.query(Product)
+                .filter(Product.id == product_id)
+                .first()
+            )
+
+            if product is None:
+                # Defensive fallback: if the product truly does not exist,
+                # surface a 404 rather than an empty forecast.
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail="Product not found.",
+                ) from e
+
+            logger.info(
+                "Forecast API: returning empty forecast for product_id=%d due to missing sales data",
+                product_id,
+            )
+
+            empty_forecast = sales_record.ProductForecastOut(
+                product_id=product.id,
+                product_name=product.name,
+                horizon_days=horizon_days,
+                points=[],
+            )
+            return empty_forecast
 
         logger.exception(
             "Forecast API: unexpected ValueError for product_id=%d", product_id

@@ -7,8 +7,12 @@ from sqlalchemy import func
 from sqlalchemy.orm import Session
 
 from app.database.database import get_db
-from app.models import Product, SalesRecord
+from app.models import Product, SalesRecord, DailyForecast
 from app.ml.inference.forecast_service import get_forecast_for_product
+from app.services.daily_forecast_service import (
+    get_product_daily_forecasts,
+    upsert_product_daily_forecasts,
+)
 from app.schemas.forecast_vs_actual import (
     ForecastVsActualPoint,
     ForecastVsActualResponse,
@@ -55,30 +59,44 @@ def get_forecast_vs_actual(
         dates.append(current)
         current += timedelta(days=1)
 
-    try:
-        forecast = get_forecast_for_product(
-            product_id=product_id,
-            days_ahead=window_days,
-            db=db,
-        )
-    except Exception:
-        forecast = None
+    # Prefer precomputed daily forecasts; fall back to on-demand once if needed.
+    daily_rows = get_product_daily_forecasts(
+        db,
+        bakery_id=product.bakery_id,
+        product_id=product.id,
+        start_date=start_date,
+        end_date=end_date,
+    )
 
-    forecast_points = []
-    if forecast is not None:
-        forecast_points = getattr(forecast, "points", forecast.get("points", []))
-    forecast_by_date_str = {}
-    for p in forecast_points:
-        point_date = getattr(p, "date", p.get("date"))
-        yhat = getattr(p, "yhat", p.get("yhat"))
-        if point_date and yhat is not None:
-            forecast_by_date_str[str(point_date)] = float(yhat)
+    if not daily_rows:
+        try:
+            forecast_out = get_forecast_for_product(
+                product_id=product_id,
+                days_ahead=window_days,
+                db=db,
+            )
+            upsert_product_daily_forecasts(
+                db,
+                product=product,
+                forecast=forecast_out,
+            )
+            daily_rows = get_product_daily_forecasts(
+                db,
+                bakery_id=product.bakery_id,
+                product_id=product.id,
+                start_date=start_date,
+                end_date=end_date,
+            )
+        except Exception:
+            daily_rows = []
+
+    forecast_by_date = {row.date: float(row.yhat or 0.0) for row in daily_rows}
 
     points = [
         ForecastVsActualPoint(
             date=d.isoformat(),
             actual=actuals_by_date.get(d),
-            forecast=forecast_by_date_str.get(d.isoformat()),
+            forecast=forecast_by_date.get(d),
         )
         for d in dates
     ]

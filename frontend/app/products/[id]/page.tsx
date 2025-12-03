@@ -128,6 +128,7 @@ export default function ProductDetailPage() {
           );
         } catch (err: any) {
           // Fallback to base endpoint if v1 fails
+          console.error("Failed to load product from /api/v1/products, falling back to /api/products/", err);
           const productsData = await apiFetch<Product[]>("/api/products/");
           const found = productsData.find(
             (p) => String(p.id) === String(productId)
@@ -147,36 +148,32 @@ export default function ProductDetailPage() {
           }
         }
 
-        // Sales + forecast
-        const salesData = await apiFetch<any>(
-          `/api/sales/product/${productId}`
-        );
-
-        const forecastData = await apiFetch<any>(
-          `/api/forecast/product/${productId}`,
-          {
+        // Sales, forecast, and metrics – fetched in parallel to reduce wait time
+        const [salesData, forecastData, metricsDataOrError] = await Promise.all([
+          apiFetch<any>(`/api/sales/product/${productId}`),
+          apiFetch<any>(`/api/forecast/product/${productId}`, {
             method: "POST",
             body: JSON.stringify({ days: 14 }),
-          }
-        );
+          }),
+          (async () => {
+            try {
+              return await apiFetch<ForecastMetrics>(
+                `/api/products/${productId}/metrics`
+              );
+            } catch (err: any) {
+              const message = String(err?.message ?? "");
+              if (message.includes("404")) {
+                return null;
+              }
+              console.error("Failed to load metrics", err);
+              return null;
+            }
+          })(),
+        ]);
 
         setSalesRaw(salesData);
         setForecastRaw(forecastData);
-        console.log("forecastData from API", forecastData);
-
-        try {
-          const metricsData = await apiFetch<ForecastMetrics>(
-            `/api/products/${productId}/metrics`
-          );
-          setMetrics(metricsData);
-        } catch (err: any) {
-          const message = String(err?.message ?? "");
-          if (message.includes("404")) {
-            setMetrics(null);
-          } else {
-            console.error("Failed to load metrics", err);
-          }
-        }
+        setMetrics(metricsDataOrError);
 
         const normalizedForecast = normalizeForecast(forecastData);
         if (normalizedForecast.length > 0) {
@@ -187,8 +184,13 @@ export default function ProductDetailPage() {
           setOptimalQuantity(first.optimal_quantity ?? null);
         }
       } catch (err: any) {
-        console.error(err);
-        setError(err.message || "Failed to load product data");
+        console.error("Failed to load product page data", err);
+        // Surface a clearer, user-friendly error while preserving the original message in console
+        const message =
+          typeof err?.message === "string" && err.message.length > 0
+            ? err.message
+            : "Failed to load product data. Please check your connection and try again.";
+        setError(message);
       } finally {
         setLoading(false);
       }
@@ -233,6 +235,23 @@ export default function ProductDetailPage() {
           ← Back to products
         </Link>
       </header>
+
+      {/* Error state */}
+      {error && (
+        <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-800">
+          <p className="font-medium">We couldn&apos;t load this product&apos;s data.</p>
+          <p className="mt-1">
+            {error}
+          </p>
+          <p className="mt-1 text-xs text-red-700">
+            Try refreshing the page. If this keeps happening, go back to{" "}
+            <Link href="/products" className="underline">
+              Products
+            </Link>
+            .
+          </p>
+        </div>
+      )}
 
       {/* How many to bake */}
       <section className="grid gap-4 md:grid-cols-4">

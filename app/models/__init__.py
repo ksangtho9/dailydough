@@ -6,6 +6,7 @@ from .forecast_metrics import ForecastMetrics
 from .event import Event
 from .promotion import Promotion
 from .weather_data import WeatherData
+from .daily_forecast import DailyForecast
 
 __all__ = [
     "User",
@@ -16,4 +17,5 @@ __all__ = [
     "Event",
     "Promotion",
     "WeatherData",
+    "DailyForecast",
 ]

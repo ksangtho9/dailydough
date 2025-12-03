@@ -6,6 +6,7 @@ from .product import router as product_router
 from .sales import router as sales_router
 from .forecast import router as forecast_router
 from .forecast_explain import router as forecast_explain_router
+from .forecast_accuracy import router as forecast_accuracy_router
 from .debug import router as debug_router
 from .demo import router as demo_router
 from .forecast_training import router as forecast_training_router
@@ -27,6 +28,7 @@ api_router.include_router(product_router)
 api_router.include_router(sales_router)
 api_router.include_router(forecast_router)
 api_router.include_router(forecast_explain_router)
+api_router.include_router(forecast_accuracy_router)
 api_router.include_router(events_router)
 api_router.include_router(promotions_router)
 api_router.include_router(weather_router)
