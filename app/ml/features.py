@@ -62,6 +62,57 @@ class FeatureEngineer:
 
         return df
 
+    def update_lag_features_for_future(
+        self,
+        historical_df: pd.DataFrame,
+        future_df: pd.DataFrame,
+        predictions: pd.Series,
+    ) -> pd.DataFrame:
+        """
+        Updates lag features for future dates using predictions.
+        
+        Args:
+            historical_df: Historical data with lag features
+            future_df: Future dates DataFrame (may have partial features)
+            predictions: Series of predictions for future dates (aligned with future_df)
+            
+        Returns:
+            DataFrame with updated lag features
+        """
+        if not self.config.include_lag_features:
+            return future_df
+            
+        future_df = future_df.copy()
+        combined_df = pd.concat([historical_df, future_df], ignore_index=True).sort_values("ds").reset_index(drop=True)
+        
+        # Update y column with predictions for future dates
+        if "y" not in combined_df.columns:
+            combined_df["y"] = 0.0
+        combined_df.loc[historical_df.index.max() + 1:, "y"] = predictions.values
+        
+        # Recalculate lag features
+        combined_df["lag_1"] = combined_df["y"].shift(1)
+        combined_df["lag_7"] = combined_df["y"].shift(7)
+        combined_df["lag_14"] = combined_df["y"].shift(14)
+        combined_df["lag_30"] = combined_df["y"].shift(30)
+        
+        # Recalculate rolling statistics
+        combined_df["rolling_mean_7"] = combined_df["y"].rolling(window=7, min_periods=1).mean()
+        combined_df["rolling_mean_30"] = combined_df["y"].rolling(window=30, min_periods=1).mean()
+        combined_df["rolling_std_7"] = combined_df["y"].rolling(window=7, min_periods=1).std().fillna(0)
+        combined_df["rolling_std_30"] = combined_df["y"].rolling(window=30, min_periods=1).std().fillna(0)
+        
+        # Extract only future rows
+        future_start_idx = len(historical_df)
+        future_with_lags = combined_df.iloc[future_start_idx:].copy()
+        
+        # Update future_df with lag features
+        for col in ["lag_1", "lag_7", "lag_14", "lag_30", "rolling_mean_7", "rolling_mean_30", "rolling_std_7", "rolling_std_30"]:
+            if col in future_with_lags.columns:
+                future_df[col] = future_with_lags[col].values
+        
+        return future_df
+
     def add_calendar_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Adds expanded calendar-based features.
@@ -99,6 +150,17 @@ class FeatureEngineer:
 
         # Payday indicators (1st and 15th of month)
         df["is_payday"] = df["ds"].dt.day.isin([1, 15]).astype(int)
+
+        # Additional seasonal features for better seasonality capture
+        df["week_of_year"] = df["ds"].dt.isocalendar().week
+        df["day_of_year"] = df["ds"].dt.dayofyear
+        
+        # Seasonal indicators (spring, summer, fall, winter)
+        month = df["ds"].dt.month
+        df["is_spring"] = ((month >= 3) & (month <= 5)).astype(int)
+        df["is_summer"] = ((month >= 6) & (month <= 8)).astype(int)
+        df["is_fall"] = ((month >= 9) & (month <= 11)).astype(int)
+        df["is_winter"] = ((month == 12) | (month <= 2)).astype(int)
 
         return df
 
@@ -201,7 +263,7 @@ class FeatureEngineer:
 
     def add_promotion_features(self, df: pd.DataFrame, promotions_df: Optional[pd.DataFrame] = None) -> pd.DataFrame:
         """
-        Adds promotion features.
+        Adds enhanced promotion features including duration, effectiveness, and decay.
 
         Args:
             df: DataFrame with "ds" and optionally "product_id" columns
@@ -215,6 +277,9 @@ class FeatureEngineer:
         # Initialize promotion columns
         df["is_promotion"] = 0
         df["promotion_multiplier"] = 1.0
+        df["promotion_duration"] = 0  # Days into current promotion
+        df["promotion_effectiveness"] = 1.0  # Historical effectiveness score
+        df["promotion_decay_factor"] = 1.0  # Decay factor (decreases over time in promotion)
 
         if promotions_df is not None and not promotions_df.empty:
             promotions_df = promotions_df.copy()
@@ -233,6 +298,68 @@ class FeatureEngineer:
 
             df["is_promotion"] = df["is_promotion"].fillna(0).astype(int)
             df["promotion_multiplier"] = df["sales_multiplier"].fillna(1.0)
+            
+            # Calculate promotion duration (days into current promotion)
+            df = df.sort_values("ds").reset_index(drop=True)
+            df["promotion_duration"] = 0
+            
+            # Track consecutive promotion days
+            in_promotion = False
+            promo_start_idx = None
+            for idx in df.index:
+                if df.loc[idx, "is_promotion"] == 1:
+                    if not in_promotion:
+                        # Start of new promotion
+                        in_promotion = True
+                        promo_start_idx = idx
+                        df.loc[idx, "promotion_duration"] = 1
+                    else:
+                        # Continuation of promotion
+                        df.loc[idx, "promotion_duration"] = idx - promo_start_idx + 1
+                else:
+                    in_promotion = False
+                    promo_start_idx = None
+            
+            # Calculate promotion decay factor (effect decreases over time)
+            # Decay formula: 1.0 for day 1, decreases by 5% per day, minimum 0.7
+            df["promotion_decay_factor"] = 1.0
+            promo_mask = df["promotion_duration"] > 0
+            if promo_mask.any():
+                # Exponential decay: decay_factor = 0.95^(duration-1)
+                df.loc[promo_mask, "promotion_decay_factor"] = np.power(
+                    0.95, 
+                    np.maximum(0, df.loc[promo_mask, "promotion_duration"] - 1)
+                )
+                # Cap minimum at 0.7
+                df.loc[promo_mask, "promotion_decay_factor"] = np.maximum(
+                    0.7,
+                    df.loc[promo_mask, "promotion_decay_factor"]
+                )
+            
+            # Calculate historical promotion effectiveness
+            # This would ideally use historical sales data, but for now we use multiplier as proxy
+            # In a full implementation, this would compare actual sales during promotions vs baseline
+            if "y" in df.columns:
+                # Calculate average sales during promotions vs non-promotions
+                promo_sales = df[df["is_promotion"] == 1]["y"].mean() if (df["is_promotion"] == 1).any() else 0.0
+                non_promo_sales = df[df["is_promotion"] == 0]["y"].mean() if (df["is_promotion"] == 0).any() else 0.0
+                
+                if non_promo_sales > 0 and promo_sales > 0:
+                    # Effectiveness = actual boost / expected boost
+                    actual_boost = promo_sales / non_promo_sales
+                    expected_boost = df[df["is_promotion"] == 1]["promotion_multiplier"].mean() if (df["is_promotion"] == 1).any() else 1.0
+                    effectiveness = actual_boost / expected_boost if expected_boost > 0 else 1.0
+                    # Normalize to reasonable range (0.5 to 2.0)
+                    effectiveness = np.clip(effectiveness, 0.5, 2.0)
+                    df["promotion_effectiveness"] = effectiveness
+                else:
+                    df["promotion_effectiveness"] = 1.0
+            else:
+                # No sales data yet, use default
+                df["promotion_effectiveness"] = 1.0
+            
+            # Apply decay to multiplier
+            df["promotion_multiplier"] = df["promotion_multiplier"] * df["promotion_decay_factor"] * df["promotion_effectiveness"]
 
         return df
 
@@ -310,6 +437,7 @@ class FeatureEngineer:
     def add_spike_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """
         Adds spike-related features based on historical spike patterns.
+        Enhanced to better capture spike patterns including promotion proximity.
         
         Args:
             df: DataFrame with "ds" column and optionally "is_spike" column
@@ -322,6 +450,7 @@ class FeatureEngineer:
         df["days_since_last_spike"] = np.nan
         df["spike_momentum"] = 0.0
         df["spike_seasonality"] = 0.0
+        df["spike_promotion_proximity"] = 0.0  # New: proximity to promotions
         
         # If is_spike column exists, calculate features from historical data
         if "is_spike" in df.columns:
@@ -357,12 +486,50 @@ class FeatureEngineer:
                 spike_month = spike_dates.dt.month.value_counts(normalize=True)
                 df["spike_month_prob"] = df["ds"].dt.month.map(spike_month).fillna(0.0)
                 
-                # Combined seasonality score
-                df["spike_seasonality"] = (df["spike_dow_prob"] + df["spike_month_prob"]) / 2.0
+                # Week of year pattern (for better seasonal capture)
+                spike_week = spike_dates.dt.isocalendar().week.value_counts(normalize=True)
+                df["spike_week_prob"] = df["ds"].dt.isocalendar().week.map(spike_week).fillna(0.0)
                 
-                # Overall spike probability (based on historical frequency)
+                # Combined seasonality score (weighted)
+                df["spike_seasonality"] = (
+                    0.4 * df["spike_dow_prob"] + 
+                    0.3 * df["spike_month_prob"] + 
+                    0.3 * df["spike_week_prob"]
+                )
+                
+                # Promotion proximity feature
+                if "is_promotion" in df.columns:
+                    # Calculate probability of spike during promotions
+                    promo_spikes = df[(df["is_promotion"] == 1) & spike_mask]
+                    promo_days = df[df["is_promotion"] == 1]
+                    promo_spike_rate = len(promo_spikes) / len(promo_days) if len(promo_days) > 0 else 0.0
+                    
+                    # Days before/after promotion
+                    for idx in df.index:
+                        if df.loc[idx, "is_promotion"] == 1:
+                            # On promotion day
+                            df.loc[idx, "spike_promotion_proximity"] = promo_spike_rate
+                        else:
+                            # Check proximity to promotions (within 3 days)
+                            nearby_promos = df[
+                                (df["is_promotion"] == 1) & 
+                                (np.abs(df.index - idx) <= 3)
+                            ]
+                            if len(nearby_promos) > 0:
+                                # Closer to promotion = higher probability
+                                min_dist = min(np.abs(nearby_promos.index - idx))
+                                proximity_score = (4 - min_dist) / 4.0  # 1.0 if on promo, 0.25 if 3 days away
+                                df.loc[idx, "spike_promotion_proximity"] = promo_spike_rate * proximity_score
+                
+                # Overall spike probability (based on historical frequency + seasonality + promotions)
                 historical_spike_rate = spike_mask.sum() / len(df) if len(df) > 0 else 0.0
-                df["spike_probability"] = historical_spike_rate * df["spike_seasonality"]
+                base_prob = historical_spike_rate * df["spike_seasonality"]
+                
+                # Boost probability near promotions
+                if "spike_promotion_proximity" in df.columns:
+                    df["spike_probability"] = np.maximum(base_prob, df["spike_promotion_proximity"])
+                else:
+                    df["spike_probability"] = base_prob
             else:
                 df["spike_probability"] = 0.0
                 df["spike_seasonality"] = 0.0
@@ -372,6 +539,7 @@ class FeatureEngineer:
             df["days_since_last_spike"] = np.nan
             df["spike_momentum"] = 0.0
             df["spike_seasonality"] = 0.0
+            df["spike_promotion_proximity"] = 0.0
         
         # Fill NaN values
         df["days_since_last_spike"] = df["days_since_last_spike"].fillna(999.0)  # Large value if no previous spike

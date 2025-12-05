@@ -67,14 +67,20 @@ def get_bake_plan(
     precomputed_by_product = {row.product_id: row for row in precomputed_rows}
 
     for product in products:
-        row = precomputed_by_product.get(product.id)
+        # Extract all ORM attributes before any database operations that might fail
+        # This prevents PendingRollbackError when accessing attributes after rollback
+        product_id = product.id
+        product_name = product.name
+        product_sku = product.sku
+        
+        row = precomputed_by_product.get(product_id)
 
         if row is None and not settings.disable_on_demand_analytics_forecasts:
             # Fallback: run a single on-demand forecast for this product,
             # then store its daily points for future requests.
             try:
                 forecast = get_forecast_for_product(
-                    product_id=product.id,
+                    product_id=product_id,
                     days_ahead=14,
                     db=db,
                 )
@@ -87,37 +93,63 @@ def get_bake_plan(
                     db.query(DailyForecast)
                     .filter(
                         DailyForecast.bakery_id == bakery_id,
-                        DailyForecast.product_id == product.id,
+                        DailyForecast.product_id == product_id,
                         DailyForecast.date == plan_date,
                     )
                     .one_or_none()
                 )
             except sa_exc.OperationalError as e:
-                # Handle SQLite \"database is locked\" errors gracefully by rolling
+                # Handle SQLite "database is locked" errors gracefully by rolling
                 # back the current transaction and skipping this product.
                 msg = str(e.orig) if getattr(e, "orig", None) is not None else str(e)
-                if "database is locked" in msg:
+                if "database is locked" in msg.lower():
                     logger.warning(
                         "Bake plan: database is locked while upserting daily forecasts for "
                         "product_id=%d, skipping this product for bakery_id=%d, plan_date=%s",
-                        product.id,
+                        product_id,
                         bakery_id,
                         plan_date.isoformat(),
                         exc_info=True,
                     )
-                    db.rollback()
+                    try:
+                        db.rollback()
+                    except Exception as rollback_error:
+                        logger.warning(
+                            f"Error during rollback: {rollback_error}. "
+                            "Session may already be in a bad state."
+                        )
                     continue
                 # Re-raise other OperationalError instances
                 raise
-            except Exception as e:
+            except sa_exc.PendingRollbackError as e:
+                # Handle case where session is already in a bad state
                 logger.warning(
-                    "Failed to generate forecast for product_id=%d, product_name=%s: %s",
-                    product.id,
-                    product.name,
+                    "Session in bad state for product_id=%d, rolling back and skipping: %s",
+                    product_id,
                     str(e),
                     exc_info=True,
                 )
-                db.rollback()
+                try:
+                    db.rollback()
+                except Exception:
+                    # Ignore errors during rollback of already-bad session
+                    pass
+                continue
+            except Exception as e:
+                logger.warning(
+                    "Failed to generate forecast for product_id=%d, product_name=%s: %s",
+                    product_id,
+                    product_name,
+                    str(e),
+                    exc_info=True,
+                )
+                try:
+                    db.rollback()
+                except Exception as rollback_error:
+                    logger.warning(
+                        f"Error during rollback: {rollback_error}. "
+                        "Session may already be in a bad state."
+                    )
                 continue
 
         if row is None:
@@ -128,22 +160,22 @@ def get_bake_plan(
         if forecast_qty <= 0:
             logger.debug(
                 "Forecast quantity is zero or negative for product_id=%d (yhat=%.2f)",
-                product.id,
+                product_id,
                 qty,
             )
             continue
 
         logger.debug(
             "Adding product to bake plan: product_id=%d, forecast_quantity=%d",
-            product.id,
+            product_id,
             forecast_qty,
         )
         items.append(
             BakePlanItem(
-                product_id=product.id,
-                product_name=product.name,
+                product_id=product_id,
+                product_name=product_name,
                 forecast_quantity=forecast_qty,
-                sku=product.sku,
+                sku=product_sku,
             )
         )
 

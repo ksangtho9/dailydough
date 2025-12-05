@@ -7,6 +7,8 @@ from sqlalchemy.orm import declarative_base, sessionmaker
 SQLALCHEMY_DATABASE_URL = "sqlite:///./bakezy.db"
 
 # For SQLite, check_same_thread should be False.
+# Note: SQLite doesn't support connection pooling in the traditional sense,
+# but we can configure it for better concurrency handling.
 engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     connect_args={
@@ -14,6 +16,12 @@ engine = create_engine(
         # Wait up to 30 seconds for a locked database before failing.
         "timeout": 30,
     },
+    # Enable connection pool pre-ping to detect stale connections
+    pool_pre_ping=True,
+    # For SQLite, pool_size and max_overflow don't apply, but we set them
+    # for consistency and in case we switch to a different database later
+    pool_size=5,
+    max_overflow=10,
 )
 
 

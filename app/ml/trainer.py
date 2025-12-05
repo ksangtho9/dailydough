@@ -9,13 +9,14 @@ from .preprocessing import CleanedTimeSeries
 from .features import FeatureEngineer
 from .models.prophet_model import ProphetSalesModel, ProphetConfig
 from .models.xgboost_model import XGBoostSalesModel, XGBoostConfig
+from .models.ensemble_model import EnsembleForecaster, EnsembleConfig
 from .hyperparameter_optimization import (
     optimize_prophet_hyperparameters,
     optimize_xgboost_hyperparameters,
 )
 
 
-ModelName = Literal["prophet", "xgboost"]
+ModelName = Literal["prophet", "xgboost", "ensemble"]
 
 
 @dataclass
@@ -123,6 +124,80 @@ class ModelTrainer:
                 model = XGBoostSalesModel()
             model.fit(df)
             return TrainResult(model_name="xgboost", model=model)
+
+        elif model_name == "ensemble":
+            # Train both Prophet and XGBoost models
+            # Train Prophet
+            if optimize_with_wape:
+                prophet_opt_result = optimize_prophet_hyperparameters(
+                    ts=CleanedTimeSeries(product_id=ts.product_id, df=df, shelf_life_days=ts.shelf_life_days),
+                    holidays_df=holidays_df,
+                    weather_df=weather_df,
+                    promotions_df=promotions_df,
+                    events_df=events_df,
+                    product_info=product_info,
+                    n_splits=3,
+                    max_iter=None,
+                )
+                prophet_config = ProphetConfig(
+                    changepoint_prior_scale=prophet_opt_result.best_params.get("changepoint_prior_scale", 0.05),
+                    seasonality_mode=prophet_opt_result.best_params.get("seasonality_mode", "additive"),
+                    daily_seasonality=True,
+                    weekly_seasonality=True,
+                    yearly_seasonality=False,
+                )
+                prophet_model = ProphetSalesModel(config=prophet_config)
+            else:
+                prophet_model = ProphetSalesModel()
+            prophet_model.fit(df)
+            
+            # Train XGBoost
+            if optimize_with_wape:
+                xgb_opt_result = optimize_xgboost_hyperparameters(
+                    ts=CleanedTimeSeries(product_id=ts.product_id, df=df, shelf_life_days=ts.shelf_life_days),
+                    holidays_df=holidays_df,
+                    weather_df=weather_df,
+                    promotions_df=promotions_df,
+                    events_df=events_df,
+                    product_info=product_info,
+                    n_splits=3,
+                    max_iter=27,
+                    use_wape_loss=True,
+                )
+                xgb_config = XGBoostConfig(
+                    max_depth=xgb_opt_result.best_params.get("max_depth", 3),
+                    learning_rate=xgb_opt_result.best_params.get("learning_rate", 0.05),
+                    n_estimators=xgb_opt_result.best_params.get("n_estimators", 200),
+                    subsample=xgb_opt_result.best_params.get("subsample", 0.8),
+                    use_wape_loss=True,
+                )
+                xgboost_model = XGBoostSalesModel(config=xgb_config)
+            else:
+                xgboost_model = XGBoostSalesModel()
+            xgboost_model.fit(df)
+            
+            # Calculate optimal weights based on cross-validation performance if available
+            ensemble_config = EnsembleConfig(strategy="weighted_average")
+            if optimize_with_wape:
+                # Use WAPE from optimization to determine weights
+                prophet_wape = prophet_opt_result.best_wape if hasattr(prophet_opt_result, 'best_wape') else float('inf')
+                xgb_wape = xgb_opt_result.best_wape if hasattr(xgb_opt_result, 'best_wape') else float('inf')
+                
+                if prophet_wape != float('inf') and xgb_wape != float('inf'):
+                    prophet_weight, xgb_weight = EnsembleForecaster.calculate_optimal_weights(
+                        [prophet_wape],
+                        [xgb_wape],
+                    )
+                    ensemble_config.prophet_weight = prophet_weight
+                    ensemble_config.xgboost_weight = xgb_weight
+            
+            # Create ensemble model
+            ensemble_model = EnsembleForecaster(
+                prophet_model=prophet_model,
+                xgboost_model=xgboost_model,
+                config=ensemble_config,
+            )
+            return TrainResult(model_name="ensemble", model=ensemble_model)
 
         else:
             raise ValueError(f"Unsupported model: {model_name}")

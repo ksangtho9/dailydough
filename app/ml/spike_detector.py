@@ -31,6 +31,14 @@ class SpikeConfig:
     
     # Minimum value to consider (ignore spikes below this)
     min_value_threshold: float = 0.0
+    
+    # Adaptive threshold settings
+    use_adaptive_thresholds: bool = True  # Adjust thresholds based on recent volatility
+    volatility_window: int = 30  # Days to look back for volatility calculation
+    volatility_multiplier: float = 1.2  # Multiply threshold by this when volatility is high
+    
+    # Promotion-aware detection
+    promotion_spike_threshold_multiplier: float = 1.5  # Higher threshold during promotions (spikes are expected)
 
 
 @dataclass
@@ -50,10 +58,55 @@ class SpikeDetector:
     def __init__(self, config: Optional[SpikeConfig] = None):
         self.config = config or SpikeConfig()
     
-    def detect_statistical(self, df: pd.DataFrame, value_col: str = "y") -> pd.Series:
+    def _calculate_adaptive_threshold(self, df: pd.DataFrame, value_col: str, idx: int) -> float:
+        """
+        Calculate adaptive threshold based on recent volatility.
+        
+        Args:
+            df: DataFrame with time series
+            value_col: Column name with values
+            idx: Current index
+            
+        Returns:
+            Multiplier for threshold (1.0 = no adjustment, >1.0 = higher threshold needed)
+        """
+        if not self.config.use_adaptive_thresholds:
+            return 1.0
+        
+        if value_col not in df.columns:
+            return 1.0
+        
+        # Look back at recent volatility
+        window_start = max(0, idx - self.config.volatility_window)
+        recent_values = df[value_col].iloc[window_start:idx+1]
+        
+        if len(recent_values) < 7:  # Need at least a week of data
+            return 1.0
+        
+        # Calculate coefficient of variation (CV) as volatility measure
+        mean_val = recent_values.mean()
+        std_val = recent_values.std()
+        
+        if mean_val == 0:
+            return 1.0
+        
+        cv = std_val / mean_val if mean_val > 0 else 0.0
+        
+        # Higher volatility = higher threshold multiplier
+        # Normalize CV (typical CV for sales might be 0.3-0.8)
+        volatility_factor = 1.0 + (cv * self.config.volatility_multiplier)
+        
+        return min(volatility_factor, 2.0)  # Cap at 2x
+    
+    def detect_statistical(self, df: pd.DataFrame, value_col: str = "y", promotions_mask: Optional[pd.Series] = None) -> pd.Series:
         """
         Detect spikes using statistical methods (Z-score and IQR).
         
+        Args:
+            df: DataFrame with time series data
+            value_col: Column name with values
+            promotions_mask: Optional boolean Series indicating promotion periods
+            
         Returns:
             Boolean Series indicating spikes
         """
@@ -71,13 +124,23 @@ class SpikeDetector:
         
         valid_values = values[valid_mask]
         
-        # Z-score method
+        # Z-score method with adaptive thresholds
         mean = valid_values.mean()
         std = valid_values.std()
         
         if std > 0:
             z_scores = np.abs((values - mean) / std)
-            z_spike = z_scores > self.config.z_score_threshold
+            
+            # Apply adaptive thresholds per row
+            z_thresholds = pd.Series(self.config.z_score_threshold, index=df.index)
+            for idx in df.index:
+                adaptive_mult = self._calculate_adaptive_threshold(df, value_col, idx)
+                # If in promotion period, increase threshold
+                if promotions_mask is not None and idx < len(promotions_mask) and promotions_mask.iloc[idx]:
+                    adaptive_mult *= self.config.promotion_spike_threshold_multiplier
+                z_thresholds.iloc[idx] = self.config.z_score_threshold * adaptive_mult
+            
+            z_spike = z_scores > z_thresholds
         else:
             z_spike = pd.Series(False, index=df.index)
         
@@ -87,8 +150,14 @@ class SpikeDetector:
         iqr = q3 - q1
         
         if iqr > 0:
-            lower_bound = q1 - self.config.iqr_multiplier * iqr
-            upper_bound = q3 + self.config.iqr_multiplier * iqr
+            # Apply adaptive multiplier to IQR bounds
+            iqr_mult = self.config.iqr_multiplier
+            if promotions_mask is not None and promotions_mask.any():
+                # Increase IQR multiplier during promotions
+                iqr_mult = iqr_mult * self.config.promotion_spike_threshold_multiplier
+            
+            lower_bound = q1 - iqr_mult * iqr
+            upper_bound = q3 + iqr_mult * iqr
             iqr_spike = (values < lower_bound) | (values > upper_bound)
         else:
             iqr_spike = pd.Series(False, index=df.index)
@@ -98,10 +167,15 @@ class SpikeDetector:
         
         return is_spike
     
-    def detect_rolling(self, df: pd.DataFrame, value_col: str = "y") -> pd.Series:
+    def detect_rolling(self, df: pd.DataFrame, value_col: str = "y", promotions_mask: Optional[pd.Series] = None) -> pd.Series:
         """
         Detect spikes using rolling window comparison.
         
+        Args:
+            df: DataFrame with time series data
+            value_col: Column name with values
+            promotions_mask: Optional boolean Series indicating promotion periods
+            
         Returns:
             Boolean Series indicating spikes
         """
@@ -119,14 +193,25 @@ class SpikeDetector:
             center=False
         ).mean()
         
+        # Calculate threshold with adaptive adjustments
+        base_threshold_percent = self.config.rolling_threshold_percent
+        threshold_percent = pd.Series(base_threshold_percent, index=df.index)
+        
+        for idx in df.index:
+            adaptive_mult = self._calculate_adaptive_threshold(df, value_col, idx)
+            # If in promotion period, increase threshold
+            if promotions_mask is not None and idx < len(promotions_mask) and promotions_mask.iloc[idx]:
+                adaptive_mult *= self.config.promotion_spike_threshold_multiplier
+            threshold_percent.iloc[idx] = base_threshold_percent * adaptive_mult
+        
         # Calculate threshold (rolling mean * (1 + threshold_percent/100))
-        threshold = rolling_mean * (1 + self.config.rolling_threshold_percent / 100.0)
+        threshold = rolling_mean * (1 + threshold_percent / 100.0)
         
         # Mark as spike if value exceeds threshold
         is_spike = values > threshold
         
         # Also check for values significantly below rolling mean (negative spikes)
-        lower_threshold = rolling_mean * (1 - self.config.rolling_threshold_percent / 100.0)
+        lower_threshold = rolling_mean * (1 - threshold_percent / 100.0)
         negative_spike = values < lower_threshold
         
         # Combine positive and negative spikes
@@ -219,7 +304,8 @@ class SpikeDetector:
     def detect(
         self,
         df: pd.DataFrame,
-        value_col: str = "y"
+        value_col: str = "y",
+        promotions_mask: Optional[pd.Series] = None,
     ) -> SpikeDetectionResult:
         """
         Main detection method that combines all detection approaches.
@@ -227,6 +313,7 @@ class SpikeDetector:
         Args:
             df: DataFrame with time series data
             value_col: Column name containing values to analyze
+            promotions_mask: Optional boolean Series indicating promotion periods (for adaptive thresholds)
             
         Returns:
             SpikeDetectionResult with detection flags and smoothed values
@@ -246,12 +333,12 @@ class SpikeDetector:
         
         # Apply detection methods based on config
         if self.config.detection_method == "statistical":
-            is_spike = self.detect_statistical(df, value_col)
+            is_spike = self.detect_statistical(df, value_col, promotions_mask)
         elif self.config.detection_method == "rolling":
-            is_spike = self.detect_rolling(df, value_col)
+            is_spike = self.detect_rolling(df, value_col, promotions_mask)
         elif self.config.detection_method == "both":
-            stat_spike = self.detect_statistical(df, value_col)
-            roll_spike = self.detect_rolling(df, value_col)
+            stat_spike = self.detect_statistical(df, value_col, promotions_mask)
+            roll_spike = self.detect_rolling(df, value_col, promotions_mask)
             
             if self.config.combination_logic == "AND":
                 is_spike = stat_spike & roll_spike

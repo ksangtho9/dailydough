@@ -126,9 +126,7 @@ def infer_column_roles(df: pd.DataFrame) -> Dict[str, Optional[str]]:
 
             if role == "date":
                 try:
-                    parsed = pd.to_datetime(
-                        series, errors="coerce", infer_datetime_format=True
-                    )
+                    parsed = pd.to_datetime(series, errors="coerce")
                     non_null_ratio = parsed.notna().mean()
                     if non_null_ratio > 0.8:
                         score += 5.0

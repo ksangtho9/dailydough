@@ -243,9 +243,17 @@ def optimize_prophet_hyperparameters(
                 actual = test_merged["y"].values
                 predicted = test_merged["yhat"].values
                 
+                # Ensure numeric types
+                actual = pd.to_numeric(actual, errors='coerce')
+                predicted = pd.to_numeric(predicted, errors='coerce')
+                
                 wape = calculate_wape(actual, predicted)
-                if not np.isnan(wape):
-                    wapes.append(wape)
+                # Safe NaN check using pandas which handles all types
+                if wape is not None and pd.notna(wape):
+                    try:
+                        wapes.append(float(wape))
+                    except (ValueError, TypeError):
+                        pass
                     
             except Exception as e:
                 logger.warning(f"Error in CV fold: {e}")
@@ -436,10 +444,18 @@ def optimize_xgboost_hyperparameters(
                 # Get actual values
                 actual = test_df["y"].values
                 
+                # Ensure numeric types
+                actual = pd.to_numeric(actual, errors='coerce')
+                predictions = pd.to_numeric(predictions, errors='coerce')
+                
                 # Calculate WAPE
                 wape = calculate_wape(actual, predictions)
-                if not np.isnan(wape):
-                    wapes.append(wape)
+                # Safe NaN check using pandas which handles all types
+                if wape is not None and pd.notna(wape):
+                    try:
+                        wapes.append(float(wape))
+                    except (ValueError, TypeError):
+                        pass
                     
             except Exception as e:
                 logger.warning(f"Error in CV fold: {e}")

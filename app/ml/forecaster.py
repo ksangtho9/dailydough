@@ -2,13 +2,15 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Literal, Optional
+from datetime import timedelta
 
 import pandas as pd
 
 from .preprocessing import CleanedTimeSeries
 from .trainer import ModelTrainer, TrainResult
+from .features import FeatureEngineer
 
-ModelName = Literal["prophet", "xgboost"]
+ModelName = Literal["prophet", "xgboost", "ensemble"]
 
 
 @dataclass
@@ -32,6 +34,7 @@ class ProductForecaster:
 
     def __init__(self, trainer: Optional[ModelTrainer] = None):
         self.trainer = trainer or ModelTrainer()
+        self.feature_engineer = FeatureEngineer()
 
     def forecast(
         self,
@@ -73,10 +76,83 @@ class ProductForecaster:
             forecast_df = forecast_df[forecast_df["ds"] > last_train_date].reset_index(drop=True)
 
         elif train_result.model_name == "xgboost":
-            # For now, we'll leave the XGBoost future feature generation as a TODO
-            # because it depends on how you design lag & calendar features.
-            # Placeholder empty df:
-            forecast_df = pd.DataFrame()
+            # Generate future dates
+            last_train_date = ts.df["ds"].max()
+            future_dates = pd.date_range(
+                start=last_train_date + timedelta(days=1),
+                periods=horizon_days,
+                freq="D",
+            )
+            future_df = pd.DataFrame({"ds": future_dates})
+            
+            # Use future_regressors if provided, otherwise generate basic features
+            if future_regressors is not None and not future_regressors.empty:
+                future_df = future_regressors.copy()
+            else:
+                # Apply basic feature engineering to future dates
+                future_df = self.feature_engineer.transform(
+                    future_df,
+                    holidays_df=holidays_df,
+                    weather_df=weather_df,
+                    promotions_df=promotions_df,
+                    events_df=events_df,
+                    product_info=product_info,
+                )
+            
+            # Use XGBoost's predict_future method for recursive prediction
+            forecast_df = train_result.model.predict_future(
+                historical_df=ts.df,
+                future_df=future_df,
+                feature_engineer=self.feature_engineer,
+                holidays_df=holidays_df,
+                weather_df=weather_df,
+                promotions_df=promotions_df,
+                events_df=events_df,
+                product_info=product_info,
+            )
+
+        elif train_result.model_name == "ensemble":
+            # Generate future dates for ensemble
+            last_train_date = ts.df["ds"].max()
+            future_dates = pd.date_range(
+                start=last_train_date + timedelta(days=1),
+                periods=horizon_days,
+                freq="D",
+            )
+            future_df = pd.DataFrame({"ds": future_dates})
+            
+            # Apply feature engineering to future dates
+            if future_regressors is not None and not future_regressors.empty:
+                future_df = future_regressors.copy()
+            else:
+                future_df = self.feature_engineer.transform(
+                    future_df,
+                    holidays_df=holidays_df,
+                    weather_df=weather_df,
+                    promotions_df=promotions_df,
+                    events_df=events_df,
+                    product_info=product_info,
+                )
+            
+            # Get historical delivery if available
+            historical_delivery = None
+            if "delivery" in ts.df.columns:
+                historical_delivery = ts.df["delivery"]
+            
+            # Use ensemble model to predict
+            forecast_df = train_result.model.predict(
+                historical_df=ts.df,
+                future_df=future_df,
+                horizon_days=horizon_days,
+                holidays_df=holidays_df,
+                weather_df=weather_df,
+                promotions_df=promotions_df,
+                events_df=events_df,
+                product_info=product_info,
+                future_regressors=future_regressors,
+                historical_delivery=historical_delivery,
+            )
+            
         else:
             raise ValueError(f"Unsupported model: {train_result.model_name}")
 

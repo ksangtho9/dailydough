@@ -533,24 +533,45 @@ class ForecastService:
         )
 
         # Fill lag features with last known values or rolling means
+        # Ensure all values are numeric
         if "lag_1" in df.columns:
-            last_y = df["y"].iloc[-1] if len(df) > 0 else 0.0
-            future_df["lag_1"] = last_y
+            last_y = pd.to_numeric(df["y"].iloc[-1], errors='coerce') if len(df) > 0 else 0.0
+            future_df["lag_1"] = float(last_y) if pd.notna(last_y) else 0.0
         if "lag_7" in df.columns:
-            last_7_avg = df["y"].tail(7).mean() if len(df) >= 7 else (df["y"].mean() if len(df) > 0 else 0.0)
+            y_series = pd.to_numeric(df["y"], errors='coerce')
+            last_7_avg = float(y_series.tail(7).mean()) if len(df) >= 7 else (float(y_series.mean()) if len(df) > 0 and pd.notna(y_series.mean()) else 0.0)
             future_df["lag_7"] = last_7_avg
         if "lag_14" in df.columns:
-            last_14_avg = df["y"].tail(14).mean() if len(df) >= 14 else (df["y"].mean() if len(df) > 0 else 0.0)
+            y_series = pd.to_numeric(df["y"], errors='coerce')
+            last_14_avg = float(y_series.tail(14).mean()) if len(df) >= 14 else (float(y_series.mean()) if len(df) > 0 and pd.notna(y_series.mean()) else 0.0)
             future_df["lag_14"] = last_14_avg
         if "lag_30" in df.columns:
-            last_30_avg = df["y"].tail(30).mean() if len(df) >= 30 else (df["y"].mean() if len(df) > 0 else 0.0)
+            y_series = pd.to_numeric(df["y"], errors='coerce')
+            last_30_avg = float(y_series.tail(30).mean()) if len(df) >= 30 else (float(y_series.mean()) if len(df) > 0 and pd.notna(y_series.mean()) else 0.0)
             future_df["lag_30"] = last_30_avg
 
         # Fill rolling features with last known values
         for col in ["rolling_mean_7", "rolling_mean_30", "rolling_std_7", "rolling_std_30"]:
             if col in df.columns:
-                last_val = df[col].iloc[-1] if len(df) > 0 else 0.0
-                future_df[col] = last_val
+                last_val = pd.to_numeric(df[col].iloc[-1], errors='coerce') if len(df) > 0 else 0.0
+                future_df[col] = float(last_val) if pd.notna(last_val) else 0.0
+        
+        # Ensure all columns in future_df are numeric (except 'ds')
+        # Remove any non-numeric columns that might have been added by feature engineering
+        cols_to_remove = []
+        for col in future_df.columns:
+            if col != "ds":
+                try:
+                    # Try to convert to numeric
+                    future_df[col] = pd.to_numeric(future_df[col], errors='coerce').fillna(0.0)
+                except (ValueError, TypeError):
+                    # If conversion fails, remove the column
+                    cols_to_remove.append(col)
+        
+        # Remove non-numeric columns
+        for col in cols_to_remove:
+            if col in future_df.columns:
+                future_df = future_df.drop(columns=[col])
 
         # 3) Forecast via Prophet
         forecast_result: ForecastResult = self.forecaster.forecast(
@@ -589,10 +610,16 @@ class ForecastService:
             ds_value = row["ds"]
             date_str = ds_value.date().isoformat()
 
-            # Raw Prophet outputs
-            yhat = float(row["yhat"])
-            yhat_lower = max(0.0, float(row["yhat_lower"]))
-            yhat_upper = max(0.0, float(row["yhat_upper"]))
+            # Raw Prophet outputs - ensure numeric conversion
+            try:
+                yhat = float(pd.to_numeric(row["yhat"], errors='coerce')) if pd.notna(row.get("yhat")) else 0.0
+                yhat_lower = max(0.0, float(pd.to_numeric(row["yhat_lower"], errors='coerce'))) if pd.notna(row.get("yhat_lower")) else 0.0
+                yhat_upper = max(0.0, float(pd.to_numeric(row["yhat_upper"], errors='coerce'))) if pd.notna(row.get("yhat_upper")) else 0.0
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Error converting forecast values to numeric: {e}")
+                yhat = 0.0
+                yhat_lower = 0.0
+                yhat_upper = 0.0
 
             # Clamp non-negative
             yhat = max(0.0, yhat)

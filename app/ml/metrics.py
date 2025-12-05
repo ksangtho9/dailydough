@@ -36,9 +36,13 @@ def calculate_wape(
     if isinstance(predicted, pd.Series):
         predicted = predicted.values
     
-    # Ensure arrays are 1D
-    actual = np.asarray(actual).flatten()
-    predicted = np.asarray(predicted).flatten()
+    # Ensure arrays are numeric - convert to numeric, coercing errors to NaN
+    actual = pd.to_numeric(actual, errors='coerce')
+    predicted = pd.to_numeric(predicted, errors='coerce')
+    
+    # Convert to numpy arrays and ensure 1D
+    actual = np.asarray(actual, dtype=np.float64).flatten()
+    predicted = np.asarray(predicted, dtype=np.float64).flatten()
     
     # Check lengths match
     if len(actual) != len(predicted):

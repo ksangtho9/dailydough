@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import Optional, Dict, Any
 
 import numpy as np
+import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.database.database import SessionLocal
@@ -20,6 +21,8 @@ def _compute_metrics(train_result, cleaned_df) -> tuple[Optional[float], Optiona
     Returns:
         Tuple of (mape, rmse, wape) - all can be None if calculation fails
     """
+    # Ensure pandas is available (explicit reference to avoid local variable issues)
+    _ = pd  # noqa: F841
     try:
         if train_result.model_name == "prophet":
             forecast_df = train_result.model.predict(0)  # includes training range
@@ -41,6 +44,38 @@ def _compute_metrics(train_result, cleaned_df) -> tuple[Optional[float], Optiona
             merged["yhat"] = predictions
             actual = merged["y"]
             predicted = merged["yhat"]
+        elif train_result.model_name == "ensemble":
+            # For ensemble, we need to generate predictions on training data
+            # Create a future_df with same dates as training data
+            from datetime import timedelta
+            from app.ml.features import FeatureEngineer
+            
+            future_df = cleaned_df[["ds"]].copy()
+            feature_engineer = FeatureEngineer()
+            future_df = feature_engineer.transform(future_df)
+            
+            # Get historical delivery if available
+            historical_delivery = None
+            if "delivery" in cleaned_df.columns:
+                historical_delivery = cleaned_df["delivery"]
+            
+            # Use ensemble to predict
+            forecast_df = train_result.model.predict(
+                historical_df=cleaned_df,
+                future_df=future_df,
+                horizon_days=len(cleaned_df),
+                future_regressors=future_df,
+                historical_delivery=historical_delivery,
+            )
+            
+            # Merge with actuals
+            forecast_df["ds"] = pd.to_datetime(forecast_df["ds"])
+            cleaned_df["ds"] = pd.to_datetime(cleaned_df["ds"])
+            merged = forecast_df.merge(cleaned_df[["ds", "y"]], on="ds", how="inner")
+            if merged.empty:
+                return None, None, None
+            actual = merged["y"]
+            predicted = merged["yhat"]
         else:
             return None, None, None
         
@@ -55,8 +90,12 @@ def _compute_metrics(train_result, cleaned_df) -> tuple[Optional[float], Optiona
         mape = float(ape.mean()) * 100 if not ape.empty else None  # Convert to percentage
         
         # Calculate WAPE
-        wape = calculate_wape(actual.values, predicted.values)
-        wape = float(wape) * 100 if not (wape is None or np.isnan(wape)) else None  # Convert to percentage
+        # Ensure numeric types
+        actual_numeric = pd.to_numeric(actual.values, errors='coerce')
+        predicted_numeric = pd.to_numeric(predicted.values, errors='coerce')
+        wape = calculate_wape(actual_numeric, predicted_numeric)
+        # Safe NaN check using pandas
+        wape = float(wape) * 100 if (wape is not None and pd.notna(wape)) else None  # Convert to percentage
         
         return mape, rmse, wape
     except Exception as e:
