@@ -142148,3 +142148,267 @@ ValueError: Regressor 'delivery' missing from dataframe
 2025-12-05 12:28:18 - INFO - bakezy.forecast - Forecast cache miss: product_id=180 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:27:57.648803
 2025-12-05 12:28:22 - INFO - bakezy.forecast - Forecast complete: product_id=180 horizon_days=14 points=14
 2025-12-05 12:28:22 - INFO - bakezy.forecast - Stored forecast in cache: product_id=180 bakery_id=7 horizon_days=14
+2025-12-05 15:04:51 - INFO - bakezy.forecast - Starting forecast: product_id=180 horizon_days=14
+2025-12-05 15:04:51 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=180 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:04:51 - INFO - bakezy.forecast - Forecast cache miss: product_id=180 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:27:57.648803
+2025-12-05 15:04:53 - INFO - bakezy.forecast - Forecast complete: product_id=180 horizon_days=14 points=14
+2025-12-05 15:04:53 - INFO - bakezy.forecast - Stored forecast in cache: product_id=180 bakery_id=7 horizon_days=14
+2025-12-05 15:04:53 - INFO - bakezy.forecast - Starting forecast: product_id=180 horizon_days=14
+2025-12-05 15:04:53 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=180 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:04:53 - INFO - bakezy.forecast - Forecast cache hit: product_id=180 bakery_id=7 horizon_days=14 age=2.2s
+2025-12-05 15:04:56 - INFO - bakezy.forecast - Starting forecast: product_id=180 horizon_days=14
+2025-12-05 15:04:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=180 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:04:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=180 bakery_id=7 horizon_days=14 age=5.6s
+2025-12-05 15:04:57 - INFO - bakezy.forecast - Starting forecast: product_id=180 horizon_days=14
+2025-12-05 15:04:57 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=180 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:04:57 - INFO - bakezy.forecast - Forecast cache hit: product_id=180 bakery_id=7 horizon_days=14 age=6.1s
+2025-12-05 15:04:57 - INFO - bakezy.forecast - Starting forecast: product_id=180 horizon_days=14
+2025-12-05 15:04:57 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=180 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:04:57 - INFO - bakezy.forecast - Forecast cache hit: product_id=180 bakery_id=7 horizon_days=14 age=6.3s
+2025-12-05 15:04:57 - INFO - bakezy.forecast - Starting forecast: product_id=180 horizon_days=14
+2025-12-05 15:04:57 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=180 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:04:57 - INFO - bakezy.forecast - Forecast cache hit: product_id=180 bakery_id=7 horizon_days=14 age=6.4s
+2025-12-05 15:04:59 - INFO - bakezy.forecast - Starting forecast: product_id=151 horizon_days=14
+2025-12-05 15:04:59 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=151 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:04:59 - INFO - bakezy.forecast - Forecast cache miss: product_id=151 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:08:42.517736
+2025-12-05 15:05:01 - INFO - bakezy.forecast - Forecast complete: product_id=151 horizon_days=14 points=14
+2025-12-05 15:05:01 - INFO - bakezy.forecast - Stored forecast in cache: product_id=151 bakery_id=7 horizon_days=14
+2025-12-05 15:05:01 - INFO - bakezy.forecast - Starting forecast: product_id=152 horizon_days=14
+2025-12-05 15:05:01 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=152 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:01 - INFO - bakezy.forecast - Forecast cache miss: product_id=152 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:09:16.453024
+2025-12-05 15:05:02 - INFO - bakezy.forecast - Forecast complete: product_id=152 horizon_days=14 points=14
+2025-12-05 15:05:02 - INFO - bakezy.forecast - Stored forecast in cache: product_id=152 bakery_id=7 horizon_days=14
+2025-12-05 15:05:02 - INFO - bakezy.forecast - Starting forecast: product_id=153 horizon_days=14
+2025-12-05 15:05:02 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=153 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:02 - INFO - bakezy.forecast - Forecast cache miss: product_id=153 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:10:26.234473
+2025-12-05 15:05:03 - INFO - bakezy.forecast - Forecast complete: product_id=153 horizon_days=14 points=14
+2025-12-05 15:05:03 - INFO - bakezy.forecast - Stored forecast in cache: product_id=153 bakery_id=7 horizon_days=14
+2025-12-05 15:05:03 - INFO - bakezy.forecast - Starting forecast: product_id=154 horizon_days=14
+2025-12-05 15:05:03 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=154 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:03 - INFO - bakezy.forecast - Forecast cache miss: product_id=154 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:11:38.387200
+2025-12-05 15:05:04 - INFO - bakezy.forecast - Forecast complete: product_id=154 horizon_days=14 points=14
+2025-12-05 15:05:04 - INFO - bakezy.forecast - Stored forecast in cache: product_id=154 bakery_id=7 horizon_days=14
+2025-12-05 15:05:04 - INFO - bakezy.forecast - Starting forecast: product_id=155 horizon_days=14
+2025-12-05 15:05:04 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=155 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:04 - INFO - bakezy.forecast - Forecast cache miss: product_id=155 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:12:13.278654
+2025-12-05 15:05:05 - INFO - bakezy.forecast - Starting forecast: product_id=180 horizon_days=14
+2025-12-05 15:05:05 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=180 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:05 - INFO - bakezy.forecast - Forecast cache hit: product_id=180 bakery_id=7 horizon_days=14 age=14.5s
+2025-12-05 15:05:05 - INFO - bakezy.forecast - Forecast complete: product_id=155 horizon_days=14 points=14
+2025-12-05 15:05:05 - INFO - bakezy.forecast - Stored forecast in cache: product_id=155 bakery_id=7 horizon_days=14
+2025-12-05 15:05:05 - INFO - bakezy.forecast - Starting forecast: product_id=156 horizon_days=14
+2025-12-05 15:05:05 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=156 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:05 - INFO - bakezy.forecast - Forecast cache miss: product_id=156 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:12:49.567768
+2025-12-05 15:05:06 - INFO - bakezy.forecast - Forecast complete: product_id=156 horizon_days=14 points=14
+2025-12-05 15:05:06 - INFO - bakezy.forecast - Stored forecast in cache: product_id=156 bakery_id=7 horizon_days=14
+2025-12-05 15:05:06 - INFO - bakezy.forecast - Starting forecast: product_id=157 horizon_days=14
+2025-12-05 15:05:06 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=157 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:06 - INFO - bakezy.forecast - Forecast cache miss: product_id=157 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:13:27.603717
+2025-12-05 15:05:07 - INFO - bakezy.forecast - Forecast complete: product_id=157 horizon_days=14 points=14
+2025-12-05 15:05:07 - INFO - bakezy.forecast - Stored forecast in cache: product_id=157 bakery_id=7 horizon_days=14
+2025-12-05 15:05:07 - INFO - bakezy.forecast - Starting forecast: product_id=158 horizon_days=14
+2025-12-05 15:05:07 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=158 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:07 - INFO - bakezy.forecast - Forecast cache miss: product_id=158 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:14:26.884902
+2025-12-05 15:05:09 - INFO - bakezy.forecast - Forecast complete: product_id=158 horizon_days=14 points=14
+2025-12-05 15:05:09 - INFO - bakezy.forecast - Stored forecast in cache: product_id=158 bakery_id=7 horizon_days=14
+2025-12-05 15:05:09 - INFO - bakezy.forecast - Starting forecast: product_id=159 horizon_days=14
+2025-12-05 15:05:09 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=159 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:09 - INFO - bakezy.forecast - Forecast cache miss: product_id=159 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:16:13.483020
+2025-12-05 15:05:10 - INFO - bakezy.forecast - Forecast complete: product_id=159 horizon_days=14 points=14
+2025-12-05 15:05:10 - INFO - bakezy.forecast - Stored forecast in cache: product_id=159 bakery_id=7 horizon_days=14
+2025-12-05 15:05:10 - INFO - bakezy.forecast - Starting forecast: product_id=160 horizon_days=14
+2025-12-05 15:05:10 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=160 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:10 - INFO - bakezy.forecast - Forecast cache miss: product_id=160 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:17:29.170435
+2025-12-05 15:05:11 - INFO - bakezy.forecast - Forecast complete: product_id=160 horizon_days=14 points=14
+2025-12-05 15:05:11 - INFO - bakezy.forecast - Stored forecast in cache: product_id=160 bakery_id=7 horizon_days=14
+2025-12-05 15:05:11 - INFO - bakezy.forecast - Starting forecast: product_id=161 horizon_days=14
+2025-12-05 15:05:11 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=161 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:11 - INFO - bakezy.forecast - Forecast cache miss: product_id=161 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:18:47.450699
+2025-12-05 15:05:12 - INFO - bakezy.forecast - Forecast complete: product_id=161 horizon_days=14 points=14
+2025-12-05 15:05:12 - INFO - bakezy.forecast - Stored forecast in cache: product_id=161 bakery_id=7 horizon_days=14
+2025-12-05 15:05:12 - INFO - bakezy.forecast - Starting forecast: product_id=162 horizon_days=14
+2025-12-05 15:05:12 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=162 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:12 - INFO - bakezy.forecast - Forecast cache miss: product_id=162 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:19:40.995510
+2025-12-05 15:05:13 - INFO - bakezy.forecast - Forecast complete: product_id=162 horizon_days=14 points=14
+2025-12-05 15:05:13 - INFO - bakezy.forecast - Stored forecast in cache: product_id=162 bakery_id=7 horizon_days=14
+2025-12-05 15:05:13 - INFO - bakezy.forecast - Starting forecast: product_id=163 horizon_days=14
+2025-12-05 15:05:13 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=163 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:13 - INFO - bakezy.forecast - Forecast cache miss: product_id=163 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:20:32.448750
+2025-12-05 15:05:15 - INFO - bakezy.forecast - Forecast complete: product_id=163 horizon_days=14 points=14
+2025-12-05 15:05:15 - INFO - bakezy.forecast - Stored forecast in cache: product_id=163 bakery_id=7 horizon_days=14
+2025-12-05 15:05:15 - INFO - bakezy.forecast - Starting forecast: product_id=164 horizon_days=14
+2025-12-05 15:05:15 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=164 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:15 - INFO - bakezy.forecast - Forecast cache miss: product_id=164 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:21:26.682962
+2025-12-05 15:05:17 - INFO - bakezy.forecast - Forecast complete: product_id=164 horizon_days=14 points=14
+2025-12-05 15:05:17 - INFO - bakezy.forecast - Stored forecast in cache: product_id=164 bakery_id=7 horizon_days=14
+2025-12-05 15:05:17 - INFO - bakezy.forecast - Starting forecast: product_id=165 horizon_days=14
+2025-12-05 15:05:17 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=165 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:17 - INFO - bakezy.forecast - Forecast cache miss: product_id=165 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:22:17.474934
+2025-12-05 15:05:19 - INFO - bakezy.forecast - Forecast complete: product_id=165 horizon_days=14 points=14
+2025-12-05 15:05:19 - INFO - bakezy.forecast - Stored forecast in cache: product_id=165 bakery_id=7 horizon_days=14
+2025-12-05 15:05:19 - INFO - bakezy.forecast - Starting forecast: product_id=166 horizon_days=14
+2025-12-05 15:05:19 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=166 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:19 - INFO - bakezy.forecast - Forecast cache miss: product_id=166 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:22:44.810649
+2025-12-05 15:05:20 - INFO - bakezy.forecast - Starting forecast: product_id=151 horizon_days=14
+2025-12-05 15:05:20 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=151 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:20 - INFO - bakezy.forecast - Forecast cache hit: product_id=151 bakery_id=7 horizon_days=14 age=20.3s
+2025-12-05 15:05:21 - INFO - bakezy.forecast - Forecast complete: product_id=166 horizon_days=14 points=14
+2025-12-05 15:05:21 - INFO - bakezy.forecast - Stored forecast in cache: product_id=166 bakery_id=7 horizon_days=14
+2025-12-05 15:05:21 - INFO - bakezy.forecast - Starting forecast: product_id=167 horizon_days=14
+2025-12-05 15:05:21 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=167 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:21 - INFO - bakezy.forecast - Forecast cache miss: product_id=167 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:23:50.823195
+2025-12-05 15:05:25 - INFO - bakezy.forecast - Forecast complete: product_id=167 horizon_days=14 points=14
+2025-12-05 15:05:25 - INFO - bakezy.forecast - Stored forecast in cache: product_id=167 bakery_id=7 horizon_days=14
+2025-12-05 15:05:25 - INFO - bakezy.forecast - Starting forecast: product_id=168 horizon_days=14
+2025-12-05 15:05:25 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=168 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:25 - INFO - bakezy.forecast - Forecast cache miss: product_id=168 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:24:08.173645
+2025-12-05 15:05:25 - INFO - bakezy.forecast - Starting forecast: product_id=180 horizon_days=14
+2025-12-05 15:05:26 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=180 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:26 - INFO - bakezy.forecast - Forecast cache hit: product_id=180 bakery_id=7 horizon_days=14 age=34.9s
+2025-12-05 15:05:28 - INFO - bakezy.forecast - Forecast complete: product_id=168 horizon_days=14 points=14
+2025-12-05 15:05:28 - INFO - bakezy.forecast - Stored forecast in cache: product_id=168 bakery_id=7 horizon_days=14
+2025-12-05 15:05:28 - INFO - bakezy.forecast - Starting forecast: product_id=169 horizon_days=14
+2025-12-05 15:05:28 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=169 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:28 - INFO - bakezy.forecast - Forecast cache miss: product_id=169 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:24:24.304331
+2025-12-05 15:05:30 - INFO - bakezy.forecast - Forecast complete: product_id=169 horizon_days=14 points=14
+2025-12-05 15:05:30 - INFO - bakezy.forecast - Stored forecast in cache: product_id=169 bakery_id=7 horizon_days=14
+2025-12-05 15:05:30 - INFO - bakezy.forecast - Starting forecast: product_id=170 horizon_days=14
+2025-12-05 15:05:30 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=170 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:30 - INFO - bakezy.forecast - Forecast cache miss: product_id=170 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:24:41.449787
+2025-12-05 15:05:34 - INFO - bakezy.forecast - Forecast complete: product_id=170 horizon_days=14 points=14
+2025-12-05 15:05:34 - INFO - bakezy.forecast - Stored forecast in cache: product_id=170 bakery_id=7 horizon_days=14
+2025-12-05 15:05:34 - INFO - bakezy.forecast - Starting forecast: product_id=171 horizon_days=14
+2025-12-05 15:05:34 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=171 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:34 - INFO - bakezy.forecast - Forecast cache miss: product_id=171 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:24:58.988075
+2025-12-05 15:05:37 - INFO - bakezy.forecast - Forecast complete: product_id=171 horizon_days=14 points=14
+2025-12-05 15:05:37 - INFO - bakezy.forecast - Stored forecast in cache: product_id=171 bakery_id=7 horizon_days=14
+2025-12-05 15:05:38 - INFO - bakezy.forecast - Starting forecast: product_id=172 horizon_days=14
+2025-12-05 15:05:38 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=172 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:38 - INFO - bakezy.forecast - Forecast cache miss: product_id=172 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:25:18.295222
+2025-12-05 15:05:40 - INFO - bakezy.forecast - Forecast complete: product_id=172 horizon_days=14 points=14
+2025-12-05 15:05:40 - INFO - bakezy.forecast - Stored forecast in cache: product_id=172 bakery_id=7 horizon_days=14
+2025-12-05 15:05:40 - INFO - bakezy.forecast - Starting forecast: product_id=173 horizon_days=14
+2025-12-05 15:05:40 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=173 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:40 - INFO - bakezy.forecast - Forecast cache miss: product_id=173 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:25:39.340832
+2025-12-05 15:05:44 - INFO - bakezy.forecast - Forecast complete: product_id=173 horizon_days=14 points=14
+2025-12-05 15:05:44 - INFO - bakezy.forecast - Stored forecast in cache: product_id=173 bakery_id=7 horizon_days=14
+2025-12-05 15:05:44 - INFO - bakezy.forecast - Starting forecast: product_id=174 horizon_days=14
+2025-12-05 15:05:44 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=174 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:44 - INFO - bakezy.forecast - Forecast cache miss: product_id=174 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:25:59.719299
+2025-12-05 15:05:46 - INFO - bakezy.forecast - Forecast complete: product_id=174 horizon_days=14 points=14
+2025-12-05 15:05:46 - INFO - bakezy.forecast - Stored forecast in cache: product_id=174 bakery_id=7 horizon_days=14
+2025-12-05 15:05:46 - INFO - bakezy.forecast - Starting forecast: product_id=175 horizon_days=14
+2025-12-05 15:05:46 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=175 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:46 - INFO - bakezy.forecast - Forecast cache miss: product_id=175 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:26:21.172167
+2025-12-05 15:05:48 - INFO - bakezy.forecast - Forecast complete: product_id=175 horizon_days=14 points=14
+2025-12-05 15:05:48 - INFO - bakezy.forecast - Stored forecast in cache: product_id=175 bakery_id=7 horizon_days=14
+2025-12-05 15:05:48 - INFO - bakezy.forecast - Starting forecast: product_id=176 horizon_days=14
+2025-12-05 15:05:48 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=176 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:48 - INFO - bakezy.forecast - Forecast cache miss: product_id=176 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:26:42.043550
+2025-12-05 15:05:50 - INFO - bakezy.forecast - Forecast complete: product_id=176 horizon_days=14 points=14
+2025-12-05 15:05:50 - INFO - bakezy.forecast - Stored forecast in cache: product_id=176 bakery_id=7 horizon_days=14
+2025-12-05 15:05:50 - INFO - bakezy.forecast - Starting forecast: product_id=177 horizon_days=14
+2025-12-05 15:05:50 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=177 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:50 - INFO - bakezy.forecast - Forecast cache miss: product_id=177 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:26:57.837376
+2025-12-05 15:05:52 - INFO - bakezy.forecast - Forecast complete: product_id=177 horizon_days=14 points=14
+2025-12-05 15:05:52 - INFO - bakezy.forecast - Stored forecast in cache: product_id=177 bakery_id=7 horizon_days=14
+2025-12-05 15:05:52 - INFO - bakezy.forecast - Starting forecast: product_id=178 horizon_days=14
+2025-12-05 15:05:52 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=178 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:52 - INFO - bakezy.forecast - Forecast cache miss: product_id=178 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:27:16.262434
+2025-12-05 15:05:54 - INFO - bakezy.forecast - Forecast complete: product_id=178 horizon_days=14 points=14
+2025-12-05 15:05:54 - INFO - bakezy.forecast - Stored forecast in cache: product_id=178 bakery_id=7 horizon_days=14
+2025-12-05 15:05:54 - INFO - bakezy.forecast - Starting forecast: product_id=179 horizon_days=14
+2025-12-05 15:05:54 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=179 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:54 - INFO - bakezy.forecast - Forecast cache miss: product_id=179 bakery_id=7 horizon_days=14 last_trained_at=2025-12-05T05:27:33.941959
+2025-12-05 15:05:55 - INFO - bakezy.forecast - Forecast complete: product_id=179 horizon_days=14 points=14
+2025-12-05 15:05:55 - INFO - bakezy.forecast - Stored forecast in cache: product_id=179 bakery_id=7 horizon_days=14
+2025-12-05 15:05:55 - INFO - bakezy.forecast - Starting forecast: product_id=180 horizon_days=14
+2025-12-05 15:05:55 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=180 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:55 - INFO - bakezy.forecast - Forecast cache hit: product_id=180 bakery_id=7 horizon_days=14 age=64.8s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=152 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=152 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=152 bakery_id=7 horizon_days=14 age=54.9s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=153 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=153 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=153 bakery_id=7 horizon_days=14 age=53.9s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=154 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=154 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=154 bakery_id=7 horizon_days=14 age=52.8s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=155 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=155 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=155 bakery_id=7 horizon_days=14 age=51.7s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=156 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=156 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=156 bakery_id=7 horizon_days=14 age=50.3s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=157 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=157 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=157 bakery_id=7 horizon_days=14 age=49.3s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=158 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=158 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=158 bakery_id=7 horizon_days=14 age=48.1s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=159 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=159 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=159 bakery_id=7 horizon_days=14 age=47.0s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=160 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=160 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=160 bakery_id=7 horizon_days=14 age=45.9s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=161 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=161 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=161 bakery_id=7 horizon_days=14 age=44.8s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=162 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=162 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=162 bakery_id=7 horizon_days=14 age=43.7s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=163 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=163 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=163 bakery_id=7 horizon_days=14 age=42.6s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=164 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=164 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=164 bakery_id=7 horizon_days=14 age=40.8s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=165 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=165 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=165 bakery_id=7 horizon_days=14 age=38.8s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=166 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=166 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=166 bakery_id=7 horizon_days=14 age=37.1s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=167 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=167 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=167 bakery_id=7 horizon_days=14 age=34.8s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=168 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=168 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=168 bakery_id=7 horizon_days=14 age=30.9s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=169 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=169 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=169 bakery_id=7 horizon_days=14 age=27.9s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=170 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=170 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=170 bakery_id=7 horizon_days=14 age=25.2s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=171 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=171 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=171 bakery_id=7 horizon_days=14 age=21.9s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=172 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=172 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=172 bakery_id=7 horizon_days=14 age=18.2s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=173 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=173 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=173 bakery_id=7 horizon_days=14 age=15.5s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=174 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=174 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=174 bakery_id=7 horizon_days=14 age=12.1s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=175 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=175 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=175 bakery_id=7 horizon_days=14 age=10.0s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=176 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=176 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=176 bakery_id=7 horizon_days=14 age=7.6s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=177 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=177 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=177 bakery_id=7 horizon_days=14 age=5.6s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=178 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=178 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=178 bakery_id=7 horizon_days=14 age=3.7s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=179 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=179 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=179 bakery_id=7 horizon_days=14 age=1.8s
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Starting forecast: product_id=180 horizon_days=14
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Loaded 366 sales records for product_id=180 (from 2024-11-01 to 2025-11-01)
+2025-12-05 15:05:56 - INFO - bakezy.forecast - Forecast cache hit: product_id=180 bakery_id=7 horizon_days=14 age=65.1s
