@@ -176,3 +176,4 @@ def delete_weather_data(
     db.commit()
     return None
 
+

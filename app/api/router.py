@@ -19,6 +19,7 @@ from .ai_assistant import router as ai_assistant_router
 from .events import router as events_router
 from .promotions import router as promotions_router
 from .weather import router as weather_router
+from .walk_forward_validation import router as walk_forward_validation_router
 
 api_router = APIRouter()
 
@@ -41,3 +42,4 @@ api_router.include_router(weekday_pattern_router)
 api_router.include_router(forecast_vs_actual_router)
 api_router.include_router(dashboard_summary_router)
 api_router.include_router(ai_assistant_router)
+api_router.include_router(walk_forward_validation_router)

@@ -17,3 +17,4 @@ export async function fetchSalesRecords(
   return apiFetch<SalesRecord[]>(url);
 }
 
+

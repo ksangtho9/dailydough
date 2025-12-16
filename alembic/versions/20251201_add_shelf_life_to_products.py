@@ -35,3 +35,4 @@ def downgrade() -> None:
     op.drop_column("products", "shelf_life_days")
 
 
+

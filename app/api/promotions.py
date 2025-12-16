@@ -190,3 +190,4 @@ def delete_promotion(
     db.commit()
     return None
 
+

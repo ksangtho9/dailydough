@@ -98,3 +98,4 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_events_id"), table_name="events")
     op.drop_table("events")
 
+

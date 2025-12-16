@@ -27,3 +27,4 @@ def downgrade() -> None:
     op.drop_column("products", "cost_per_unit")
     op.drop_column("products", "price")
 
+

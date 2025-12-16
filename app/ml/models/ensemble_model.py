@@ -178,3 +178,4 @@ class EnsembleForecaster:
         total = prophet_weight + xgboost_weight
         return prophet_weight / total, xgboost_weight / total
 
+

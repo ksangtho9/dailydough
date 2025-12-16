@@ -44,3 +44,8 @@ class Product(Base):
         back_populates="product",
         cascade="all, delete-orphan",
     )
+    walk_forward_results = relationship(
+        "WalkForwardResult",
+        back_populates="product",
+        cascade="all, delete-orphan",
+    )

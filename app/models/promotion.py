@@ -25,3 +25,4 @@ class Promotion(Base):
     bakery = relationship("Bakery", back_populates="promotions")
     product = relationship("Product", back_populates="promotions")
 
+
