@@ -229,12 +229,24 @@ def optimize_prophet_hyperparameters(
                     # Alignment issue, skip this fold
                     continue
                 
-                # Merge with actuals
-                test_merged = test_df[["ds", "y"]].merge(
+                # Merge with actuals (include is_valid_day if present)
+                test_cols = ["ds", "y"]
+                if "is_valid_day" in test_df.columns:
+                    test_cols.append("is_valid_day")
+                
+                test_merged = test_df[test_cols].merge(
                     test_forecast[["ds", "yhat"]],
                     on="ds",
                     how="inner",
                 )
+                
+                if len(test_merged) == 0:
+                    continue
+                
+                # Filter to valid days only for metrics computation
+                # Keep CV split boundaries calendar-based, but evaluate only on valid days
+                if "is_valid_day" in test_merged.columns:
+                    test_merged = test_merged[test_merged["is_valid_day"] == 1]
                 
                 if len(test_merged) == 0:
                     continue
@@ -441,8 +453,22 @@ def optimize_xgboost_hyperparameters(
                 
                 predictions = model.predict(test_df)
                 
-                # Get actual values
-                actual = test_df["y"].values
+                # Filter to valid days only for metrics computation
+                # Keep CV split boundaries calendar-based, but evaluate only on valid days
+                if "is_valid_day" in test_df.columns:
+                    test_df_valid = test_df[test_df["is_valid_day"] == 1].copy()
+                    if len(test_df_valid) == 0:
+                        continue
+                    # Re-predict on valid test set only
+                    if model.feature_cols is None:
+                        continue
+                    missing_cols = set(model.feature_cols) - set(test_df_valid.columns)
+                    if missing_cols:
+                        continue
+                    predictions = model.predict(test_df_valid)
+                    actual = test_df_valid["y"].values
+                else:
+                    actual = test_df["y"].values
                 
                 # Ensure numeric types
                 actual = pd.to_numeric(actual, errors='coerce')

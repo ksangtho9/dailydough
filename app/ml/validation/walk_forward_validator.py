@@ -403,3 +403,5 @@ class WalkForwardValidator:
             "is_complete": next_date is None and len(predictions_pending) == 0,
             "metrics": metrics,
         }
+
+

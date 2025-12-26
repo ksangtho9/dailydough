@@ -26,3 +26,5 @@ class Promotion(Base):
     product = relationship("Product", back_populates="promotions")
 
 
+
+

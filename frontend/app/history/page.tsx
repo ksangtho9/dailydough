@@ -656,7 +656,7 @@ export default function HistoryPage() {
                 <tbody className="bg-white divide-y divide-slate-200">
                   {viewMode === "individual" ? (
                     // Individual records view
-                    paginatedRecords.map((record) => (
+                    (paginatedRecords as SalesRecordWithProduct[]).map((record) => (
                       <tr key={record.id} className="hover:bg-slate-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-slate-900">
                           {formatDate(record.date)}
@@ -673,7 +673,7 @@ export default function HistoryPage() {
                     ))
                   ) : (
                     // Grouped views (byDate or byProduct)
-                    paginatedRecords.map((group) => {
+                    (paginatedRecords as Array<{ key: string; label: string; total: number; records: SalesRecordWithProduct[] }>).map((group) => {
                       const isExpanded = expandedGroups.has(group.key);
                       return (
                         <React.Fragment key={group.key}>

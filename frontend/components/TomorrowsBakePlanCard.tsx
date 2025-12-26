@@ -23,7 +23,7 @@ export function TomorrowsBakePlanCard({ bakeryId }: Props) {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetchBakePlan(bakeryId);
+        const res = await fetchBakePlan(bakeryId!);
         if (!cancelled) {
           setData(res);
         }

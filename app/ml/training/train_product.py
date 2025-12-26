@@ -12,6 +12,9 @@ from app.models import Product, SalesRecord, ForecastMetrics
 from app.ml.preprocessing import SalesPreprocessor, RawSalesRecord
 from app.ml.trainer import ModelTrainer
 from app.ml.metrics import calculate_wape
+import logging
+
+logger = logging.getLogger("bakezy.training")
 
 
 def _compute_metrics(train_result, cleaned_df) -> tuple[Optional[float], Optional[float], Optional[float]]:
@@ -26,7 +29,16 @@ def _compute_metrics(train_result, cleaned_df) -> tuple[Optional[float], Optiona
     try:
         if train_result.model_name == "prophet":
             forecast_df = train_result.model.predict(0)  # includes training range
-            merged = forecast_df.merge(cleaned_df, on="ds", how="inner")
+            # Include is_valid_day in merge if present
+            merge_cols = ["ds", "y"]
+            if "is_valid_day" in cleaned_df.columns:
+                merge_cols.append("is_valid_day")
+            merged = forecast_df.merge(cleaned_df[merge_cols], on="ds", how="inner")
+            if merged.empty:
+                return None, None, None
+            # Filter to valid days only for metrics
+            if "is_valid_day" in merged.columns:
+                merged = merged[merged["is_valid_day"] == 1]
             if merged.empty:
                 return None, None, None
             actual = merged["y"]
@@ -37,10 +49,15 @@ def _compute_metrics(train_result, cleaned_df) -> tuple[Optional[float], Optiona
                 return None, None, None
             # Extract features from cleaned_df
             feature_df = cleaned_df.copy()
+            # Filter to valid days for prediction and metrics
+            if "is_valid_day" in feature_df.columns:
+                feature_df = feature_df[feature_df["is_valid_day"] == 1].copy()
+            if feature_df.empty:
+                return None, None, None
             X = feature_df[train_result.model.feature_cols].values
             predictions = train_result.model.model.predict(X)
             
-            merged = cleaned_df.copy()
+            merged = feature_df.copy()
             merged["yhat"] = predictions
             actual = merged["y"]
             predicted = merged["yhat"]
@@ -71,7 +88,15 @@ def _compute_metrics(train_result, cleaned_df) -> tuple[Optional[float], Optiona
             # Merge with actuals
             forecast_df["ds"] = pd.to_datetime(forecast_df["ds"])
             cleaned_df["ds"] = pd.to_datetime(cleaned_df["ds"])
-            merged = forecast_df.merge(cleaned_df[["ds", "y"]], on="ds", how="inner")
+            merge_cols = ["ds", "y"]
+            if "is_valid_day" in cleaned_df.columns:
+                merge_cols.append("is_valid_day")
+            merged = forecast_df.merge(cleaned_df[merge_cols], on="ds", how="inner")
+            if merged.empty:
+                return None, None, None
+            # Filter to valid days only for metrics
+            if "is_valid_day" in merged.columns:
+                merged = merged[merged["is_valid_day"] == 1]
             if merged.empty:
                 return None, None, None
             actual = merged["y"]
@@ -176,8 +201,47 @@ def train_product(
             }
 
         trainer = ModelTrainer()
+        
+        # Initial training
         train_result = trainer.train(cleaned, model_name=model_name, optimize_with_wape=True)
-
+        
+        # Feature pruning (adaptive: drop bottom 10%) - only for XGBoost
+        if model_name == "xgboost" and train_result.model.feature_cols is not None:
+            from app.ml.feature_selection import compute_feature_importance, prune_features_adaptive
+            
+            # Get training data with features
+            feature_df = cleaned.df.copy()
+            if "is_valid_day" in feature_df.columns:
+                feature_df = feature_df[feature_df["is_valid_day"] == 1].copy()
+            
+            if not feature_df.empty and len(train_result.model.feature_cols) > 5:
+                try:
+                    # Compute feature importance
+                    X = feature_df[train_result.model.feature_cols].values
+                    y = feature_df["y"].values
+                    
+                    importance_df = compute_feature_importance(
+                        model=train_result.model.model,
+                        X=X,
+                        y=y,
+                        feature_names=train_result.model.feature_cols,
+                        model_name="xgboost",
+                    )
+                    
+                    # Prune features (drop bottom 10%)
+                    features_to_keep = prune_features_adaptive(importance_df, bottom_percentile=10.0)
+                    
+                    original_feature_count = len(train_result.model.feature_cols)
+                    if len(features_to_keep) < original_feature_count and len(features_to_keep) > 0:
+                        # Retrain model with pruned features
+                        X_pruned = feature_df[features_to_keep].values
+                        train_result.model.model.fit(X_pruned, y)
+                        # Update feature_cols in model after retraining
+                        train_result.model.feature_cols = features_to_keep
+                        logger.info(f"Feature pruning: retrained with {len(features_to_keep)} features (removed {original_feature_count - len(features_to_keep)})")
+                except Exception as e:
+                    logger.warning(f"Feature pruning failed: {e}, continuing with all features")
+        
         mape, rmse, wape = _compute_metrics(train_result, cleaned.df)
         trained_at = datetime.now(timezone.utc)
 
@@ -193,7 +257,11 @@ def train_product(
         metrics.mape = mape
         metrics.rmse = rmse
         metrics.wape = wape
-        metrics.n_points = len(cleaned.df)
+        # Count only valid days for n_points
+        if "is_valid_day" in cleaned.df.columns:
+            metrics.n_points = len(cleaned.df[cleaned.df["is_valid_day"] == 1])
+        else:
+            metrics.n_points = len(cleaned.df)
         metrics.model_type = train_result.model_name
         metrics.status = "ok"
         metrics.last_trained_at = trained_at
@@ -201,12 +269,18 @@ def train_product(
         db.commit()
         db.refresh(metrics)
 
+        # Count only valid days for n_points
+        if "is_valid_day" in cleaned.df.columns:
+            n_points = len(cleaned.df[cleaned.df["is_valid_day"] == 1])
+        else:
+            n_points = len(cleaned.df)
+        
         return {
             "product_id": product_id,
             "product_name": product.name,
             "status": "ok",
             "model_type": train_result.model_name,
-            "n_points": len(cleaned.df),
+            "n_points": n_points,
             "mape": mape,
             "rmse": rmse,
             "wape": wape,

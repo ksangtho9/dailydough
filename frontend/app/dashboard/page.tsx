@@ -45,8 +45,30 @@ type ProductAccuracy = {
   productName: string;
   mape: number | null;
   rmse: number | null;
+  wape: number | null;
   n_points: number;
+  valid_points_count: number | null;
   lastTrainedAt: string | null;
+  start_date: string | null;
+  end_date: string | null;
+};
+
+type ForecastVsActualRow = {
+  date: string;
+  actual: number | null;
+  forecast: number | null;
+  error: number | null;
+  abs_error: number | null;
+  pct_error: number | null;
+};
+
+type ForecastVsActualData = {
+  product_id: number;
+  rows: ForecastVsActualRow[];
+  wape: number | null;
+  valid_points_count: number;
+  start_date: string;
+  end_date: string;
 };
 
 function formatFriendlyDate(input?: string) {
@@ -218,6 +240,30 @@ export default function DashboardPage() {
   const [productsAccuracy, setProductsAccuracy] = useState<ProductAccuracy[]>([]);
   const [accuracyLoading, setAccuracyLoading] = useState(false);
   const [accuracyError, setAccuracyError] = useState<string | null>(null);
+  
+  // Date selection state - default to range mode with last 30 days to ensure WAPE is calculated
+  const [dateMode, setDateMode] = useState<"single" | "range">("range");
+  const [singleDate, setSingleDate] = useState<string>(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 1); // Yesterday
+    return date.toISOString().split('T')[0];
+  });
+  const [startDate, setStartDate] = useState<string>(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 30);
+    return date.toISOString().split('T')[0];
+  });
+  const [endDate, setEndDate] = useState<string>(() => {
+    const date = new Date();
+    date.setDate(date.getDate() - 1); // Yesterday
+    return date.toISOString().split('T')[0];
+  });
+  
+  // Forecast vs actual data state
+  const [forecastVsActualData, setForecastVsActualData] = useState<ForecastVsActualData | null>(null);
+  const [forecastVsActualLoading, setForecastVsActualLoading] = useState(false);
+  const [forecastVsActualError, setForecastVsActualError] = useState<string | null>(null);
+  const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -336,7 +382,7 @@ export default function DashboardPage() {
     };
   }, [bakeryId]);
 
-  // Load accuracy data when accuracy tab is active
+  // Load accuracy data when accuracy tab is active or date range changes
   useEffect(() => {
     if (bakeryId == null || activeTab !== "accuracy") {
       setProducts([]);
@@ -351,13 +397,40 @@ export default function DashboardPage() {
       setAccuracyError(null);
 
       try {
-        // New, fast path: fetch per-product accuracy metrics in a single call
-        const accuracyResults = await apiFetch<ProductAccuracy[]>(
-          `/api/forecast-accuracy/bakery/${bakeryId}`
-        );
+        // Build query params for date filtering
+        // Always provide dates to ensure WAPE is calculated (default to last 30 days if not set)
+        const params = new URLSearchParams();
+        if (dateMode === "single" && singleDate) {
+          params.append('start_date', singleDate);
+          // end_date not provided = single date mode
+        } else if (dateMode === "range") {
+          if (startDate) params.append('start_date', startDate);
+          if (endDate) params.append('end_date', endDate);
+        } else {
+          // Default to last 30 days if no dates selected
+          params.append('start_date', startDate);
+          params.append('end_date', endDate);
+        }
+        const queryString = params.toString();
+        const url = `/api/forecast-accuracy/bakery/${bakeryId}${queryString ? `?${queryString}` : ''}`;
+        
+        // Fetch per-product accuracy metrics with date filtering
+        const accuracyResults = await apiFetch<ProductAccuracy[]>(url);
 
         if (!cancelled) {
-          setProductsAccuracy(accuracyResults);
+          // Map API response to frontend format
+          setProductsAccuracy(accuracyResults.map((r: any) => ({
+            productId: r.product_id,
+            productName: r.product_name,
+            mape: r.mape,
+            rmse: r.rmse,
+            wape: r.wape,
+            n_points: r.n_points,
+            valid_points_count: r.valid_points_count ?? null,
+            lastTrainedAt: r.last_trained_at,
+            start_date: r.start_date,
+            end_date: r.end_date,
+          })));
         }
       } catch (err: any) {
         if (!cancelled) {
@@ -377,7 +450,56 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [bakeryId, activeTab]);
+  }, [bakeryId, activeTab, dateMode, singleDate, startDate, endDate]);
+
+  // Load forecast vs actual data when product is selected
+  useEffect(() => {
+    if (selectedProductId == null || activeTab !== "accuracy") {
+      setForecastVsActualData(null);
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadForecastVsActual() {
+      setForecastVsActualLoading(true);
+      setForecastVsActualError(null);
+
+      try {
+        const params = new URLSearchParams();
+        if (dateMode === "single" && singleDate) {
+          params.append('start_date', singleDate);
+          params.append('end_date', singleDate);
+        } else if (dateMode === "range") {
+          if (startDate) params.append('start_date', startDate);
+          if (endDate) params.append('end_date', endDate);
+        }
+        const queryString = params.toString();
+        const url = `/api/products/${selectedProductId}/forecast-vs-actual${queryString ? `?${queryString}` : ''}`;
+        
+        const data = await apiFetch<ForecastVsActualData>(url);
+
+        if (!cancelled) {
+          setForecastVsActualData(data);
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setForecastVsActualError(err?.message ?? "Failed to load forecast vs actual data.");
+          setForecastVsActualData(null);
+        }
+      } finally {
+        if (!cancelled) {
+          setForecastVsActualLoading(false);
+        }
+      }
+    }
+
+    loadForecastVsActual();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedProductId, dateMode, singleDate, startDate, endDate, activeTab]);
 
   // In dev mode, use real API data (based on uploaded sales data)
   // No longer using mock data - dev mode now allows date selection and uses real forecasts
@@ -438,16 +560,18 @@ export default function DashboardPage() {
     return sorted;
   }, [displayBakePlan, sortMode]);
 
-  // Calculate aggregate accuracy statistics
+  // Calculate aggregate accuracy statistics (using WAPE as primary metric)
   const accuracyStats = useMemo(() => {
-    const validAccuracies = productsAccuracy.filter((p) => p.mape !== null);
-    const mapeValues = validAccuracies.map((p) => p.mape!);
-    const rmseValues = validAccuracies.map((p) => p.rmse!).filter((r) => r !== null);
-    const totalDataPoints = validAccuracies.reduce((sum, p) => sum + p.n_points, 0);
-    const highRiskCount = validAccuracies.filter((p) => p.mape! > 25).length;
-    const goodAccuracyCount = validAccuracies.filter((p) => p.mape! <= 10).length;
+    const validAccuracies = productsAccuracy.filter((p) => p.wape !== null);
+    const wapeValues = validAccuracies.map((p) => p.wape!);
+    const mapeValues = productsAccuracy.map((p) => p.mape).filter((m) => m !== null) as number[];
+    const rmseValues = productsAccuracy.map((p) => p.rmse).filter((r) => r !== null) as number[];
+    const totalDataPoints = validAccuracies.reduce((sum, p) => sum + (p.valid_points_count ?? p.n_points), 0);
+    const highRiskCount = validAccuracies.filter((p) => p.wape! > 25).length;
+    const goodAccuracyCount = validAccuracies.filter((p) => p.wape! <= 10).length;
 
     return {
+      avgWape: wapeValues.length > 0 ? wapeValues.reduce((a, b) => a + b, 0) / wapeValues.length : null,
       avgMape: mapeValues.length > 0 ? mapeValues.reduce((a, b) => a + b, 0) / mapeValues.length : null,
       avgRmse: rmseValues.length > 0 ? rmseValues.reduce((a, b) => a + b, 0) / rmseValues.length : null,
       totalDataPoints,
@@ -748,55 +872,101 @@ export default function DashboardPage() {
           {/* Summary Cards */}
           <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
             <div className="rounded-xl border bg-white p-4 shadow-sm">
-              <p className="text-xs uppercase text-slate-500">
-                Average MAPE
+              <p className="text-xs uppercase text-slate-700 font-semibold">
+                Average WAPE
               </p>
-              <p className="mt-2 text-2xl font-semibold">
-                {accuracyStats.avgMape !== null
-                  ? `${accuracyStats.avgMape.toFixed(1)}%`
+              <p className="mt-2 text-2xl font-semibold text-slate-900">
+                {accuracyStats.avgWape !== null
+                  ? `${accuracyStats.avgWape.toFixed(1)}%`
                   : "—"}
               </p>
-              <p className="mt-1 text-xs text-slate-500">
-                Mean absolute percentage error across all products
+              <p className="mt-1 text-xs text-slate-600">
+                Weighted absolute percentage error (primary metric)
               </p>
             </div>
 
             <div className="rounded-xl border bg-white p-4 shadow-sm">
-              <p className="text-xs uppercase text-slate-500">
+              <p className="text-xs uppercase text-slate-700 font-semibold">
                 Average RMSE
               </p>
-              <p className="mt-2 text-2xl font-semibold">
+              <p className="mt-2 text-2xl font-semibold text-slate-900">
                 {accuracyStats.avgRmse !== null
                   ? accuracyStats.avgRmse.toFixed(1)
                   : "—"}
               </p>
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1 text-xs text-slate-600">
                 Root mean squared error in units
               </p>
             </div>
 
             <div className="rounded-xl border bg-white p-4 shadow-sm">
-              <p className="text-xs uppercase text-slate-500">
+              <p className="text-xs uppercase text-slate-700 font-semibold">
                 Products Trained
               </p>
-              <p className="mt-2 text-2xl font-semibold">
+              <p className="mt-2 text-2xl font-semibold text-slate-900">
                 {accuracyStats.trainedProducts} / {accuracyStats.totalProducts}
               </p>
-              <p className="mt-1 text-xs text-slate-500">
+              <p className="mt-1 text-xs text-slate-600">
                 Products with accuracy data
               </p>
             </div>
 
             <div className="rounded-xl border bg-white p-4 shadow-sm">
-              <p className="text-xs uppercase text-slate-500">
+              <p className="text-xs uppercase text-slate-700 font-semibold">
                 High Risk Items
               </p>
-              <p className="mt-2 text-2xl font-semibold">
+              <p className="mt-2 text-2xl font-semibold text-slate-900">
                 {accuracyStats.highRiskCount}
               </p>
-              <p className="mt-1 text-xs text-slate-500">
-                Products with MAPE &gt; 25%
+              <p className="mt-1 text-xs text-slate-600">
+                Products with WAPE &gt; 25%
               </p>
+            </div>
+          </section>
+
+          {/* Date Selection Picker */}
+          <section className="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div className="flex items-center gap-4 flex-wrap">
+              <label className="text-sm font-medium text-slate-900">Date Selection:</label>
+              <select
+                value={dateMode}
+                onChange={(e) => setDateMode(e.target.value as "single" | "range")}
+                className="rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-900"
+              >
+                <option value="single">Single Date</option>
+                <option value="range">Date Range</option>
+              </select>
+              
+              {dateMode === "single" ? (
+                <input
+                  type="date"
+                  value={singleDate}
+                  onChange={(e) => setSingleDate(e.target.value)}
+                  className="rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-900"
+                />
+              ) : (
+                <>
+                  <input
+                    type="date"
+                    value={startDate}
+                    onChange={(e) => setStartDate(e.target.value)}
+                    className="rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-900"
+                  />
+                  <span className="text-sm text-slate-700 font-medium">to</span>
+                  <input
+                    type="date"
+                    value={endDate}
+                    onChange={(e) => setEndDate(e.target.value)}
+                    className="rounded border border-slate-300 px-3 py-1.5 text-sm text-slate-900"
+                  />
+                </>
+              )}
+              
+              {forecastVsActualData && (
+                <span className="ml-auto text-xs text-slate-700">
+                  {forecastVsActualData.valid_points_count} valid data points
+                </span>
+              )}
             </div>
           </section>
 
@@ -839,7 +1009,7 @@ export default function DashboardPage() {
                   <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
                     <tr>
                       <th className="px-4 py-3 text-left">Product</th>
-                      <th className="px-4 py-3 text-right">MAPE</th>
+                      <th className="px-4 py-3 text-right">WAPE</th>
                       <th className="px-4 py-3 text-right">RMSE</th>
                       <th className="px-4 py-3 text-right">Data Points</th>
                       <th className="px-4 py-3 text-center">
@@ -862,16 +1032,20 @@ export default function DashboardPage() {
                           }`}
                         >
                           <td className="px-4 py-3">
-                            <Link
-                              href={`/products/${product.productId}`}
-                              className="font-medium text-slate-900 hover:text-amber-700 hover:underline"
+                            <button
+                              onClick={() => setSelectedProductId(product.productId)}
+                              className={`font-medium hover:text-amber-700 hover:underline ${
+                                selectedProductId === product.productId
+                                  ? "text-amber-700 underline"
+                                  : "text-slate-900"
+                              }`}
                             >
                               {product.productName}
-                            </Link>
+                            </button>
                           </td>
                           <td className="px-4 py-3 text-right text-slate-900">
-                            {product.mape !== null
-                              ? `${product.mape.toFixed(1)}%`
+                            {product.wape !== null
+                              ? `${product.wape.toFixed(1)}%`
                               : "—"}
                           </td>
                           <td className="px-4 py-3 text-right text-slate-600">
@@ -880,7 +1054,7 @@ export default function DashboardPage() {
                               : "—"}
                           </td>
                           <td className="px-4 py-3 text-right text-slate-600">
-                            {product.n_points}
+                            {product.valid_points_count ?? product.n_points}
                           </td>
                           <td className="px-4 py-3 text-center">
                             {productWithMetrics && (
@@ -900,8 +1074,7 @@ export default function DashboardPage() {
             {!accuracyLoading && !accuracyError && productsAccuracy.length > 0 && (
               <div className="mt-4 text-xs text-slate-500 space-y-1">
                 <p>
-                  💡 Accuracy (MAPE/RMSE) is calculated only on dates after model training, excluding the initial training data.
-                  Click on any product to see detailed accuracy metrics and charts.
+                  💡 Accuracy (WAPE/RMSE) is calculated for the selected date range. Click on any product to see forecast vs actual comparison.
                 </p>
                 <p>
                   📊 Status badge shows training-time model confidence (based on how well the model fit the training data), not real-world post-training accuracy.
@@ -909,6 +1082,92 @@ export default function DashboardPage() {
               </div>
             )}
           </section>
+
+          {/* Forecast vs Actual Table */}
+          {selectedProductId && (
+            <section className="rounded-xl border border-slate-200 bg-white p-8 shadow-sm">
+              <div className="mb-4">
+                <h3 className="text-lg font-semibold text-slate-900">
+                  Forecast vs Actual
+                </h3>
+                <p className="text-sm text-slate-600">
+                  {forecastVsActualData && (
+                    <>
+                      WAPE: {forecastVsActualData.wape !== null ? `${forecastVsActualData.wape.toFixed(1)}%` : "—"} • 
+                      Valid Points: {forecastVsActualData.valid_points_count} • 
+                      Date Range: {forecastVsActualData.start_date} to {forecastVsActualData.end_date}
+                    </>
+                  )}
+                </p>
+              </div>
+
+              {forecastVsActualLoading && (
+                <div className="py-8">
+                  <TextShimmer className="text-sm text-slate-500" duration={1.5}>
+                    Loading forecast vs actual data...
+                  </TextShimmer>
+                </div>
+              )}
+
+              {forecastVsActualError && (
+                <div className="py-8">
+                  <p className="text-sm text-red-600">Error: {forecastVsActualError}</p>
+                </div>
+              )}
+
+              {!forecastVsActualLoading && !forecastVsActualError && forecastVsActualData && (
+                <div className="overflow-x-auto">
+                  <table className="min-w-full text-sm">
+                    <thead className="border-b border-slate-200 bg-slate-50 text-xs uppercase text-slate-500">
+                      <tr>
+                        <th className="px-4 py-3 text-left">Date</th>
+                        <th className="px-4 py-3 text-right">Forecast</th>
+                        <th className="px-4 py-3 text-right">Actual</th>
+                        <th className="px-4 py-3 text-right">Error</th>
+                        <th className="px-4 py-3 text-right">Abs Error</th>
+                        <th className="px-4 py-3 text-right">% Error</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {forecastVsActualData.rows.map((row, idx) => (
+                        <tr
+                          key={row.date}
+                          className={`border-b border-slate-100 ${
+                            idx % 2 === 1 ? "bg-slate-50/50" : "bg-white"
+                          }`}
+                        >
+                          <td className="px-4 py-3 text-slate-900">{row.date}</td>
+                          <td className="px-4 py-3 text-right text-slate-900">
+                            {row.forecast !== null ? row.forecast.toFixed(1) : "—"}
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-900">
+                            {row.actual !== null ? row.actual.toFixed(1) : "—"}
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-600">
+                            {row.error !== null ? row.error.toFixed(1) : "—"}
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-600">
+                            {row.abs_error !== null ? row.abs_error.toFixed(1) : "—"}
+                          </td>
+                          <td className="px-4 py-3 text-right text-slate-600">
+                            {row.pct_error !== null ? `${row.pct_error.toFixed(1)}%` : "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {!forecastVsActualLoading && !forecastVsActualError && !forecastVsActualData && (
+                <div className="py-8">
+                  <p className="text-sm text-slate-500">
+                    Select a product from the table above to view forecast vs actual comparison.
+                  </p>
+                </div>
+              )}
+            </section>
+          )}
         </div>
       )}
 

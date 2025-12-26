@@ -29,9 +29,12 @@ class FeatureEngineer:
 
     def add_lag_features(self, df: pd.DataFrame) -> pd.DataFrame:
         """
-        Adds lag features and rolling statistics.
+        Adds lag features and rolling statistics using previous N valid observations.
+        
+        Uses "previous N valid observations" approach (not calendar-based).
+        Invalid days (is_valid_day == 0) are excluded from lag computation.
 
-        Assumes df has column "y" (target) and "ds" (datetime).
+        Assumes df has column "y" (target), "ds" (datetime), and optionally "is_valid_day".
         """
         df = df.copy()
         df = df.sort_values("ds").reset_index(drop=True)
@@ -41,24 +44,199 @@ class FeatureEngineer:
 
         # Lag features
         if self.config.include_lag_features:
-            df["lag_1"] = df["y"].shift(1)
-            df["lag_7"] = df["y"].shift(7)
-            df["lag_14"] = df["y"].shift(14)
-            df["lag_30"] = df["y"].shift(30)
+            # Check if is_valid_day column exists
+            has_valid_day = "is_valid_day" in df.columns
+            
+            if has_valid_day:
+                # Compute lags using "previous N valid observations" approach
+                lag_windows = [1, 2, 3, 7, 14, 21, 30]  # lag_60 deferred
+                
+                # Initialize all lag columns
+                for lag_n in lag_windows:
+                    df[f"lag_{lag_n}"] = np.nan
+                
+                # Build a list of valid indices and their y values for efficient lookup
+                valid_indices = []
+                valid_y_values = []
+                for i in range(len(df)):
+                    if df.loc[i, "is_valid_day"] == 1 and pd.notna(df.loc[i, "y"]):
+                        valid_indices.append(i)
+                        valid_y_values.append(df.loc[i, "y"])
+                
+                # For each row, find the previous N valid observations
+                for i in range(len(df)):
+                    if df.loc[i, "is_valid_day"] == 1:
+                        # Find position of current index in valid_indices list
+                        try:
+                            current_pos = valid_indices.index(i)
+                        except ValueError:
+                            # Current row not in valid list (shouldn't happen, but handle gracefully)
+                            continue
+                        
+                        # For each lag window, get the value from N positions back
+                        for lag_n in lag_windows:
+                            lag_col = f"lag_{lag_n}"
+                            if current_pos >= lag_n:
+                                # We have enough history
+                                prev_valid_idx = valid_indices[current_pos - lag_n]
+                                df.loc[i, lag_col] = valid_y_values[current_pos - lag_n]
+                
+                # Compute rolling statistics on valid days only
+                # Filter to valid days, compute rolling stats, then map back
+                valid_mask = df["is_valid_day"] == 1
+                if valid_mask.any():
+                    valid_indices = df[valid_mask].index.tolist()
+                    valid_y = df.loc[valid_mask, "y"].values
+                    
+                    # Compute rolling stats on valid series
+                    valid_rolling_mean_7 = pd.Series(valid_y).rolling(window=7, min_periods=1).mean().values
+                    valid_rolling_mean_30 = pd.Series(valid_y).rolling(window=30, min_periods=1).mean().values
+                    valid_rolling_std_7 = pd.Series(valid_y).rolling(window=7, min_periods=1).std().fillna(0).values
+                    valid_rolling_std_30 = pd.Series(valid_y).rolling(window=30, min_periods=1).std().fillna(0).values
+                    
+                    # Map back to original dataframe
+                    df["rolling_mean_7"] = np.nan
+                    df["rolling_mean_30"] = np.nan
+                    df["rolling_std_7"] = np.nan
+                    df["rolling_std_30"] = np.nan
+                    
+                    for idx, orig_idx in enumerate(valid_indices):
+                        df.loc[orig_idx, "rolling_mean_7"] = valid_rolling_mean_7[idx]
+                        df.loc[orig_idx, "rolling_mean_30"] = valid_rolling_mean_30[idx]
+                        df.loc[orig_idx, "rolling_std_7"] = valid_rolling_std_7[idx]
+                        df.loc[orig_idx, "rolling_std_30"] = valid_rolling_std_30[idx]
+                else:
+                    # No valid days - set all to NaN
+                    df["rolling_mean_7"] = np.nan
+                    df["rolling_mean_30"] = np.nan
+                    df["rolling_std_7"] = np.nan
+                    df["rolling_std_30"] = np.nan
+            else:
+                # No is_valid_day column - use calendar-based lags (backward compatibility)
+                df["lag_1"] = df["y"].shift(1)
+                df["lag_2"] = df["y"].shift(2)
+                df["lag_3"] = df["y"].shift(3)
+                df["lag_7"] = df["y"].shift(7)
+                df["lag_14"] = df["y"].shift(14)
+                df["lag_21"] = df["y"].shift(21)
+                df["lag_30"] = df["y"].shift(30)
+                
+                # Rolling averages
+                df["rolling_mean_7"] = df["y"].rolling(window=7, min_periods=1).mean()
+                df["rolling_mean_30"] = df["y"].rolling(window=30, min_periods=1).mean()
+                
+                # Rolling standard deviations
+                df["rolling_std_7"] = df["y"].rolling(window=7, min_periods=1).std().fillna(0)
+                df["rolling_std_30"] = df["y"].rolling(window=30, min_periods=1).std().fillna(0)
 
-            # Rolling averages
-            df["rolling_mean_7"] = df["y"].rolling(window=7, min_periods=1).mean()
-            df["rolling_mean_30"] = df["y"].rolling(window=30, min_periods=1).mean()
+        return df
 
-            # Rolling standard deviations
-            df["rolling_std_7"] = df["y"].rolling(window=7, min_periods=1).std().fillna(0)
-            df["rolling_std_30"] = df["y"].rolling(window=30, min_periods=1).std().fillna(0)
+    def add_ewma_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Adds Exponential Weighted Moving Average (EWMA) features.
+        Computes on valid days only (treat invalid days as missing/NaN in series).
+        """
+        df = df.copy()
+        df = df.sort_values("ds").reset_index(drop=True)
 
-            # Fill NaN values for early rows
-            df["lag_1"] = df["lag_1"].fillna(df["y"].mean() if not df["y"].empty else 0)
-            df["lag_7"] = df["lag_7"].fillna(df["y"].mean() if not df["y"].empty else 0)
-            df["lag_14"] = df["lag_14"].fillna(df["y"].mean() if not df["y"].empty else 0)
-            df["lag_30"] = df["lag_30"].fillna(df["y"].mean() if not df["y"].empty else 0)
+        if "y" not in df.columns:
+            return df
+
+        has_valid_day = "is_valid_day" in df.columns
+
+        if has_valid_day and (df["is_valid_day"] == 1).any():
+            # Filter to valid days for EWMA computation
+            valid_mask = df["is_valid_day"] == 1
+            valid_indices = df[valid_mask].index.tolist()
+            valid_y = df.loc[valid_mask, "y"].values
+            
+            if len(valid_y) > 0:
+                # Compute EWMA with different halflives
+                # ewma_7_halflife_3: 7-day EWMA with 3-day halflife
+                # ewma_14_halflife_7: 14-day EWMA with 7-day halflife
+                # ewma_30_halflife_14: 30-day EWMA with 14-day halflife
+                valid_series = pd.Series(valid_y)
+                
+                # Halflife = 3 days for 7-day EWMA
+                ewma_7 = valid_series.ewm(halflife=3, min_periods=1).mean().values
+                # Halflife = 7 days for 14-day EWMA
+                ewma_14 = valid_series.ewm(halflife=7, min_periods=1).mean().values
+                # Halflife = 14 days for 30-day EWMA
+                ewma_30 = valid_series.ewm(halflife=14, min_periods=1).mean().values
+                
+                # Map back to original dataframe
+                df["ewma_7_halflife_3"] = np.nan
+                df["ewma_14_halflife_7"] = np.nan
+                df["ewma_30_halflife_14"] = np.nan
+                
+                for idx, orig_idx in enumerate(valid_indices):
+                    df.loc[orig_idx, "ewma_7_halflife_3"] = ewma_7[idx]
+                    df.loc[orig_idx, "ewma_14_halflife_7"] = ewma_14[idx]
+                    df.loc[orig_idx, "ewma_30_halflife_14"] = ewma_30[idx]
+            else:
+                df["ewma_7_halflife_3"] = np.nan
+                df["ewma_14_halflife_7"] = np.nan
+                df["ewma_30_halflife_14"] = np.nan
+        else:
+            # No is_valid_day or no valid days - compute on all data
+            df["ewma_7_halflife_3"] = df["y"].ewm(halflife=3, min_periods=1).mean()
+            df["ewma_14_halflife_7"] = df["y"].ewm(halflife=7, min_periods=1).mean()
+            df["ewma_30_halflife_14"] = df["y"].ewm(halflife=14, min_periods=1).mean()
+
+        return df
+
+    def add_lagged_rolling_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Adds lagged rolling statistics.
+        rolling_mean_7_lag_1: 7-day mean from 1 valid observation ago
+        rolling_mean_7_lag_7: 7-day mean from 7 valid observations ago
+        rolling_mean_30_lag_7: 30-day mean from 7 valid observations ago
+        """
+        df = df.copy()
+        df = df.sort_values("ds").reset_index(drop=True)
+
+        if "rolling_mean_7" not in df.columns or "rolling_mean_30" not in df.columns:
+            return df
+
+        has_valid_day = "is_valid_day" in df.columns
+
+        if has_valid_day:
+            # Use previous N valid observations approach
+            df["rolling_mean_7_lag_1"] = np.nan
+            df["rolling_mean_7_lag_7"] = np.nan
+            df["rolling_mean_30_lag_7"] = np.nan
+
+            # Build valid indices list for efficient lookup
+            valid_indices = []
+            for i in range(len(df)):
+                if df.loc[i, "is_valid_day"] == 1:
+                    valid_indices.append(i)
+
+            for i in range(len(df)):
+                if df.loc[i, "is_valid_day"] == 1:
+                    try:
+                        current_pos = valid_indices.index(i)
+                        
+                        # Find previous 1 valid observation for rolling_mean_7_lag_1
+                        if current_pos >= 1:
+                            prev_idx = valid_indices[current_pos - 1]
+                            if pd.notna(df.loc[prev_idx, "rolling_mean_7"]):
+                                df.loc[i, "rolling_mean_7_lag_1"] = df.loc[prev_idx, "rolling_mean_7"]
+                        
+                        # Find previous 7 valid observations for rolling_mean_7_lag_7 and rolling_mean_30_lag_7
+                        if current_pos >= 7:
+                            prev_idx = valid_indices[current_pos - 7]
+                            if pd.notna(df.loc[prev_idx, "rolling_mean_7"]):
+                                df.loc[i, "rolling_mean_7_lag_7"] = df.loc[prev_idx, "rolling_mean_7"]
+                            if pd.notna(df.loc[prev_idx, "rolling_mean_30"]):
+                                df.loc[i, "rolling_mean_30_lag_7"] = df.loc[prev_idx, "rolling_mean_30"]
+                    except ValueError:
+                        continue
+        else:
+            # No is_valid_day - use calendar-based shifts
+            df["rolling_mean_7_lag_1"] = df["rolling_mean_7"].shift(1)
+            df["rolling_mean_7_lag_7"] = df["rolling_mean_7"].shift(7)
+            df["rolling_mean_30_lag_7"] = df["rolling_mean_30"].shift(7)
 
         return df
 
@@ -128,15 +306,23 @@ class FeatureEngineer:
                 df["is_weekend"] = df["ds"].dt.dayofweek.isin([5, 6]).astype(int)
             return df
 
-        # Basic day of week
+        # Cyclical encoding for day_of_week and month (replace raw values)
         if self.config.include_day_of_week:
-            df["day_of_week"] = df["ds"].dt.dayofweek  # 0=Mon, 6=Sun
+            day_of_week_raw = df["ds"].dt.dayofweek  # 0=Mon, 6=Sun
+            # Cyclical encoding: sin and cos
+            df["day_of_week_sin"] = np.sin(2 * np.pi * day_of_week_raw / 7)
+            df["day_of_week_cos"] = np.cos(2 * np.pi * day_of_week_raw / 7)
+            # Keep raw for backward compatibility during transition, but will drop later
 
         if self.config.include_is_weekend:
             df["is_weekend"] = df["ds"].dt.dayofweek.isin([5, 6]).astype(int)
 
-        # Month and quarter
-        df["month"] = df["ds"].dt.month
+        # Month and quarter - use cyclical encoding for month
+        month_raw = df["ds"].dt.month
+        df["month_sin"] = np.sin(2 * np.pi * month_raw / 12)
+        df["month_cos"] = np.cos(2 * np.pi * month_raw / 12)
+        # Keep raw month for backward compatibility during transition
+        df["month"] = month_raw
         df["quarter"] = df["ds"].dt.quarter
         df["day_of_month"] = df["ds"].dt.day
 
@@ -161,6 +347,186 @@ class FeatureEngineer:
         df["is_summer"] = ((month >= 6) & (month <= 8)).astype(int)
         df["is_fall"] = ((month >= 9) & (month <= 11)).astype(int)
         df["is_winter"] = ((month == 12) | (month <= 2)).astype(int)
+
+        return df
+
+    def add_trend_momentum_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Adds trend and momentum features.
+        trend_slope_7: Linear trend over last 7 valid days
+        trend_slope_30: Linear trend over last 30 valid days
+        momentum_7d: rolling_mean_7 - rolling_mean_30
+        sales_change_1d: lag_1 - lag_2
+        sales_change_7d: lag_1 - lag_8 (using valid observations)
+        """
+        df = df.copy()
+        df = df.sort_values("ds").reset_index(drop=True)
+
+        # Return early if y column doesn't exist
+        if "y" not in df.columns:
+            df["trend_slope_7"] = np.nan
+            df["trend_slope_30"] = np.nan
+            df["momentum_7d"] = np.nan
+            df["sales_change_1d"] = np.nan
+            df["sales_change_7d"] = np.nan
+            return df
+
+        has_valid_day = "is_valid_day" in df.columns
+
+        # Trend slopes - compute on valid days only
+        if has_valid_day and (df["is_valid_day"] == 1).any():
+            df["trend_slope_7"] = np.nan
+            df["trend_slope_30"] = np.nan
+
+            for i in range(len(df)):
+                if df.loc[i, "is_valid_day"] == 1:
+                    # Get last 7 valid observations for trend_slope_7
+                    valid_y_7 = []
+                    valid_indices_7 = []
+                    for j in range(i, -1, -1):
+                        if df.loc[j, "is_valid_day"] == 1 and pd.notna(df.loc[j, "y"]):
+                            valid_y_7.insert(0, df.loc[j, "y"])
+                            valid_indices_7.insert(0, j)
+                            if len(valid_y_7) >= 7:
+                                break
+                    
+                    if len(valid_y_7) >= 2:
+                        # Compute linear trend (slope)
+                        x = np.arange(len(valid_y_7))
+                        slope = np.polyfit(x, valid_y_7, 1)[0]
+                        df.loc[i, "trend_slope_7"] = slope
+                    
+                    # Get last 30 valid observations for trend_slope_30
+                    valid_y_30 = []
+                    for j in range(i, -1, -1):
+                        if df.loc[j, "is_valid_day"] == 1 and pd.notna(df.loc[j, "y"]):
+                            valid_y_30.insert(0, df.loc[j, "y"])
+                            if len(valid_y_30) >= 30:
+                                break
+                    
+                    if len(valid_y_30) >= 2:
+                        x = np.arange(len(valid_y_30))
+                        slope = np.polyfit(x, valid_y_30, 1)[0]
+                        df.loc[i, "trend_slope_30"] = slope
+        else:
+            # No is_valid_day - compute on all data
+            df["trend_slope_7"] = np.nan
+            df["trend_slope_30"] = np.nan
+            for i in range(len(df)):
+                if i >= 1:
+                    y_window_7 = df.loc[max(0, i-6):i+1, "y"].values
+                    if len(y_window_7) >= 2 and pd.notna(y_window_7).all():
+                        x = np.arange(len(y_window_7))
+                        slope = np.polyfit(x, y_window_7, 1)[0]
+                        df.loc[i, "trend_slope_7"] = slope
+                
+                if i >= 1:
+                    y_window_30 = df.loc[max(0, i-29):i+1, "y"].values
+                    if len(y_window_30) >= 2 and pd.notna(y_window_30).all():
+                        x = np.arange(len(y_window_30))
+                        slope = np.polyfit(x, y_window_30, 1)[0]
+                        df.loc[i, "trend_slope_30"] = slope
+
+        # Momentum and change features
+        if "rolling_mean_7" in df.columns and "rolling_mean_30" in df.columns:
+            df["momentum_7d"] = df["rolling_mean_7"] - df["rolling_mean_30"]
+        else:
+            df["momentum_7d"] = np.nan
+
+        if "lag_1" in df.columns and "lag_2" in df.columns:
+            df["sales_change_1d"] = df["lag_1"] - df["lag_2"]
+        else:
+            df["sales_change_1d"] = np.nan
+
+        # sales_change_7d: lag_1 - value from 8 valid observations ago
+        if has_valid_day and "lag_1" in df.columns:
+            df["sales_change_7d"] = np.nan
+            # Build valid indices list for efficient lookup
+            valid_indices = []
+            valid_y_values = []
+            for i in range(len(df)):
+                if df.loc[i, "is_valid_day"] == 1 and pd.notna(df.loc[i, "y"]):
+                    valid_indices.append(i)
+                    valid_y_values.append(df.loc[i, "y"])
+            
+            for i in range(len(df)):
+                if df.loc[i, "is_valid_day"] == 1 and pd.notna(df.loc[i, "lag_1"]):
+                    try:
+                        current_pos = valid_indices.index(i)
+                        if current_pos >= 8:
+                            # Get value from 8 valid observations ago
+                            prev_y = valid_y_values[current_pos - 8]
+                            df.loc[i, "sales_change_7d"] = df.loc[i, "lag_1"] - prev_y
+                    except ValueError:
+                        continue
+        else:
+            if "lag_1" in df.columns:
+                # Approximate with lag_1 - lag_8 (if lag_8 exists, otherwise use lag_7)
+                if "lag_7" in df.columns:
+                    df["sales_change_7d"] = df["lag_1"] - df["lag_7"]
+                else:
+                    df["sales_change_7d"] = np.nan
+            else:
+                df["sales_change_7d"] = np.nan
+
+        return df
+
+    def add_interaction_features(self, df: pd.DataFrame) -> pd.DataFrame:
+        """
+        Adds minimal interaction features (6 features).
+        weekend_x_rolling_mean_7, weekend_x_lag_7, lag_1_div_rolling_mean_7,
+        lag_7_div_rolling_mean_30, rolling_mean_diff, weekend_x_sales_change
+        """
+        df = df.copy()
+
+        # weekend_x_rolling_mean_7
+        if "is_weekend" in df.columns and "rolling_mean_7" in df.columns:
+            df["weekend_x_rolling_mean_7"] = df["is_weekend"] * df["rolling_mean_7"]
+        else:
+            df["weekend_x_rolling_mean_7"] = 0.0
+
+        # weekend_x_lag_7
+        if "is_weekend" in df.columns and "lag_7" in df.columns:
+            df["weekend_x_lag_7"] = df["is_weekend"] * df["lag_7"]
+        else:
+            df["weekend_x_lag_7"] = 0.0
+
+        # lag_1_div_rolling_mean_7 (handle division by zero)
+        if "lag_1" in df.columns and "rolling_mean_7" in df.columns:
+            df["lag_1_div_rolling_mean_7"] = np.where(
+                df["rolling_mean_7"] != 0,
+                df["lag_1"] / df["rolling_mean_7"],
+                np.nan
+            )
+        else:
+            df["lag_1_div_rolling_mean_7"] = np.nan
+
+        # lag_7_div_rolling_mean_30
+        if "lag_7" in df.columns and "rolling_mean_30" in df.columns:
+            df["lag_7_div_rolling_mean_30"] = np.where(
+                df["rolling_mean_30"] != 0,
+                df["lag_7"] / df["rolling_mean_30"],
+                np.nan
+            )
+        else:
+            df["lag_7_div_rolling_mean_30"] = np.nan
+
+        # rolling_mean_diff
+        if "rolling_mean_7" in df.columns and "rolling_mean_30" in df.columns:
+            df["rolling_mean_diff"] = df["rolling_mean_7"] - df["rolling_mean_30"]
+        else:
+            df["rolling_mean_diff"] = np.nan
+
+        # weekend_x_sales_change
+        if "is_weekend" in df.columns and "sales_change_1d" in df.columns and "lag_7" in df.columns:
+            # sales_change for weekend: lag_1 - lag_7
+            if "lag_1" in df.columns:
+                weekend_sales_change = df["lag_1"] - df["lag_7"]
+                df["weekend_x_sales_change"] = df["is_weekend"] * weekend_sales_change
+            else:
+                df["weekend_x_sales_change"] = 0.0
+        else:
+            df["weekend_x_sales_change"] = 0.0
 
         return df
 
@@ -561,8 +927,20 @@ class FeatureEngineer:
         # Add lag features (needs to be done early, before other features)
         df_out = self.add_lag_features(df_out)
 
-        # Add calendar features
+        # Add EWMA features (after lag features)
+        df_out = self.add_ewma_features(df_out)
+
+        # Add lagged rolling statistics (after rolling stats are computed)
+        df_out = self.add_lagged_rolling_features(df_out)
+
+        # Add calendar features (includes cyclical encoding)
         df_out = self.add_calendar_features(df_out)
+
+        # Add trend and momentum features (after lag and rolling features)
+        df_out = self.add_trend_momentum_features(df_out)
+
+        # Add interaction features (after all base features)
+        df_out = self.add_interaction_features(df_out)
 
         # Add external regressors
         df_out = self.add_holiday_features(df_out, holidays_df)

@@ -259,3 +259,5 @@ class WalkForwardScheduler:
             "auto_prediction": prediction_result,
             "current_status": status,
         }
+
+

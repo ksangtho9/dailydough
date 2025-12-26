@@ -23,7 +23,7 @@ export function TopProductsCard({ bakeryId }: Props) {
       setLoading(true);
       setError(null);
       try {
-        const res = await fetchTopProducts(bakeryId);
+        const res = await fetchTopProducts(bakeryId!);
         if (!cancelled) {
           setData(res);
         }
@@ -99,6 +99,8 @@ export function TopProductsCard({ bakeryId }: Props) {
     </section>
   );
 }
+
+
 
 
 

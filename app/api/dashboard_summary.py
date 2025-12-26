@@ -141,36 +141,12 @@ def get_dashboard_summary(
         recommended_bake = sum(
             max(0, int(round(float(row.yhat or 0.0)))) for row in daily_rows
         )
-    elif not settings.disable_on_demand_analytics_forecasts:
-        # Fallback: if no precomputed forecasts exist yet (e.g. before models
-        # have been trained), fall back to on-demand forecasts so the dashboard
-        # still shows something, at the cost of extra compute.
+    else:
+        # No precomputed forecasts available - return None instead of generating
+        # on-demand forecasts. This prevents connection pool exhaustion from
+        # generating forecasts for many products sequentially.
+        # Precomputed forecasts should be generated via training/background jobs.
         recommended_bake = 0
-        for product in products:
-            try:
-                forecast = get_forecast_for_product(
-                    product_id=product.id,
-                    days_ahead=14,
-                    db=db,
-                )
-            except Exception:
-                continue
-
-            points = getattr(forecast, "points", [])
-            match = next(
-                (
-                    p
-                    for p in points
-                    if str(getattr(p, "date", None)) == tomorrow.isoformat()
-                ),
-                None,
-            )
-            if match is None:
-                continue
-            yhat = getattr(match, "yhat", None)
-            if yhat is None:
-                continue
-            recommended_bake += max(0, int(round(float(yhat))))
 
     if recommended_bake == 0:
         recommended_bake_value = None
@@ -203,8 +179,13 @@ def get_dashboard_summary(
                 expected_waste_pct = surplus / recommended_bake_value
 
     # Calculate post-training accuracy for each product
+    # OPTIMIZATION: Use more efficient query - only select needed columns
     metrics_rows = (
-        db.query(ForecastMetrics)
+        db.query(
+            ForecastMetrics.product_id,
+            ForecastMetrics.mape,
+            ForecastMetrics.last_trained_at,
+        )
         .join(Product, ForecastMetrics.product_id == Product.id)
         .filter(Product.bakery_id == bakery_id)
         .all()
@@ -213,21 +194,17 @@ def get_dashboard_summary(
     post_training_mape_values = []
     high_risk_count = 0
 
+    # OPTIMIZATION: Use MAPE directly from ForecastMetrics instead of recalculating
+    # Recalculating would call get_forecast_for_product for each product, which is
+    # extremely slow and causes connection pool exhaustion.
     for metrics_row in metrics_rows:
-        product_id = metrics_row.product_id
-        last_trained_at = metrics_row.last_trained_at
+        # Use the MAPE from ForecastMetrics directly (already in percentage form)
+        mape_value = metrics_row.mape
         
-        # Calculate post-training accuracy
-        post_mape, _ = calculate_post_training_accuracy(
-            product_id=product_id,
-            last_trained_at=last_trained_at,
-            db=db,
-        )
-        
-        if post_mape is not None:
-            post_training_mape_values.append(post_mape)
+        if mape_value is not None:
+            post_training_mape_values.append(mape_value)
             # High risk: MAPE > 25%
-            if post_mape > 25.0:
+            if mape_value > 25.0:
                 high_risk_count += 1
 
     # Calculate average post-training MAPE (already in percentage form)

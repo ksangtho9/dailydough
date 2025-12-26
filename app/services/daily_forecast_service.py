@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 from datetime import date
 from typing import Iterable, List, Sequence
+import numpy as np
 
 from sqlalchemy import exc as sa_exc
 from sqlalchemy.orm import Session
@@ -48,9 +49,71 @@ def _upsert_product_daily_forecasts_internal(
     existing_by_date = {row.date: row for row in existing_rows}
 
     for point_date, point in points_by_date.items():
-        yhat = float(point.yhat)
-        yhat_lower = float(point.yhat_lower) if point.yhat_lower is not None else None
-        yhat_upper = float(point.yhat_upper) if point.yhat_upper is not None else None
+        # #region agent log
+        try:
+            import json
+            import time
+            from datetime import date as date_type
+            today = date_type.today()
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "H",
+                "location": "daily_forecast_service.py:51",
+                "message": "Processing forecast point for storage",
+                "data": {
+                    "product_id": product_id,
+                    "point_date": point_date.isoformat() if hasattr(point_date, 'isoformat') else str(point_date),
+                    "today": today.isoformat(),
+                    "is_future_date": point_date >= today if hasattr(point_date, '__ge__') else None,
+                    "yhat": point.yhat
+                },
+                "timestamp": int(time.time() * 1000)
+            }
+            with open(r"c:\Users\forfl\Documents\dailydough-1\.cursor\debug.log", "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_entry) + "\n")
+        except Exception:
+            pass
+        # #endregion
+        
+        # Validate yhat before storing - skip if None or invalid
+        if point.yhat is None:
+            logger.warning(
+                f"Skipping forecast for product_id={product_id}, date={point_date} - yhat is None (invalid forecast)"
+            )
+            continue
+        
+        try:
+            yhat = float(point.yhat)
+            # Validate yhat is a valid number (not NaN, not infinite)
+            if not (np.isfinite(yhat) and yhat >= 0):
+                logger.warning(
+                    f"Skipping forecast for product_id={product_id}, date={point_date} - invalid yhat value: {yhat}"
+                )
+                continue
+        except (ValueError, TypeError) as e:
+            logger.warning(
+                f"Skipping forecast for product_id={product_id}, date={point_date} - cannot convert yhat to float: {e}"
+            )
+            continue
+        
+        yhat_lower = None
+        if point.yhat_lower is not None:
+            try:
+                yhat_lower_val = float(point.yhat_lower)
+                if np.isfinite(yhat_lower_val) and yhat_lower_val >= 0:
+                    yhat_lower = yhat_lower_val
+            except (ValueError, TypeError):
+                pass  # Keep as None if conversion fails
+        
+        yhat_upper = None
+        if point.yhat_upper is not None:
+            try:
+                yhat_upper_val = float(point.yhat_upper)
+                if np.isfinite(yhat_upper_val) and yhat_upper_val >= 0:
+                    yhat_upper = yhat_upper_val
+            except (ValueError, TypeError):
+                pass  # Keep as None if conversion fails
 
         row = existing_by_date.get(point_date)
         if row is None:
@@ -96,9 +159,44 @@ def _upsert_product_daily_forecasts_internal(
         
         # Update or insert rows
         for point_date, point in points_by_date.items():
-            yhat = float(point.yhat)
-            yhat_lower = float(point.yhat_lower) if point.yhat_lower is not None else None
-            yhat_upper = float(point.yhat_upper) if point.yhat_upper is not None else None
+            # Validate yhat before storing - skip if None or invalid
+            if point.yhat is None:
+                logger.warning(
+                    f"Skipping forecast for product_id={product_id}, date={point_date} - yhat is None (invalid forecast)"
+                )
+                continue
+            
+            try:
+                yhat = float(point.yhat)
+                # Validate yhat is a valid number (not NaN, not infinite)
+                if not (np.isfinite(yhat) and yhat >= 0):
+                    logger.warning(
+                        f"Skipping forecast for product_id={product_id}, date={point_date} - invalid yhat value: {yhat}"
+                    )
+                    continue
+            except (ValueError, TypeError) as e:
+                logger.warning(
+                    f"Skipping forecast for product_id={product_id}, date={point_date} - cannot convert yhat to float: {e}"
+                )
+                continue
+            
+            yhat_lower = None
+            if point.yhat_lower is not None:
+                try:
+                    yhat_lower_val = float(point.yhat_lower)
+                    if np.isfinite(yhat_lower_val) and yhat_lower_val >= 0:
+                        yhat_lower = yhat_lower_val
+                except (ValueError, TypeError):
+                    pass  # Keep as None if conversion fails
+            
+            yhat_upper = None
+            if point.yhat_upper is not None:
+                try:
+                    yhat_upper_val = float(point.yhat_upper)
+                    if np.isfinite(yhat_upper_val) and yhat_upper_val >= 0:
+                        yhat_upper = yhat_upper_val
+                except (ValueError, TypeError):
+                    pass  # Keep as None if conversion fails
 
             row = existing_by_date.get(point_date)
             if row is None:
@@ -139,9 +237,32 @@ def _upsert_product_daily_forecasts_internal(
             for point_date, point in points_by_date.items():
                 row = existing_by_date.get(point_date)
                 if row is not None:
-                    row.yhat = float(point.yhat)
-                    row.yhat_lower = float(point.yhat_lower) if point.yhat_lower is not None else None
-                    row.yhat_upper = float(point.yhat_upper) if point.yhat_upper is not None else None
+                    # Validate yhat before updating
+                    if point.yhat is None:
+                        continue  # Skip invalid forecasts
+                    try:
+                        yhat = float(point.yhat)
+                        if not (np.isfinite(yhat) and yhat >= 0):
+                            continue  # Skip invalid values
+                        row.yhat = yhat
+                    except (ValueError, TypeError):
+                        continue  # Skip if conversion fails
+                    
+                    if point.yhat_lower is not None:
+                        try:
+                            yhat_lower_val = float(point.yhat_lower)
+                            if np.isfinite(yhat_lower_val) and yhat_lower_val >= 0:
+                                row.yhat_lower = yhat_lower_val
+                        except (ValueError, TypeError):
+                            pass
+                    
+                    if point.yhat_upper is not None:
+                        try:
+                            yhat_upper_val = float(point.yhat_upper)
+                            if np.isfinite(yhat_upper_val) and yhat_upper_val >= 0:
+                                row.yhat_upper = yhat_upper_val
+                        except (ValueError, TypeError):
+                            pass
             
             try:
                 db.flush()

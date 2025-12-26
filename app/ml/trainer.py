@@ -57,7 +57,7 @@ class ModelTrainer:
         """
         df = ts.df.copy()
 
-        # Feature engineering
+        # Feature engineering (on all data first, including invalid days for feature computation)
         df["ds"] = pd.to_datetime(df["ds"])
         df = self.feature_engineer.transform(
             df,
@@ -67,6 +67,13 @@ class ModelTrainer:
             events_df=events_df,
             product_info=product_info,
         )
+
+        # Filter out invalid days from training (but keep in df for reference)
+        # Only train on is_valid_day == 1
+        if "is_valid_day" in df.columns:
+            train_df = df[df["is_valid_day"] == 1].copy()
+        else:
+            train_df = df.copy()
 
         if model_name == "prophet":
             # Optimize hyperparameters if requested
@@ -93,7 +100,7 @@ class ModelTrainer:
             else:
                 # Use default configuration
                 model = ProphetSalesModel()
-            model.fit(df)
+            model.fit(train_df)
             return TrainResult(model_name="prophet", model=model)
 
         elif model_name == "xgboost":
@@ -122,7 +129,7 @@ class ModelTrainer:
             else:
                 # Use default configuration
                 model = XGBoostSalesModel()
-            model.fit(df)
+            model.fit(train_df)
             return TrainResult(model_name="xgboost", model=model)
 
         elif model_name == "ensemble":
@@ -149,7 +156,7 @@ class ModelTrainer:
                 prophet_model = ProphetSalesModel(config=prophet_config)
             else:
                 prophet_model = ProphetSalesModel()
-            prophet_model.fit(df)
+            prophet_model.fit(train_df)
             
             # Train XGBoost
             if optimize_with_wape:
@@ -174,7 +181,7 @@ class ModelTrainer:
                 xgboost_model = XGBoostSalesModel(config=xgb_config)
             else:
                 xgboost_model = XGBoostSalesModel()
-            xgboost_model.fit(df)
+            xgboost_model.fit(train_df)
             
             # Calculate optimal weights based on cross-validation performance if available
             ensemble_config = EnsembleConfig(strategy="weighted_average")

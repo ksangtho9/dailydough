@@ -50,9 +50,9 @@ if not logger.handlers:
 class ForecastPoint:
     """Single forecasted point for a given date."""
     date: str          # ISO date string, e.g. "2025-01-01"
-    yhat: float        # point forecast
-    yhat_lower: float  # lower bound
-    yhat_upper: float  # upper bound
+    yhat: float | None  # point forecast (None if invalid/missing)
+    yhat_lower: float | None  # lower bound (None if invalid/missing)
+    yhat_upper: float | None  # upper bound (None if invalid/missing)
     # Profit metrics (optional - only included if product has price/cost)
     revenue: float | None = None
     cost: float | None = None
@@ -588,6 +588,42 @@ class ForecastService:
 
         df = forecast_result.forecast_df
 
+        # #region agent log
+        try:
+            import json
+            import time
+            from datetime import date as date_type
+            last_train_date = cleaned_ts.df["ds"].max().date() if not cleaned_ts.df.empty else None
+            today = date_type.today()
+            forecast_date_range = f"{df['ds'].min().date() if not df.empty else 'none'} to {df['ds'].max().date() if not df.empty else 'none'}"
+            sample_yhat_values = df["yhat"].head(5).tolist() if not df.empty and "yhat" in df.columns else []
+            zero_forecast_count = (df["yhat"] == 0.0).sum() if not df.empty and "yhat" in df.columns else 0
+            total_forecast_count = len(df) if not df.empty else 0
+            log_entry = {
+                "sessionId": "debug-session",
+                "runId": "run1",
+                "hypothesisId": "I",
+                "location": "forecast_service.py:589",
+                "message": "Forecast generated - checking values",
+                "data": {
+                    "product_id": product_id,
+                    "last_train_date": last_train_date.isoformat() if last_train_date else None,
+                    "today": today.isoformat(),
+                    "horizon_days": horizon_days,
+                    "forecast_date_range": forecast_date_range,
+                    "total_forecast_count": total_forecast_count,
+                    "zero_forecast_count": int(zero_forecast_count),
+                    "sample_yhat_values": sample_yhat_values,
+                    "forecast_df_columns": list(df.columns) if not df.empty else []
+                },
+                "timestamp": int(time.time() * 1000)
+            }
+            with open(r"c:\Users\forfl\Documents\dailydough-1\.cursor\debug.log", "a", encoding="utf-8") as f:
+                f.write(json.dumps(log_entry) + "\n")
+        except Exception:
+            pass
+        # #endregion
+
         # 4) Predict spikes for forecast period
         # Use historical data with spike information for prediction
         historical_with_spikes = cleaned_ts.df.copy()
@@ -611,23 +647,79 @@ class ForecastService:
             date_str = ds_value.date().isoformat()
 
             # Raw Prophet outputs - ensure numeric conversion
+            # Don't default NaN to 0.0 - use None to indicate invalid/missing forecasts
             try:
-                yhat = float(pd.to_numeric(row["yhat"], errors='coerce')) if pd.notna(row.get("yhat")) else 0.0
-                yhat_lower = max(0.0, float(pd.to_numeric(row["yhat_lower"], errors='coerce'))) if pd.notna(row.get("yhat_lower")) else 0.0
-                yhat_upper = max(0.0, float(pd.to_numeric(row["yhat_upper"], errors='coerce'))) if pd.notna(row.get("yhat_upper")) else 0.0
+                yhat_raw = row.get("yhat")
+                if pd.notna(yhat_raw):
+                    yhat_numeric = pd.to_numeric(yhat_raw, errors='coerce')
+                    if pd.notna(yhat_numeric):
+                        yhat_before_clamp = float(yhat_numeric)
+                        yhat = max(0.0, yhat_before_clamp)  # Clamp non-negative
+                        # #region agent log
+                        if yhat == 0.0 and yhat_before_clamp < 0:
+                            try:
+                                import json
+                                import time
+                                log_entry = {
+                                    "sessionId": "debug-session",
+                                    "runId": "run1",
+                                    "hypothesisId": "K",
+                                    "location": "forecast_service.py:656",
+                                    "message": "Zero forecast from negative prediction",
+                                    "data": {
+                                        "product_id": product_id,
+                                        "date": date_str,
+                                        "yhat_before_clamp": yhat_before_clamp,
+                                        "yhat_after_clamp": yhat
+                                    },
+                                    "timestamp": int(time.time() * 1000)
+                                }
+                                with open(r"c:\Users\forfl\Documents\dailydough-1\.cursor\debug.log", "a", encoding="utf-8") as f:
+                                    f.write(json.dumps(log_entry) + "\n")
+                            except Exception:
+                                pass
+                        # #endregion
+                    else:
+                        yhat = None  # Invalid conversion
+                else:
+                    yhat = None  # Missing value
+                
+                yhat_lower_raw = row.get("yhat_lower")
+                if pd.notna(yhat_lower_raw):
+                    yhat_lower_numeric = pd.to_numeric(yhat_lower_raw, errors='coerce')
+                    if pd.notna(yhat_lower_numeric):
+                        yhat_lower = max(0.0, float(yhat_lower_numeric))
+                    else:
+                        yhat_lower = None
+                else:
+                    yhat_lower = None
+                
+                yhat_upper_raw = row.get("yhat_upper")
+                if pd.notna(yhat_upper_raw):
+                    yhat_upper_numeric = pd.to_numeric(yhat_upper_raw, errors='coerce')
+                    if pd.notna(yhat_upper_numeric):
+                        yhat_upper = max(0.0, float(yhat_upper_numeric))
+                    else:
+                        yhat_upper = None
+                else:
+                    yhat_upper = None
             except (ValueError, TypeError) as e:
-                logger.warning(f"Error converting forecast values to numeric: {e}")
-                yhat = 0.0
-                yhat_lower = 0.0
-                yhat_upper = 0.0
+                logger.warning(f"Error converting forecast values to numeric for date {date_str}: {e}")
+                yhat = None
+                yhat_lower = None
+                yhat_upper = None
+            
+            # Skip this point if yhat is invalid (None)
+            if yhat is None:
+                logger.warning(f"Skipping forecast point for {date_str} - invalid yhat value")
+                continue
 
-            # Clamp non-negative
-            yhat = max(0.0, yhat)
-
-            # Round nicely
+            # Round nicely (only if values are not None)
             yhat = round(yhat, 2)
-            yhat_lower = round(yhat_lower, 2)
-            yhat_upper = round(yhat_upper, 2)
+            if yhat_lower is not None:
+                yhat_lower = round(yhat_lower, 2)
+            if yhat_upper is not None:
+                yhat_upper = round(yhat_upper, 2)
 
             # Calculate profit metrics if available
             revenue = None

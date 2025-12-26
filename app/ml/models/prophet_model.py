@@ -183,22 +183,42 @@ class ProphetSalesModel:
                     self.regressors.append(feature)
 
         # Before fitting, ensure all columns are numeric
-        # Prophet may check all columns for NaN, so we need to ensure they're numeric
-        # Ensure 'y' is numeric first
-        df["y"] = pd.to_numeric(df["y"], errors='coerce').fillna(0.0)
+        # Never forward-fill y - only impute regressor features if required
+        # Ensure 'y' is numeric but keep NaN if missing (Prophet will handle it)
+        df["y"] = pd.to_numeric(df["y"], errors='coerce')
+        # Do NOT fillna y - keep as NaN if missing
         
         df_for_fit = df[["ds", "y"]].copy()
         
         # Add only numeric regressor columns
+        # For regressor features: forward-fill from past, then fallback to rolling_mean_30, then global median
         for regressor in self.regressors:
             if regressor in df.columns:
                 # Ensure it's numeric
-                numeric_col = pd.to_numeric(df[regressor], errors='coerce').fillna(0.0)
+                numeric_col = pd.to_numeric(df[regressor], errors='coerce')
+                # Impute regressor features: forward-fill from past, then fallback
+                if numeric_col.isna().any():
+                    # Forward-fill from past
+                    numeric_col = numeric_col.ffill()
+                    # If still NaN, use rolling_mean_30 if available
+                    if numeric_col.isna().any() and "rolling_mean_30" in df.columns:
+                        rolling_mean = pd.to_numeric(df["rolling_mean_30"], errors='coerce')
+                        numeric_col = numeric_col.fillna(rolling_mean)
+                    # If still NaN, use global median
+                    if numeric_col.isna().any():
+                        global_median = numeric_col.median()
+                        if pd.notna(global_median):
+                            numeric_col = numeric_col.fillna(global_median)
+                        else:
+                            numeric_col = numeric_col.fillna(0.0)
                 df_for_fit[regressor] = numeric_col
         
         # Also add delivery if it was in the original df but not in regressors
+        # Impute delivery (regressor) but not y
         if "delivery" in df.columns and "delivery" not in df_for_fit.columns:
-            numeric_delivery = pd.to_numeric(df["delivery"], errors='coerce').fillna(0.0)
+            numeric_delivery = pd.to_numeric(df["delivery"], errors='coerce')
+            # Forward-fill delivery from past, then 0.0
+            numeric_delivery = numeric_delivery.ffill().fillna(0.0)
             df_for_fit["delivery"] = numeric_delivery
         
         # Final check: ensure all columns in df_for_fit are numeric (except 'ds')
@@ -209,7 +229,12 @@ class ProphetSalesModel:
             if col != "ds":
                 try:
                     # Convert to numeric
-                    numeric_col = pd.to_numeric(df_for_fit[col], errors='coerce').fillna(0.0)
+                    numeric_col = pd.to_numeric(df_for_fit[col], errors='coerce')
+                    # For regressor columns (not y), impute if needed
+                    if col != "y" and numeric_col.isna().any():
+                        numeric_col = numeric_col.ffill()
+                        if numeric_col.isna().any():
+                            numeric_col = numeric_col.fillna(0.0)
                     # Ensure it's actually numeric dtype
                     numeric_col = numeric_col.astype(float)
                     df_for_fit[col] = numeric_col
@@ -237,7 +262,8 @@ class ProphetSalesModel:
                 logger = logging.getLogger("bakezy.prophet")
                 logger.warning(f"Prophet fit failed with regressors, trying without: {e}")
                 df_minimal = df_for_fit[["ds", "y"]].copy()
-                df_minimal["y"] = pd.to_numeric(df_minimal["y"], errors='coerce').fillna(0.0)
+                # Never fill y - keep as NaN if missing, Prophet will handle it
+                df_minimal["y"] = pd.to_numeric(df_minimal["y"], errors='coerce')
                 m = Prophet(
                     daily_seasonality=self.config.daily_seasonality,
                     weekly_seasonality=self.config.weekly_seasonality,
@@ -280,13 +306,11 @@ class ProphetSalesModel:
         future = self.model.make_future_dataframe(periods=horizon_days, freq="D")
         
         # CRITICAL: Ensure 'y' column is numeric (it comes from training data extension)
-        # Prophet checks this column for NaN internally, and if it's not numeric, it fails
+        # Never forward-fill y - keep as NaN for future dates (Prophet will handle it)
         if "y" in future.columns:
             try:
                 future["y"] = pd.to_numeric(future["y"], errors='coerce')
-                # Fill NaN values in 'y' (these are the future dates we're predicting)
-                # For historical dates, keep the actual values; for future, NaN is expected
-                future["y"] = future["y"].fillna(0.0)
+                # Do NOT fillna y - keep NaN for future dates
             except Exception as e:
                 import logging
                 logger = logging.getLogger("bakezy.prophet")
@@ -375,9 +399,14 @@ class ProphetSalesModel:
         # Fill any remaining NaN values (for regressors that were merged but have NaN values)
         # Ensure all regressors are numeric
         for regressor in regressors:
-            if regressor in future.columns:
-                # Convert to numeric and fill NaN
-                future[regressor] = pd.to_numeric(future[regressor], errors='coerce').fillna(0.0)
+                if regressor in future.columns:
+                    # Convert to numeric and impute regressor features (not y)
+                    numeric_reg = pd.to_numeric(future[regressor], errors='coerce')
+                    # Forward-fill from past, then fallback
+                    numeric_reg = numeric_reg.ffill()
+                    if numeric_reg.isna().any():
+                        numeric_reg = numeric_reg.fillna(0.0)
+                    future[regressor] = numeric_reg
 
         # Before predicting, ensure all columns are numeric
         # Prophet may check all columns for NaN during prediction
@@ -387,17 +416,23 @@ class ProphetSalesModel:
         for regressor in regressors:
             if regressor in future.columns:
                 try:
-                    # Ensure it's numeric
-                    numeric_col = pd.to_numeric(future[regressor], errors='coerce').fillna(0.0)
+                    # Ensure it's numeric and impute regressor features
+                    numeric_col = pd.to_numeric(future[regressor], errors='coerce')
+                    # Forward-fill from past, then fallback
+                    numeric_col = numeric_col.ffill()
+                    if numeric_col.isna().any():
+                        numeric_col = numeric_col.fillna(0.0)
                     future_for_predict[regressor] = numeric_col
                 except Exception:
                     # Skip if conversion fails
                     continue
         
         # Also ensure 'y' column is numeric if it exists (for historical data)
+        # Never fill y - keep as NaN if missing
         if "y" in future.columns:
             try:
-                numeric_y = pd.to_numeric(future["y"], errors='coerce').fillna(0.0)
+                numeric_y = pd.to_numeric(future["y"], errors='coerce')
+                # Do NOT fillna - keep NaN
                 future_for_predict["y"] = numeric_y
             except Exception:
                 # If 'y' conversion fails, don't include it
@@ -419,9 +454,18 @@ class ProphetSalesModel:
         future_for_predict = future_for_predict[cols_to_keep].copy()
         
         # Ensure all remaining columns are numeric
+        # For regressor columns (not y), impute if needed
         for col in future_for_predict.columns:
-            if col != "ds":
-                future_for_predict[col] = pd.to_numeric(future_for_predict[col], errors='coerce').fillna(0.0)
+            if col != "ds" and col != "y":
+                numeric_col = pd.to_numeric(future_for_predict[col], errors='coerce')
+                # Forward-fill from past, then fallback
+                numeric_col = numeric_col.ffill()
+                if numeric_col.isna().any():
+                    numeric_col = numeric_col.fillna(0.0)
+                future_for_predict[col] = numeric_col
+            elif col == "y":
+                # Never fill y - keep as NaN if missing
+                future_for_predict[col] = pd.to_numeric(future_for_predict[col], errors='coerce')
         
         # Final safety: ensure all columns are explicitly numeric with proper dtypes
         for col in future_for_predict.columns:

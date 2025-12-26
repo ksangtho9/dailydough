@@ -13,15 +13,19 @@ engine = create_engine(
     SQLALCHEMY_DATABASE_URL,
     connect_args={
         "check_same_thread": False,
-        # Wait up to 30 seconds for a locked database before failing.
-        "timeout": 30,
+        # Wait up to 60 seconds for a locked database before failing.
+        # Increased from 30 to handle concurrent requests better.
+        "timeout": 60,
     },
     # Enable connection pool pre-ping to detect stale connections
     pool_pre_ping=True,
-    # For SQLite, pool_size and max_overflow don't apply, but we set them
-    # for consistency and in case we switch to a different database later
-    pool_size=5,
-    max_overflow=10,
+    # For SQLite, pool_size and max_overflow don't fully apply, but increasing
+    # them helps with concurrent request handling. Increased significantly
+    # to handle multiple concurrent dashboard requests.
+    pool_size=20,  # Increased from 5
+    max_overflow=30,  # Increased from 10
+    # Reduce pool recycle time to prevent stale connections
+    pool_recycle=3600,  # Recycle connections after 1 hour
 )
 
 
