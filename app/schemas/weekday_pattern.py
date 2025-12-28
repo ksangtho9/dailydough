@@ -20,3 +20,5 @@ class WeekdayPatternResponse(BaseModel):
 
 
 
+
+

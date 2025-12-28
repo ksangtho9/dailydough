@@ -108,11 +108,15 @@ class XGBoostSalesModel:
         
         return grad, hess
     
-    def fit(self, df: pd.DataFrame) -> None:
+    def fit(self, df: pd.DataFrame, sample_weight: Optional[np.ndarray] = None) -> None:
         """
         df should contain:
         - y (target)
         - (optional) feature columns (lag features, calendar, etc.)
+        
+        Args:
+            df: Training DataFrame
+            sample_weight: Optional array of sample weights (for down-weighting supply-capped days)
         """
         X, y = self._split_features_target(df)
         
@@ -130,7 +134,7 @@ class XGBoostSalesModel:
             colsample_bytree=self.config.colsample_bytree,
             objective=objective,
         )
-        model.fit(X, y)
+        model.fit(X, y, sample_weight=sample_weight)
         self.model = model
 
     def predict(self, df_future: pd.DataFrame) -> np.ndarray:

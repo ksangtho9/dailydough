@@ -36,3 +36,5 @@ class WalkForwardResult(Base):
     product = relationship("Product", back_populates="walk_forward_results")
 
 
+
+

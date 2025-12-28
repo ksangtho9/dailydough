@@ -23,3 +23,7 @@ def downgrade() -> None:
     op.drop_column("sales_records", "quantity_delivered")
 
 
+
+
+
+

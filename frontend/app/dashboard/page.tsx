@@ -11,9 +11,11 @@ import { BAKERY_SELECTION_CHANGED_EVENT } from "@/lib/bakeries";
 import { TopProductsCard } from "@/components/TopProductsCard";
 import { GettingStartedChecklist } from "@/components/GettingStartedChecklist";
 import { TextShimmer } from "@/components/ui/text-shimmer";
-import { apiFetch } from "@/lib/api";
+import { apiFetch, adminStartRetrain, adminGetTrainingStatus, adminCancelTrainingJob, type JobStatusResponse } from "@/lib/api";
 import type { ForecastMetrics } from "@/lib/metrics";
 import { ForecastConfidenceBadge } from "@/components/ForecastConfidenceBadge";
+import { AdminOnly } from "@/components/AdminOnly";
+import { isAdminMode } from "@/lib/admin";
 
 const STORAGE_KEY = "current_bakery_id";
 const DEV_MODE_KEY = "dashboard_dev_mode";
@@ -264,6 +266,13 @@ export default function DashboardPage() {
   const [forecastVsActualLoading, setForecastVsActualLoading] = useState(false);
   const [forecastVsActualError, setForecastVsActualError] = useState<string | null>(null);
   const [selectedProductId, setSelectedProductId] = useState<number | null>(null);
+  
+  // Admin retrain state
+  const [showRetrainModal, setShowRetrainModal] = useState(false);
+  const [retrainJobStatus, setRetrainJobStatus] = useState<JobStatusResponse | null>(null);
+  const [retrainLoading, setRetrainLoading] = useState(false);
+  const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
+  const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -292,6 +301,100 @@ export default function DashboardPage() {
       setSelectedForecastDate(null);
     }
   };
+
+  // Admin retrain handlers
+  const startRetrain = async (productIds?: number[] | null) => {
+    try {
+      setRetrainLoading(true);
+      const response = await adminStartRetrain(productIds);
+      setRetrainJobStatus({
+        status: "running",
+        job_id: response.job_id,
+        progress: { completed: 0, total: response.total },
+        errors: [],
+      });
+      setShowRetrainModal(false);
+      // Start polling
+      startPolling(response.job_id);
+    } catch (error: any) {
+      alert(`Failed to start retrain: ${error.message}`);
+      setRetrainLoading(false);
+    }
+  };
+
+  const startPolling = (jobId: string) => {
+    // Clear existing interval
+    if (pollingInterval) {
+      clearInterval(pollingInterval);
+    }
+    
+    const interval = setInterval(async () => {
+      try {
+        const status = await adminGetTrainingStatus(jobId);
+        setRetrainJobStatus(status);
+        
+          // Stop polling if job is done
+          if (status.status === "completed" || status.status === "failed" || status.status === "completed_with_errors" || status.status === "cancelled") {
+            clearInterval(interval);
+            setPollingInterval(null);
+            setRetrainLoading(false);
+            
+            // Refresh dashboard data
+            if (bakeryId) {
+              loadPlan();
+              // Reload summary and accuracy data
+              window.location.reload(); // Simple refresh for now
+            }
+            
+            // Show completion message
+            if (status.status === "completed") {
+              alert("Training completed successfully!");
+            } else if (status.status === "completed_with_errors") {
+              alert(`Training completed with ${status.errors.length} errors. Check details below.`);
+            } else if (status.status === "cancelled") {
+              alert("Training was cancelled.");
+            } else {
+              alert("Training failed. Check details below.");
+            }
+          }
+          
+          // If status is "cancelling", show that cancellation is in progress
+          // Don't stop polling yet - wait for it to become "cancelled"
+          if (status.status === "cancelling") {
+            // Status panel will show "Training Cancelled" message
+            // Keep polling until status becomes "cancelled"
+          }
+      } catch (error) {
+        console.error("Error polling training status:", error);
+      }
+    }, 2000); // Poll every 2 seconds
+    
+    setPollingInterval(interval);
+  };
+
+  const cancelTraining = async () => {
+    if (!retrainJobStatus?.job_id) return;
+    
+    if (!confirm("Are you sure you want to cancel the training job? It will stop after the current product completes.")) {
+      return;
+    }
+    
+    try {
+      await adminCancelTrainingJob(retrainJobStatus.job_id);
+      // Polling will detect the cancelled status and stop automatically
+    } catch (error: any) {
+      alert(`Failed to cancel training: ${error.message}`);
+    }
+  };
+
+  useEffect(() => {
+    // Cleanup polling on unmount
+    return () => {
+      if (pollingInterval) {
+        clearInterval(pollingInterval);
+      }
+    };
+  }, [pollingInterval]);
 
   useEffect(() => {
     function handleSelectionChange() {
@@ -722,6 +825,17 @@ export default function DashboardPage() {
                 >
                   🧪 Dev Mode
                 </button>
+                <AdminOnly>
+                  <button
+                    type="button"
+                    onClick={() => setShowRetrainModal(true)}
+                    disabled={retrainLoading || (retrainJobStatus?.status === "running")}
+                    className="inline-flex items-center rounded-full border border-purple-300 bg-purple-50 px-3 py-1 text-xs font-medium text-purple-700 hover:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed"
+                    title="Retrain models (admin only)"
+                  >
+                    🔄 Retrain Models
+                  </button>
+                </AdminOnly>
                 {devMode && (
                   <input
                     type="date"
@@ -1190,6 +1304,142 @@ export default function DashboardPage() {
             <GettingStartedChecklist />
           </div>
         </section>
+      )}
+
+      {/* Retrain Modal */}
+      {showRetrainModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+            <h3 className="text-lg font-semibold text-slate-900 mb-4">Retrain Models</h3>
+            
+            <div className="space-y-4">
+              <button
+                type="button"
+                onClick={() => startRetrain(null)}
+                disabled={retrainLoading}
+                className="w-full rounded-lg border border-purple-300 bg-purple-50 px-4 py-2 text-sm font-medium text-purple-700 hover:bg-purple-100 disabled:opacity-50"
+              >
+                Retrain All Products
+              </button>
+              
+              <div className="border-t pt-4">
+                <label className="block text-sm font-medium text-slate-700 mb-2">
+                  Or select specific products:
+                </label>
+                <select
+                  multiple
+                  value={selectedProductIds.map(String)}
+                  onChange={(e) => {
+                    const values = Array.from(e.target.selectedOptions, (opt) => Number(opt.value));
+                    setSelectedProductIds(values);
+                  }}
+                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
+                  size={5}
+                >
+                  {products.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name} (ID: {p.id})
+                    </option>
+                  ))}
+                </select>
+                <button
+                  type="button"
+                  onClick={() => startRetrain(selectedProductIds.length > 0 ? selectedProductIds : null)}
+                  disabled={retrainLoading || selectedProductIds.length === 0}
+                  className="mt-2 w-full rounded-lg border border-purple-300 bg-purple-50 px-4 py-2 text-sm font-medium text-purple-700 hover:bg-purple-100 disabled:opacity-50"
+                >
+                  Retrain Selected ({selectedProductIds.length})
+                </button>
+              </div>
+            </div>
+            
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => {
+                  setShowRetrainModal(false);
+                  setSelectedProductIds([]);
+                }}
+                className="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-100"
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Training Status Panel */}
+      {retrainJobStatus && (retrainJobStatus.status === "running" || retrainJobStatus.status === "cancelling" || retrainJobStatus.status === "cancelled") && (
+        <div className="fixed bottom-4 right-4 z-40 bg-white rounded-lg shadow-lg border border-purple-200 p-4 max-w-sm">
+          <div className="flex items-center justify-between mb-2">
+            <h4 className="text-sm font-semibold text-slate-900">
+              {retrainJobStatus.status === "cancelled" || retrainJobStatus.status === "cancelling" 
+                ? "Training Cancelled" 
+                : "Training in Progress"}
+            </h4>
+            <div className="flex items-center gap-2">
+              {retrainJobStatus.status === "running" && (
+                <button
+                  type="button"
+                  onClick={cancelTraining}
+                  className="text-xs px-2 py-1 rounded border border-red-300 bg-red-50 text-red-700 hover:bg-red-100"
+                  title="Cancel training job"
+                >
+                  Cancel
+                </button>
+              )}
+              <button
+                type="button"
+                onClick={() => setRetrainJobStatus(null)}
+                className="text-slate-400 hover:text-slate-600"
+                title={retrainJobStatus.status === "running" ? "Hide panel (training continues)" : "Close panel"}
+              >
+                ×
+              </button>
+            </div>
+          </div>
+          <div className="space-y-2">
+            {(retrainJobStatus.status === "cancelling" || retrainJobStatus.status === "cancelled") && (
+              <div className="text-xs text-amber-600 font-medium">
+                {retrainJobStatus.status === "cancelling" 
+                  ? "⏸️ Cancellation requested. Training will stop after current product completes..."
+                  : "⏹️ Training has been cancelled."}
+              </div>
+            )}
+            <div className="text-xs text-slate-600">
+              Progress: {retrainJobStatus.progress.completed} / {retrainJobStatus.progress.total}
+            </div>
+            <div className="w-full bg-slate-200 rounded-full h-2">
+              <div
+                className="bg-purple-600 h-2 rounded-full transition-all"
+                style={{
+                  width: `${(retrainJobStatus.progress.completed / retrainJobStatus.progress.total) * 100}%`,
+                }}
+              />
+            </div>
+            {retrainJobStatus.current_product_id && (
+              <div className="text-xs text-slate-500">
+                Current: Product {retrainJobStatus.current_product_id}
+              </div>
+            )}
+            {retrainJobStatus.errors.length > 0 && (
+              <div className="text-xs text-red-600">
+                Errors: {retrainJobStatus.errors.length}
+                <details className="mt-1">
+                  <summary className="cursor-pointer">View errors</summary>
+                  <ul className="list-disc list-inside mt-1 space-y-1">
+                    {retrainJobStatus.errors.map((err, idx) => (
+                      <li key={idx}>
+                        Product {err.product_id}: {err.error}
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              </div>
+            )}
+          </div>
+        </div>
       )}
     </div>
   );

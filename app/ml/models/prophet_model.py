@@ -46,6 +46,10 @@ class ProphetSalesModel:
         
         Automatically enables yearly seasonality if >1 year of data is available.
         Automatically enables quarterly seasonality if >3 months of data is available.
+        
+        NOTE: Prophet does NOT support sample weights. This model trains on all valid days
+        (is_valid_day == 1) without any weighting. In ensemble models, sample weights
+        only apply to the XGBoost component, not the Prophet component.
         """
         # Determine data span
         df = df.copy()

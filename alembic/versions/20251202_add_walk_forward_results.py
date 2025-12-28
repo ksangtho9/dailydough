@@ -69,3 +69,7 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_walk_forward_results_product_id"), table_name="walk_forward_results")
     op.drop_index(op.f("ix_walk_forward_results_id"), table_name="walk_forward_results")
     op.drop_table("walk_forward_results")
+
+
+
+

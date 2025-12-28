@@ -23,7 +23,7 @@ class RawSalesRecord:
 class CleanedTimeSeries:
     """Normalized time series ready for modeling."""
     product_id: int
-    df: pd.DataFrame  # columns: ["ds", "y"] and optionally ["delivery"] (Prophet-friendly)
+    df: pd.DataFrame  # columns: ["ds", "y", "is_valid_day", "is_supply_capped_day"] and optionally ["delivery"] (Prophet-friendly)
     # Static product-level metadata that models or downstream services can use.
     shelf_life_days: int = 1
 
@@ -75,6 +75,20 @@ class SalesPreprocessor:
         df["is_valid_day"] = 1
         df.loc[(df["delivery"] == 0) & (df["y"] == 0), "is_valid_day"] = 0
         df.loc[df["y"].isna(), "is_valid_day"] = 0
+
+        # Add is_supply_capped_day flag
+        # CRITICAL: Only compute when is_valid_day == 1
+        # If is_valid_day == 0, force is_supply_capped_day = 0 (always)
+        # This prevents tagging inactive product days and polluting metrics
+        df["is_supply_capped_day"] = 0
+        # Only check on valid days: delivery > 0 AND sales >= 0.95 * delivery
+        valid_mask = df["is_valid_day"] == 1
+        capped_mask = (
+            valid_mask
+            & (df["delivery"] > 0)
+            & (df["y"] >= 0.95 * df["delivery"])
+        )
+        df.loc[capped_mask, "is_supply_capped_day"] = 1
 
         return df
 
@@ -132,7 +146,13 @@ class SalesPreprocessor:
         # Also check delivery == 0 AND y == 0 (or NaN) for missing dates
         df_full.loc[(df_full["delivery"] == 0) & (df_full["y"].isna()), "is_valid_day"] = 0
 
-        return df_full[["ds", "y", "product_id", "delivery", "is_valid_day"]]
+        # Set is_supply_capped_day = 0 for missing dates or when is_valid_day == 0
+        if "is_supply_capped_day" not in df_full.columns:
+            df_full["is_supply_capped_day"] = 0
+        # Force to 0 for invalid days
+        df_full.loc[df_full["is_valid_day"] == 0, "is_supply_capped_day"] = 0
+
+        return df_full[["ds", "y", "product_id", "delivery", "is_valid_day", "is_supply_capped_day"]]
 
     def preprocess(
         self,
@@ -198,8 +218,8 @@ class SalesPreprocessor:
             df_full["spike_severity"] = 0.0
             df_full["y_original"] = df_full["y"] if "y" in df_full.columns else np.nan
         
-        # Include all columns: ds, y, delivery, is_valid_day, and spike-related columns
-        columns = ["ds", "y", "is_valid_day"]
+        # Include all columns: ds, y, delivery, is_valid_day, is_supply_capped_day, and spike-related columns
+        columns = ["ds", "y", "is_valid_day", "is_supply_capped_day"]
         if "delivery" in df_full.columns:
             columns.append("delivery")
         # Always include spike-related columns for analysis

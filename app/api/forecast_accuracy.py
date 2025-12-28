@@ -14,7 +14,7 @@ from app.database.database import get_db
 from app.api.auth import get_current_user
 from app.models import Product, ForecastMetrics, Bakery, SalesRecord, DailyForecast
 from app.schemas.forecast_accuracy import ProductAccuracyOut
-from app.ml.metrics import calculate_wape
+from app.ml.metrics import calculate_wape, calculate_adjusted_wape
 from app.services.daily_forecast_service import get_product_daily_forecasts
 
 # #region agent log
@@ -133,6 +133,7 @@ def get_bakery_forecast_accuracy(
         
         # OPTIMIZATION: Batch fetch all sales records in one query
         # Use more efficient query with explicit column selection
+        # Also fetch quantity_delivered for supply-cap detection
         # #region agent log
         query_start = time.time()
         # #endregion
@@ -142,6 +143,7 @@ def get_bakery_forecast_accuracy(
                     SalesRecord.product_id,
                     SalesRecord.date.label("day"),
                     func.sum(SalesRecord.quantity_sold).label("qty"),
+                    func.sum(SalesRecord.quantity_delivered).label("delivery"),
                 )
                 .filter(
                     SalesRecord.product_id.in_(product_ids),
@@ -167,13 +169,26 @@ def get_bakery_forecast_accuracy(
         }, "B")
         # #endregion
         
-        # Group sales by product_id -> date -> quantity (use defaultdict for efficiency)
+        # Group sales by product_id -> date -> quantity and delivery (use defaultdict for efficiency)
+        # Also compute is_supply_capped_day for each date
         # #region agent log
         process_start = time.time()
         # #endregion
         actuals_by_product: dict[int, dict[date, float]] = defaultdict(dict)
+        delivery_by_product: dict[int, dict[date, float]] = defaultdict(dict)
+        supply_capped_by_product: dict[int, dict[date, int]] = defaultdict(dict)
         for row in sales_rows:
-            actuals_by_product[row.product_id][row.day] = float(row.qty or 0.0)
+            product_id = row.product_id
+            day = row.day
+            qty = float(row.qty or 0.0)
+            delivery = float(row.delivery or 0.0)
+            actuals_by_product[product_id][day] = qty
+            delivery_by_product[product_id][day] = delivery
+            # Compute is_supply_capped_day: delivery > 0 AND sales >= 0.95 * delivery
+            # Only on valid days (delivery > 0 or sales > 0)
+            is_valid = (delivery > 0) or (qty > 0)
+            is_capped = is_valid and (delivery > 0) and (qty >= 0.95 * delivery)
+            supply_capped_by_product[product_id][day] = 1 if is_capped else 0
         # #region agent log
         process_time = time.time() - process_start
         _debug_log("forecast_accuracy.py:96", "Sales grouping completed", {
@@ -261,8 +276,11 @@ def get_bakery_forecast_accuracy(
             # Calculate WAPE for valid points (both forecast and actual exist)
             valid_forecasts = []
             valid_actuals = []
+            valid_is_supply_capped = []
             valid_count = 0
             zero_forecast_count = 0  # Track how many forecasts are 0
+            delivery_by_date = delivery_by_product.get(product_id, {})
+            supply_capped_by_date = supply_capped_by_product.get(product_id, {})
             
             # OPTIMIZATION: Only check dates that have both actual and forecast
             # This is more efficient than checking all dates
@@ -318,11 +336,14 @@ def get_bakery_forecast_accuracy(
                 # by the query (DailyForecast.yhat.isnot(None))
                 valid_forecasts.append(forecast_val)
                 valid_actuals.append(actual_val)
+                # Get supply-capped flag for this date
+                is_capped = supply_capped_by_date.get(d, 0)
+                valid_is_supply_capped.append(is_capped)
                 valid_count += 1
                 if forecast_val == 0.0:
                     zero_forecast_count += 1
             
-            # Calculate WAPE
+            # Calculate WAPE (raw)
             wape = None
             if valid_count > 0 and len(valid_actuals) > 0:
                 try:
@@ -350,6 +371,34 @@ def get_bakery_forecast_accuracy(
                     logger.error(f"Error calculating WAPE for product {product_id}: {e}")
                     wape = None
             
+            # Calculate Adjusted WAPE (censor-aware)
+            wape_adjusted = None
+            if valid_count > 0 and len(valid_actuals) > 0 and len(valid_is_supply_capped) > 0:
+                try:
+                    wape_adjusted_result = calculate_adjusted_wape(
+                        np.array(valid_actuals),
+                        np.array(valid_forecasts),
+                        np.array(valid_is_supply_capped),
+                        capped_overpred_penalty=0.2,  # Default soft censor
+                    )
+                    if wape_adjusted_result is not None and not np.isnan(wape_adjusted_result):
+                        wape_adjusted = float(wape_adjusted_result) * 100  # Convert to percentage
+                        
+                        # Validation: adjusted WAPE should be <= raw WAPE when supply-capped days exist
+                        capped_count = sum(valid_is_supply_capped)
+                        if capped_count > 0 and wape is not None and wape_adjusted > wape:
+                            import logging
+                            logger = logging.getLogger(__name__)
+                            logger.warning(
+                                f"Product {product_id}: Adjusted WAPE ({wape_adjusted:.2f}%) > Raw WAPE ({wape:.2f}%) "
+                                f"despite {capped_count} supply-capped days. This may indicate an issue."
+                            )
+                except Exception as e:
+                    import logging
+                    logger = logging.getLogger(__name__)
+                    logger.error(f"Error calculating Adjusted WAPE for product {product_id}: {e}")
+                    wape_adjusted = None
+            
             # Get base metrics from ForecastMetrics if available
             metrics = metrics_by_product.get(product_id)
             
@@ -372,6 +421,7 @@ def get_bakery_forecast_accuracy(
                     mape=metrics.mape if metrics else None,
                     rmse=metrics.rmse if metrics else None,
                     wape=wape,
+                    wape_adjusted=wape_adjusted,
                     n_points=metrics.n_points or 0 if metrics else 0,
                     valid_points_count=valid_count,
                     last_trained_at=metrics.last_trained_at if metrics else None,
@@ -412,6 +462,7 @@ def get_bakery_forecast_accuracy(
                     mape=metrics.mape,
                     rmse=metrics.rmse,
                     wape=metrics.wape,  # Include WAPE from metrics
+                    wape_adjusted=metrics.wape_adjusted,  # Include Adjusted WAPE from metrics
                     n_points=metrics.n_points or 0,
                     valid_points_count=None,
                     last_trained_at=metrics.last_trained_at,
@@ -429,6 +480,7 @@ def get_bakery_forecast_accuracy(
                     mape=None,
                     rmse=None,
                     wape=None,
+                    wape_adjusted=None,
                     n_points=0,
                     valid_points_count=None,
                     last_trained_at=None,

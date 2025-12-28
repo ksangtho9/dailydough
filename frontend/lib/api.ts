@@ -105,3 +105,63 @@ export async function deleteAllProducts(bakeryId: number): Promise<{
     method: "DELETE",
   });
 }
+
+// Admin Training API
+
+export type RetrainRequest = {
+  product_ids?: number[] | null;
+};
+
+export type RetrainResponse = {
+  status: string;
+  job_id: string;
+  total: number;
+};
+
+export type JobStatusResponse = {
+  status: "idle" | "running" | "cancelling" | "completed" | "failed" | "completed_with_errors" | "cancelled";
+  job_id?: string | null;
+  progress: { completed: number; total: number };
+  current_product_id?: number | null;
+  started_at?: string | null;
+  finished_at?: string | null;
+  errors: Array<{ product_id: number; error: string }>;
+};
+
+/**
+ * Start a retrain job for all products or selected products.
+ */
+export async function adminStartRetrain(
+  productIds?: number[] | null
+): Promise<RetrainResponse> {
+  return apiFetch<RetrainResponse>("/api/admin/training/retrain", {
+    method: "POST",
+    body: JSON.stringify({ product_ids: productIds ?? null }),
+  });
+}
+
+/**
+ * Get training job status.
+ */
+export async function adminGetTrainingStatus(
+  jobId?: string
+): Promise<JobStatusResponse> {
+  const url = jobId
+    ? `/api/admin/training/status?job_id=${jobId}`
+    : "/api/admin/training/status";
+  return apiFetch<JobStatusResponse>(url);
+}
+
+/**
+ * Cancel a running training job.
+ */
+export async function adminCancelTrainingJob(
+  jobId?: string
+): Promise<{ status: string; job_id?: string; message: string }> {
+  const url = jobId
+    ? `/api/admin/training/cancel?job_id=${jobId}`
+    : "/api/admin/training/cancel";
+  return apiFetch<{ status: string; job_id?: string; message: string }>(url, {
+    method: "POST",
+  });
+}
