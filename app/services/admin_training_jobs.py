@@ -24,11 +24,16 @@ class TrainingError:
     error: str
 
 
+class CancelledError(Exception):
+    """Raised when a training job is cancelled by the user."""
+    pass
+
+
 @dataclass
 class JobState:
     """State of a training job."""
     job_id: str
-    status: str  # "idle" | "running" | "completed" | "failed" | "completed_with_errors" | "cancelled"
+    status: str  # "idle" | "running" | "cancelling" | "completed" | "failed" | "completed_with_errors" | "cancelled"
     started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     completed: int = 0
@@ -147,7 +152,8 @@ class AdminTrainingJobManager:
         """
         with self._lock:
             if self._current_job and self._current_job.job_id == job_id:
-                if self._current_job.status == "running":
+                # Allow cancellation if status is "running" or already "cancelling"
+                if self._current_job.status in ("running", "cancelling"):
                     self._current_job.cancelled = True
                     # Immediately update status to "cancelling" so frontend shows cancellation
                     # The training loop will change it to "cancelled" when it detects it

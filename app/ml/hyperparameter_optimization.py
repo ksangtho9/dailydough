@@ -86,6 +86,7 @@ def optimize_prophet_hyperparameters(
     product_info: Optional[dict] = None,
     n_splits: int = 3,
     max_iter: Optional[int] = None,
+    should_cancel: Optional[Callable[[], bool]] = None,  # New parameter: cancellation callback
 ) -> OptimizationResult:
     """
     Optimize Prophet hyperparameters using WAPE as the optimization metric.
@@ -181,9 +182,17 @@ def optimize_prophet_hyperparameters(
     all_results = []
     
     for params in param_combinations:
+        # Check cancellation before each parameter combination
+        if should_cancel and should_cancel():
+            raise CancelledError("Hyperparameter optimization cancelled by user")
+        
         wapes = []
         
         for train_idx, test_idx in cv_splits:
+            # Check cancellation between CV splits
+            if should_cancel and should_cancel():
+                raise CancelledError("Hyperparameter optimization cancelled by user")
+            
             try:
                 # Split data
                 train_df = df.iloc[train_idx].copy()
@@ -421,9 +430,17 @@ def optimize_xgboost_hyperparameters(
     all_results = []
     
     for params in param_combinations:
+        # Check cancellation before each parameter combination
+        if should_cancel and should_cancel():
+            raise CancelledError("Hyperparameter optimization cancelled by user")
+        
         wapes = []
         
         for train_idx, test_idx in cv_splits:
+            # Check cancellation between CV splits
+            if should_cancel and should_cancel():
+                raise CancelledError("Hyperparameter optimization cancelled by user")
+            
             try:
                 # Split data
                 train_df = df.iloc[train_idx].copy()

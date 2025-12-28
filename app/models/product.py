@@ -49,3 +49,8 @@ class Product(Base):
         back_populates="product",
         cascade="all, delete-orphan",
     )
+    model_runs = relationship(
+        "ModelRun",
+        back_populates="product",
+        cascade="all, delete-orphan",
+    )

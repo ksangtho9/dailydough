@@ -20,7 +20,7 @@ from app.models import Product
 from app.ml.training.train_product import train_product
 from app.ml.inference.forecast_service import get_forecast_for_product
 from app.services.daily_forecast_service import upsert_product_daily_forecasts
-from app.services.admin_training_jobs import job_manager, TrainingError
+from app.services.admin_training_jobs import job_manager, TrainingError, CancelledError
 
 logger = logging.getLogger("bakezy.admin.training")
 
@@ -148,6 +148,7 @@ def run_training_job(job_id: str, product_ids: Optional[List[int]] = None):
                     product_id=product_id,
                     db=db,
                     model_name="prophet",  # Use default model
+                    job_id=job_id,  # Pass job_id for cancellation
                 )
                 
                 product_duration = time.time() - product_start_time
@@ -193,6 +194,10 @@ def run_training_job(job_id: str, product_ids: Optional[List[int]] = None):
                     job_manager.complete_job(job_id, status="cancelled")
                     return
                 
+            except CancelledError:
+                logger.info(f"Training job {job_id} cancelled during product {product_id}")
+                job_manager.complete_job(job_id, status="cancelled")
+                return
             except Exception as e:
                 error_msg = str(e)
                 logger.error(

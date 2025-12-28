@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Optional
+import logging
 
 import pandas as pd
 
@@ -38,6 +39,8 @@ class ProphetSalesModel:
         self.config = config or ProphetConfig()
         self.model: Optional[Prophet] = None
         self.has_delivery_regressor: bool = False
+        self.logger = logging.getLogger("bakezy.prophet")
+        self.regressors = []
 
     def fit(self, df: pd.DataFrame) -> None:
         """
@@ -262,9 +265,7 @@ class ProphetSalesModel:
         except Exception as e:
             # If fit fails, try with just ds and y (no regressors)
             if len(self.regressors) > 0:
-                import logging
-                logger = logging.getLogger("bakezy.prophet")
-                logger.warning(f"Prophet fit failed with regressors, trying without: {e}")
+                self.logger.warning(f"Prophet fit failed with regressors, trying without: {e}")
                 df_minimal = df_for_fit[["ds", "y"]].copy()
                 # Never fill y - keep as NaN if missing, Prophet will handle it
                 df_minimal["y"] = pd.to_numeric(df_minimal["y"], errors='coerce')
@@ -283,6 +284,14 @@ class ProphetSalesModel:
                 raise
         
         self.model = m
+        
+        # Store training dataframe for later reference (for regressor imputation)
+        self._training_df = df_for_fit.copy()
+        
+        # Log regressors that were added
+        self.logger.info(
+            f"Prophet model fitted with {len(self.regressors)} regressors: {self.regressors}"
+        )
 
     def predict(
         self,
@@ -316,9 +325,7 @@ class ProphetSalesModel:
                 future["y"] = pd.to_numeric(future["y"], errors='coerce')
                 # Do NOT fillna y - keep NaN for future dates
             except Exception as e:
-                import logging
-                logger = logging.getLogger("bakezy.prophet")
-                logger.warning(f"Error converting 'y' column to numeric: {e}")
+                self.logger.warning(f"Error converting 'y' column to numeric: {e}")
                 # If conversion fails, remove 'y' column (Prophet can work without it for prediction)
                 if "y" in future.columns:
                     future = future.drop(columns=["y"])
@@ -340,6 +347,19 @@ class ProphetSalesModel:
 
         # Add regressor values for future dates
         regressors = getattr(self, "regressors", [])
+        
+        # Log regressor availability (Step 0: Confirm Expected Regressors)
+        if regressors:
+            self.logger.info(f"Prophet predict: Expected {len(regressors)} regressors: {regressors}")
+            if future_regressors is not None and not future_regressors.empty:
+                available_regressors = [r for r in regressors if r in future_regressors.columns]
+                missing_regressors = [r for r in regressors if r not in future_regressors.columns]
+                self.logger.info(
+                    f"Prophet predict: {len(available_regressors)} regressors available, "
+                    f"{len(missing_regressors)} missing: {missing_regressors}"
+                )
+            else:
+                self.logger.warning(f"Prophet predict: future_regressors is None/empty, all {len(regressors)} regressors will be missing")
 
         if future_regressors is not None and not future_regressors.empty:
             # Merge provided future regressor values
@@ -366,39 +386,83 @@ class ProphetSalesModel:
                     how="left"
                 )
 
-        # Add default values for any missing regressors (whether future_regressors was provided or not)
+        # Add default values for any missing regressors (Fix 2: Safer imputation)
+        # Use smarter imputation: forward-fill, rolling mean, median, then 0.0 as last resort
         for regressor in regressors:
             if regressor not in future.columns:
-                if regressor == "delivery" and historical_delivery is not None and len(historical_delivery) > 0:
-                    # Use historical average for delivery
-                    avg_delivery = historical_delivery.mean()
-                    future[regressor] = avg_delivery
-                elif regressor.startswith("lag_"):
-                    # For lag features, we can't predict future values easily
-                    # Use the last known value or mean
-                    future[regressor] = 0.0  # Will be filled by preprocessing
-                elif regressor.startswith("rolling_"):
-                    # Rolling features need historical context
-                    future[regressor] = 0.0  # Will be filled by preprocessing
-                elif regressor in ["is_holiday", "is_promotion", "is_event", "is_rainy", "is_sunny",
-                                   "is_month_start", "is_month_end", "is_payday", "is_spike"]:
-                    # Binary flags default to 0
-                    future[regressor] = 0
-                elif regressor in ["promotion_multiplier", "event_multiplier"]:
-                    # Multipliers default to 1.0
-                    future[regressor] = 1.0
-                elif regressor in ["spike_probability", "spike_severity", "spike_seasonality"]:
-                    # Spike probabilities default to 0.0
-                    future[regressor] = 0.0
-                elif regressor in ["days_since_last_spike", "spike_momentum"]:
-                    # Spike timing features default to 0 or large value
-                    if regressor == "days_since_last_spike":
-                        future[regressor] = 999.0  # Large value if no previous spike
-                    else:
+                # Try to get historical values from training data (forward-fill)
+                imputed = False
+                if hasattr(self, '_training_df') and regressor in self._training_df.columns:
+                    training_data = self._training_df[regressor].copy()
+                    training_data = pd.to_numeric(training_data, errors='coerce')
+                    if not training_data.isna().all():
+                        # Use last known value (forward-fill)
+                        last_value = training_data.dropna().iloc[-1] if len(training_data.dropna()) > 0 else None
+                        if last_value is not None and pd.notna(last_value):
+                            future[regressor] = float(last_value)
+                            self.logger.debug(f"Prophet: Imputed {regressor} using last training value: {last_value}")
+                            imputed = True
+                
+                if not imputed:
+                    # Fall back to type-specific defaults
+                    if regressor == "delivery" and historical_delivery is not None and len(historical_delivery) > 0:
+                        # Use historical average for delivery
+                        avg_delivery = historical_delivery.mean()
+                        future[regressor] = avg_delivery
+                        self.logger.debug(f"Prophet: Imputed {regressor} using historical average: {avg_delivery}")
+                    elif regressor.startswith("lag_"):
+                        # For lag features, use last known value from training or 0.0
+                        if hasattr(self, '_training_df') and regressor in self._training_df.columns:
+                            training_data = pd.to_numeric(self._training_df[regressor], errors='coerce').dropna()
+                            if len(training_data) > 0:
+                                future[regressor] = float(training_data.iloc[-1])
+                                self.logger.debug(f"Prophet: Imputed {regressor} using last lag value")
+                            else:
+                                future[regressor] = 0.0
+                        else:
+                            future[regressor] = 0.0
+                    elif regressor.startswith("rolling_"):
+                        # Rolling features: use last known rolling mean from training
+                        if hasattr(self, '_training_df') and regressor in self._training_df.columns:
+                            training_data = pd.to_numeric(self._training_df[regressor], errors='coerce').dropna()
+                            if len(training_data) > 0:
+                                future[regressor] = float(training_data.iloc[-1])
+                                self.logger.debug(f"Prophet: Imputed {regressor} using last rolling value")
+                            else:
+                                future[regressor] = 0.0
+                        else:
+                            future[regressor] = 0.0
+                    elif regressor in ["is_holiday", "is_promotion", "is_event", "is_rainy", "is_sunny",
+                                       "is_month_start", "is_month_end", "is_payday", "is_spike"]:
+                        # Binary flags default to 0
+                        future[regressor] = 0
+                    elif regressor in ["promotion_multiplier", "event_multiplier"]:
+                        # Multipliers default to 1.0
+                        future[regressor] = 1.0
+                    elif regressor in ["spike_probability", "spike_severity", "spike_seasonality"]:
+                        # Spike probabilities default to 0.0
                         future[regressor] = 0.0
-                else:
-                    # For other numeric regressors, use 0 or mean
-                    future[regressor] = 0.0
+                    elif regressor in ["days_since_last_spike", "spike_momentum"]:
+                        # Spike timing features default to 0 or large value
+                        if regressor == "days_since_last_spike":
+                            future[regressor] = 999.0  # Large value if no previous spike
+                        else:
+                            future[regressor] = 0.0
+                    else:
+                        # Unknown regressor type: try median from training data, then 0.0
+                        if hasattr(self, '_training_df') and regressor in self._training_df.columns:
+                            training_data = pd.to_numeric(self._training_df[regressor], errors='coerce').dropna()
+                            if len(training_data) > 0:
+                                median_value = float(training_data.median())
+                                future[regressor] = median_value
+                                self.logger.debug(f"Prophet: Imputed {regressor} using training median: {median_value}")
+                            else:
+                                future[regressor] = 0.0
+                                self.logger.warning(f"Prophet: Unknown regressor {regressor}, defaulting to 0.0 (no training data)")
+                        else:
+                            # Unknown regressor type, default to 0.0 as last resort
+                            future[regressor] = 0.0
+                            self.logger.warning(f"Prophet: Unknown regressor {regressor}, defaulting to 0.0 (no training data available)")
 
         # Fill any remaining NaN values (for regressors that were merged but have NaN values)
         # Ensure all regressors are numeric
@@ -480,9 +544,7 @@ class ProphetSalesModel:
             forecast = self.model.predict(future_for_predict)
         except Exception as e:
             # If predict fails, try with absolute minimal columns (just ds)
-            import logging
-            logger = logging.getLogger("bakezy.prophet")
-            logger.warning(f"Prophet predict failed with regressors, trying minimal: {e}")
+            self.logger.warning(f"Prophet predict failed with regressors, trying minimal: {e}")
             # Create a completely fresh future DataFrame with only 'ds'
             future_minimal = self.model.make_future_dataframe(periods=horizon_days, freq="D")
             # Only keep 'ds' column - remove everything else including 'y'
@@ -490,7 +552,7 @@ class ProphetSalesModel:
             try:
                 forecast = self.model.predict(future_minimal)
             except Exception as e2:
-                logger.error(f"Prophet predict failed even with minimal columns: {e2}")
+                self.logger.error(f"Prophet predict failed even with minimal columns: {e2}")
                 raise RuntimeError(f"Prophet prediction failed: {e2}") from e2
         
         return forecast

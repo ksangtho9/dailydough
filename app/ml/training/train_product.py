@@ -8,12 +8,14 @@ import pandas as pd
 from sqlalchemy.orm import Session
 
 from app.database.database import SessionLocal
-from app.models import Product, SalesRecord, ForecastMetrics
+from app.models import Product, SalesRecord, ForecastMetrics, ModelRun
 from app.ml.preprocessing import SalesPreprocessor, RawSalesRecord
 from app.ml.trainer import ModelTrainer
 from app.ml.metrics import calculate_wape, calculate_adjusted_wape
+from app.services.admin_training_jobs import CancelledError
 import logging
 import numpy as np
+import hashlib
 
 logger = logging.getLogger("bakezy.training")
 
@@ -154,6 +156,7 @@ def train_product(
     product_id: int,
     db: Optional[Session] = None,
     model_name: str = "prophet",
+    job_id: Optional[str] = None,  # New parameter: job_id for cancellation
 ) -> Dict[str, Any]:
     owns_session = False
     if db is None:
@@ -221,6 +224,17 @@ def train_product(
                 "last_trained_at": None,
             }
 
+        # Create cancellation callback
+        def should_cancel() -> bool:
+            if job_id:
+                from app.services.admin_training_jobs import job_manager
+                return job_manager.is_cancelled(job_id)
+            return False
+        
+        # Check cancellation before training
+        if should_cancel():
+            raise CancelledError("Training cancelled by user")
+        
         trainer = ModelTrainer()
         
         # Note: Sample weights are computed INSIDE trainer.train() after feature engineering
@@ -233,7 +247,12 @@ def train_product(
             model_name=model_name, 
             optimize_with_wape=True,
             sample_weights=None,  # Will be computed inside trainer after feature engineering
+            should_cancel=should_cancel,  # Pass cancellation callback
         )
+        
+        # Check cancellation after training
+        if should_cancel():
+            raise CancelledError("Training cancelled by user")
         
         # Feature pruning (adaptive: drop bottom 10%) - only for XGBoost
         if model_name == "xgboost" and train_result.model.feature_cols is not None:
@@ -300,6 +319,118 @@ def train_product(
         db.commit()
         db.refresh(metrics)
 
+        # Save ModelRun with hyperparameters and metadata
+        try:
+            # Extract hyperparameters from trained model
+            hyperparams = {}
+            if train_result.model_name == "prophet":
+                if hasattr(train_result.model, 'config') and train_result.model.config:
+                    config = train_result.model.config
+                    hyperparams["prophet"] = {
+                        "changepoint_prior_scale": config.changepoint_prior_scale,
+                        "seasonality_mode": config.seasonality_mode,
+                        "daily_seasonality": config.daily_seasonality,
+                        "weekly_seasonality": config.weekly_seasonality,
+                        "yearly_seasonality": config.yearly_seasonality,
+                        "monthly_seasonality": getattr(config, 'monthly_seasonality', False),
+                        "quarterly_seasonality": getattr(config, 'quarterly_seasonality', False),
+                    }
+            elif train_result.model_name == "xgboost":
+                if hasattr(train_result.model, 'config') and train_result.model.config:
+                    config = train_result.model.config
+                    hyperparams["xgboost"] = {
+                        "max_depth": config.max_depth,
+                        "n_estimators": config.n_estimators,
+                        "learning_rate": config.learning_rate,
+                        "subsample": config.subsample,
+                        "colsample_bytree": config.colsample_bytree,
+                        "use_wape_loss": config.use_wape_loss,
+                    }
+            elif train_result.model_name == "ensemble":
+                # Ensemble may have both Prophet and XGBoost configs
+                if hasattr(train_result.model, 'prophet_model') and hasattr(train_result.model.prophet_model, 'config'):
+                    config = train_result.model.prophet_model.config
+                    hyperparams["prophet"] = {
+                        "changepoint_prior_scale": config.changepoint_prior_scale,
+                        "seasonality_mode": config.seasonality_mode,
+                        "daily_seasonality": config.daily_seasonality,
+                        "weekly_seasonality": config.weekly_seasonality,
+                        "yearly_seasonality": config.yearly_seasonality,
+                    }
+                if hasattr(train_result.model, 'xgboost_model') and hasattr(train_result.model.xgboost_model, 'config'):
+                    config = train_result.model.xgboost_model.config
+                    hyperparams["xgboost"] = {
+                        "max_depth": config.max_depth,
+                        "n_estimators": config.n_estimators,
+                        "learning_rate": config.learning_rate,
+                        "subsample": config.subsample,
+                        "colsample_bytree": config.colsample_bytree,
+                        "use_wape_loss": config.use_wape_loss,
+                    }
+                if hasattr(train_result.model, 'config') and train_result.model.config:
+                    config = train_result.model.config
+                    hyperparams["ensemble"] = {
+                        "prophet_weight": getattr(config, 'prophet_weight', 0.5),
+                        "xgboost_weight": getattr(config, 'xgboost_weight', 0.5),
+                    }
+
+            # Determine selected_model_type (actual model used after gating/fallback)
+            selected_model_type = train_result.model_name
+
+            # Compute feature_version (hash of feature column names)
+            feature_version = None
+            if train_result.model_name == "xgboost" and hasattr(train_result.model, 'feature_cols') and train_result.model.feature_cols:
+                # Use feature columns from XGBoost model
+                sorted_cols = sorted(train_result.model.feature_cols)
+                cols_str = ",".join(sorted_cols)
+                feature_version = hashlib.md5(cols_str.encode()).hexdigest()[:8]
+            elif train_result.model_name == "prophet":
+                # For Prophet, we can use a default version or check regressors
+                # For now, use a simple version string
+                feature_version = "v1"
+            elif train_result.model_name in ["seasonal_naive", "rolling_mean"]:
+                # Baseline models don't use features
+                feature_version = "baseline"
+            else:
+                feature_version = "v1"
+
+            # Get training window end date
+            training_window_end = None
+            if not cleaned.df.empty and "ds" in cleaned.df.columns:
+                training_window_end = pd.to_datetime(cleaned.df["ds"].max()).date()
+
+            # Mark previous runs as inactive
+            db.query(ModelRun).filter(
+                ModelRun.product_id == product_id,
+                ModelRun.is_active == True
+            ).update({"is_active": False})
+
+            # Create new ModelRun
+            model_run = ModelRun(
+                product_id=product_id,
+                created_at=trained_at,
+                model_type=model_name,  # Requested model
+                selected_model_type=selected_model_type,  # Actual model used
+                hyperparameters_json=hyperparams if hyperparams else None,
+                training_window_end=training_window_end,
+                feature_version=feature_version,
+                metrics_json={
+                    "wape": float(wape) if wape is not None else None,
+                    "wape_adjusted": float(wape_adjusted) if wape_adjusted is not None else None,
+                    "mape": float(mape) if mape is not None else None,
+                    "rmse": float(rmse) if rmse is not None else None,
+                },
+                is_active=True,
+                is_best=False,  # Can be set later if we implement best run tracking
+            )
+            db.add(model_run)
+            db.commit()
+            logger.info(f"Saved ModelRun for product {product_id}: model_type={model_name}, selected={selected_model_type}, hyperparams={bool(hyperparams)}")
+        except Exception as e:
+            logger.warning(f"Failed to save ModelRun for product {product_id}: {e}")
+            # Don't fail training if ModelRun save fails
+            db.rollback()
+
         # Count only valid days for n_points
         if "is_valid_day" in cleaned.df.columns:
             n_points = len(cleaned.df[cleaned.df["is_valid_day"] == 1])
@@ -327,11 +458,13 @@ def train_product(
                 capped_count = int((train_df_for_analysis["is_supply_capped_day"] == 1).sum())
                 capped_pct = (capped_count / total_count * 100) if total_count > 0 else 0
             
-            # Predicted distribution on training data (recent window)
-            # Get predictions from the model for the training period
+            # Predicted distribution on training data (consistent evaluation set)
+            # Get predictions from the model for the training period (training fitted values)
             yhat_mean = None
             yhat_zero_pct = None
+            raw_yhat_neg_pct = None
             yhat_values = None
+            raw_yhat_values = None
             
             try:
                 if train_result.model_name == "prophet":
@@ -345,10 +478,14 @@ def train_product(
                             how="inner"
                         )
                         if not merged.empty:
-                            yhat_values = merged["yhat"].values
+                            raw_yhat_values = merged["yhat"].values  # Before clamping
+                            yhat_values = np.maximum(raw_yhat_values, 0.0)  # After clamping
                             yhat_mean = float(yhat_values.mean())
                             yhat_zero_count = (yhat_values == 0.0).sum()
                             yhat_zero_pct = (yhat_zero_count / len(yhat_values) * 100) if len(yhat_values) > 0 else 0
+                            # Calculate negative prediction percentage
+                            raw_yhat_neg_count = (raw_yhat_values < 0).sum()
+                            raw_yhat_neg_pct = (raw_yhat_neg_count / len(raw_yhat_values) * 100) if len(raw_yhat_values) > 0 else 0
                 elif train_result.model_name == "xgboost":
                     # XGBoost: Predict on training data
                     if train_result.model.feature_cols is not None:
@@ -360,10 +497,14 @@ def train_product(
                         feature_df = feature_engineer.transform(feature_df)
                         
                         X = feature_df[train_result.model.feature_cols].values
-                        yhat_values = train_result.model.model.predict(X)
+                        raw_yhat_values = train_result.model.model.predict(X)  # Can be negative
+                        yhat_values = np.maximum(raw_yhat_values, 0.0)  # After clamping
                         yhat_mean = float(yhat_values.mean())
                         yhat_zero_count = (yhat_values == 0.0).sum()
                         yhat_zero_pct = (yhat_zero_count / len(yhat_values) * 100) if len(yhat_values) > 0 else 0
+                        # Calculate negative prediction percentage
+                        raw_yhat_neg_count = (raw_yhat_values < 0).sum()
+                        raw_yhat_neg_pct = (raw_yhat_neg_count / len(raw_yhat_values) * 100) if len(raw_yhat_values) > 0 else 0
                 elif train_result.model_name == "ensemble":
                     # Ensemble: Use ensemble prediction
                     from app.ml.features import FeatureEngineer
@@ -375,16 +516,20 @@ def train_product(
                     # Get ensemble predictions
                     predictions = train_result.model.predict(feature_df)
                     if predictions is not None and len(predictions) > 0:
-                        yhat_values = predictions
+                        raw_yhat_values = np.array(predictions)  # Can be negative
+                        yhat_values = np.maximum(raw_yhat_values, 0.0)  # After clamping
                         yhat_mean = float(yhat_values.mean())
                         yhat_zero_count = (yhat_values == 0.0).sum()
                         yhat_zero_pct = (yhat_zero_count / len(yhat_values) * 100) if len(yhat_values) > 0 else 0
+                        # Calculate negative prediction percentage
+                        raw_yhat_neg_count = (raw_yhat_values < 0).sum()
+                        raw_yhat_neg_pct = (raw_yhat_neg_count / len(raw_yhat_values) * 100) if len(raw_yhat_values) > 0 else 0
             except Exception as e:
                 logger.warning(f"Could not compute predicted distribution for logging: {e}")
             
-            # Log comprehensive metrics
+            # Log comprehensive metrics (on consistent evaluation set: training fitted values)
             log_msg = (
-                f"Product {product_id} training metrics:\n"
+                f"Product {product_id} training metrics [training_fitted]:\n"
                 f"  Training data: {total_count} unique days, "
                 f"{zero_count} zeros ({zero_pct:.1f}%), "
                 f"mean y={mean_y:.2f}, median y={median_y:.2f}"
@@ -395,8 +540,25 @@ def train_product(
             
             if yhat_mean is not None:
                 log_msg += (
-                    f"\n  Predictions: mean yhat={yhat_mean:.2f}, "
-                    f"{yhat_zero_pct:.1f}% yhat==0" if yhat_zero_pct is not None else ""
+                    f"\n  Predictions: mean yhat={yhat_mean:.2f}"
+                )
+                if raw_yhat_neg_pct is not None:
+                    log_msg += f", {raw_yhat_neg_pct:.1f}% raw_yhat<0 (negative before clamp)"
+                if yhat_zero_pct is not None:
+                    log_msg += f", {yhat_zero_pct:.1f}% yhat==0 (after clamp)"
+            
+            logger.info(log_msg)
+            
+            # Guardrail warning: Model predicting too many zeros relative to training data
+            from app.core.config import settings
+            if (yhat_zero_pct is not None and raw_yhat_neg_pct is not None and 
+                zero_pct < settings.zero_guardrail_train_max * 100 and 
+                yhat_zero_pct > settings.zero_guardrail_pred_min * 100):
+                logger.warning(
+                    f"GUARDRAIL: {train_result.model_name} predicting too many zeros relative to training data "
+                    f"(training zeros: {zero_pct:.1f}%, predicted zeros: {yhat_zero_pct:.1f}%, "
+                    f"negative predictions: {raw_yhat_neg_pct:.1f}%). "
+                    f"This may indicate feature bugs, scaling issues, or preprocessing regressions."
                 )
                 
                 # Interpretation guide
@@ -405,7 +567,9 @@ def train_product(
                 elif zero_pct > 50:
                     log_msg += "\n  ℹ️  INFO: y is mostly zero → data/product-availability problem (not a model bug)"
             
-            log_msg += f"\n  Accuracy: WAPE={wape:.2f}%" + (f", Adjusted WAPE={wape_adjusted:.2f}%" if wape_adjusted is not None else "")
+            wape_str = f"{wape:.2f}%" if wape is not None else "N/A"
+            wape_adj_str = f", Adjusted WAPE={wape_adjusted:.2f}%" if wape_adjusted is not None else ""
+            log_msg += f"\n  Accuracy: WAPE={wape_str}{wape_adj_str}"
             
             logger.info(log_msg)
         else:
@@ -415,7 +579,7 @@ def train_product(
                 valid_count = int(cleaned.df[cleaned.df["is_valid_day"] == 1].shape[0]) if "is_valid_day" in cleaned.df.columns else n_points
                 logger.info(
                     f"Product {product_id}: {capped_count} supply-capped days out of {valid_count} valid days. "
-                    f"Raw WAPE: {wape:.2f}%, Adjusted WAPE: {wape_adjusted:.2f}%" if wape_adjusted is not None else f"Raw WAPE: {wape:.2f}%"
+                    f"Raw WAPE: {wape:.2f}%, Adjusted WAPE: {wape_adjusted:.2f}%" if (wape is not None and wape_adjusted is not None) else (f"Raw WAPE: {wape:.2f}%" if wape is not None else "WAPE: N/A")
                 )
         
         return {

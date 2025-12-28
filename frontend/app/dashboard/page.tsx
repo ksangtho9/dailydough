@@ -289,6 +289,32 @@ export default function DashboardPage() {
       setDevMode(true);
     }
   }, []);
+  
+  // Check for existing training job on page load (e.g., after refresh)
+  // This runs after component mount to ensure all functions are defined
+  useEffect(() => {
+    // Only check if admin mode is enabled
+    if (!isAdminMode()) return;
+    
+    adminGetTrainingStatus()
+      .then((status) => {
+        // If there's a running or cancelling job, restore the UI and resume polling
+        if (status.status === "running" || status.status === "cancelling") {
+          setRetrainJobStatus(status);
+          if (status.job_id) {
+            startPolling(status.job_id);
+          }
+        } else if (status.status === "cancelled") {
+          // Show cancelled status briefly, but don't resume polling
+          setRetrainJobStatus(status);
+        }
+      })
+      .catch((error) => {
+        // Silently fail - no job running or API error
+        // Don't show error to user as this is just a background check
+        console.log("No existing training job found:", error);
+      });
+  }, []); // Empty deps - only run once on mount
 
   const toggleDevMode = () => {
     const newValue = !devMode;
@@ -381,7 +407,10 @@ export default function DashboardPage() {
     
     try {
       await adminCancelTrainingJob(retrainJobStatus.job_id);
-      // Polling will detect the cancelled status and stop automatically
+      // Immediately fetch status to show "cancelling" right away
+      const updatedStatus = await adminGetTrainingStatus(retrainJobStatus.job_id);
+      setRetrainJobStatus(updatedStatus);
+      // Polling will continue and detect when status becomes "cancelled"
     } catch (error: any) {
       alert(`Failed to cancel training: ${error.message}`);
     }

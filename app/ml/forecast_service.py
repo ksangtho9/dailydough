@@ -13,7 +13,7 @@ from sqlalchemy.orm import Session
 import pandas as pd
 import numpy as np
 
-from app.models import SalesRecord, Product, Event, Promotion, WeatherData
+from app.models import SalesRecord, Product, Event, Promotion, WeatherData, ModelRun
 from app.services.profit_calculator import ProfitCalculator
 try:
     from app.services.production_optimizer import ProductionOptimizer
@@ -573,11 +573,40 @@ class ForecastService:
             if col in future_df.columns:
                 future_df = future_df.drop(columns=[col])
 
-        # 3) Forecast via Prophet
+        # 3) Load ModelRun to get stored hyperparameters and selected model type
+        model_run = (
+            db.query(ModelRun)
+            .filter(
+                ModelRun.product_id == product_id,
+                ModelRun.is_active == True
+            )
+            .first()
+        )
+        
+        # Determine model type and hyperparameters to use
+        requested_model = "prophet"  # Default
+        hyperparameters = None
+        forecast_model_override_reason = None
+        
+        if model_run:
+            # Use stored selected_model_type
+            requested_model = model_run.selected_model_type
+            hyperparameters = model_run.hyperparameters_json or {}
+            logger.info(
+                f"Using stored ModelRun for product {product_id}: "
+                f"selected_model_type={requested_model}, has_hyperparams={bool(hyperparameters)}"
+            )
+        else:
+            logger.info(
+                f"No active ModelRun found for product {product_id}, using defaults"
+            )
+        
+        # 4) Forecast via selected model (gating will still run in trainer.train())
         forecast_result: ForecastResult = self.forecaster.forecast(
             ts=cleaned_ts,
             horizon_days=horizon_days,
-            model_name="prophet",
+            model_name=requested_model,
+            hyperparameters=hyperparameters,  # Pass stored hyperparameters as warm-start
             holidays_df=holidays_df,
             weather_df=weather_df,
             promotions_df=promotions_df,
@@ -585,6 +614,19 @@ class ForecastService:
             product_info=product_info,
             future_regressors=future_df,
         )
+        
+        # Check if gating forced a different model (compare requested vs actual)
+        if forecast_result.model_name != requested_model:
+            forecast_model_override_reason = (
+                f"Gating selected {forecast_result.model_name} instead of {requested_model}"
+            )
+            logger.warning(
+                f"Model override for product {product_id}: {forecast_model_override_reason}"
+            )
+            # Update ModelRun with override reason if it exists
+            if model_run:
+                model_run.forecast_model_override_reason = forecast_model_override_reason
+                db.commit()
 
         df = forecast_result.forecast_df
 

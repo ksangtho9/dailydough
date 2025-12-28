@@ -10,7 +10,7 @@ from .preprocessing import CleanedTimeSeries
 from .trainer import ModelTrainer, TrainResult
 from .features import FeatureEngineer
 
-ModelName = Literal["prophet", "xgboost", "ensemble"]
+ModelName = Literal["prophet", "xgboost", "ensemble", "seasonal_naive", "rolling_mean"]
 
 
 @dataclass
@@ -41,6 +41,7 @@ class ProductForecaster:
         ts: CleanedTimeSeries,
         horizon_days: int = 14,
         model_name: ModelName = "prophet",
+        hyperparameters: Optional[dict] = None,  # New parameter: stored hyperparameters
         holidays_df: Optional[pd.DataFrame] = None,
         weather_df: Optional[pd.DataFrame] = None,
         promotions_df: Optional[pd.DataFrame] = None,
@@ -48,11 +49,12 @@ class ProductForecaster:
         product_info: Optional[dict] = None,
         future_regressors: Optional[pd.DataFrame] = None,
     ) -> ForecastResult:
-        # For forecasting (inference), don't optimize hyperparameters - use defaults
+        # For forecasting (inference), don't optimize hyperparameters - use stored or defaults
         # Hyperparameter optimization should only run during explicit training
         train_result: TrainResult = self.trainer.train(
             ts,
             model_name=model_name,
+            hyperparameters=hyperparameters,  # Pass stored hyperparameters as warm-start
             holidays_df=holidays_df,
             weather_df=weather_df,
             promotions_df=promotions_df,
@@ -151,6 +153,14 @@ class ProductForecaster:
                 product_info=product_info,
                 future_regressors=future_regressors,
                 historical_delivery=historical_delivery,
+            )
+        
+        elif train_result.model_name in ("seasonal_naive", "rolling_mean"):
+            # Baseline models: use their predict method
+            last_train_date = ts.df["ds"].max()
+            forecast_df = train_result.model.predict(
+                horizon_days=horizon_days,
+                last_date=last_train_date,
             )
             
         else:

@@ -8,6 +8,7 @@ from .promotion import Promotion
 from .weather_data import WeatherData
 from .daily_forecast import DailyForecast
 from .walk_forward_result import WalkForwardResult
+from .model_run import ModelRun
 
 __all__ = [
     "User",
@@ -20,4 +21,5 @@ __all__ = [
     "WeatherData",
     "DailyForecast",
     "WalkForwardResult",
+    "ModelRun",
 ]
