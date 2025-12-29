@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from typing import Optional, Dict, Any
+import time
 
 import numpy as np
 import pandas as pd
@@ -157,6 +158,7 @@ def train_product(
     db: Optional[Session] = None,
     model_name: str = "prophet",
     job_id: Optional[str] = None,  # New parameter: job_id for cancellation
+    optimize_hyperparameters: str = "auto",  # "auto", "true", or "false"
 ) -> Dict[str, Any]:
     owns_session = False
     if db is None:
@@ -208,8 +210,16 @@ def train_product(
             for row in sales_rows
         ]
 
+        # Timing: Start total time
+        total_start_time = time.time()
+        
+        # Timing: Feature engineering
+        fe_start_time = time.time()
         preprocessor = SalesPreprocessor()
         cleaned = preprocessor.preprocess(raw_records, product_id=product_id)
+        fe_duration = time.time() - fe_start_time
+        logger.info(f"Product {product_id}: Feature engineering took {fe_duration:.2f}s")
+        
         if cleaned.df.empty:
             return {
                 "product_id": product_id,
@@ -241,14 +251,20 @@ def train_product(
         # to ensure perfect alignment with training data. We pass a flag to indicate
         # that weights should be computed from the cleaned time series.
         
-        # Initial training
+        # Timing: Training (includes optimization if enabled)
+        training_start_time = time.time()
         train_result = trainer.train(
             cleaned, 
             model_name=model_name, 
             optimize_with_wape=True,
             sample_weights=None,  # Will be computed inside trainer after feature engineering
             should_cancel=should_cancel,  # Pass cancellation callback
+            optimize_hyperparameters=optimize_hyperparameters,  # Pass optimization flag
+            db=db,  # Pass db for ModelRun queries
+            product_id=product_id,  # Pass product_id for ModelRun queries
         )
+        training_duration = time.time() - training_start_time
+        logger.info(f"Product {product_id}: Training (including optimization) took {training_duration:.2f}s")
         
         # Check cancellation after training
         if should_cancel():
@@ -291,7 +307,12 @@ def train_product(
                 except Exception as e:
                     logger.warning(f"Feature pruning failed: {e}, continuing with all features")
         
+        # Timing: Metrics computation
+        metrics_start_time = time.time()
         mape, rmse, wape, wape_adjusted = _compute_metrics(train_result, cleaned.df)
+        metrics_duration = time.time() - metrics_start_time
+        logger.info(f"Product {product_id}: Metrics computation took {metrics_duration:.2f}s")
+        
         trained_at = datetime.now(timezone.utc)
 
         metrics = (

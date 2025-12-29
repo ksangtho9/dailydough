@@ -299,15 +299,14 @@ export default function DashboardPage() {
     adminGetTrainingStatus()
       .then((status) => {
         // If there's a running or cancelling job, restore the UI and resume polling
+        // Do NOT restore cancelled jobs - once dismissed, they should stay dismissed
         if (status.status === "running" || status.status === "cancelling") {
           setRetrainJobStatus(status);
           if (status.job_id) {
             startPolling(status.job_id);
           }
-        } else if (status.status === "cancelled") {
-          // Show cancelled status briefly, but don't resume polling
-          setRetrainJobStatus(status);
         }
+        // Cancelled jobs are intentionally not restored on page load
       })
       .catch((error) => {
         // Silently fail - no job running or API error
@@ -1236,12 +1235,22 @@ export default function DashboardPage() {
                 <p className="text-sm text-slate-600">
                   {forecastVsActualData && (
                     <>
-                      WAPE: {forecastVsActualData.wape !== null ? `${forecastVsActualData.wape.toFixed(1)}%` : "—"} • 
-                      Valid Points: {forecastVsActualData.valid_points_count} • 
+                      <span className="font-medium">WAPE: {forecastVsActualData.wape !== null ? `${forecastVsActualData.wape.toFixed(1)}%` : "—"}</span>
+                      <span className="text-slate-500" title="WAPE (Weighted Absolute Percentage Error) is calculated as an aggregate metric over all dates in the range. Even if one date matches perfectly, other dates with errors will contribute to a non-zero WAPE.">
+                        {" "}(aggregate over {forecastVsActualData.valid_points_count} dates)
+                      </span>
+                      {" • "}
                       Date Range: {forecastVsActualData.start_date} to {forecastVsActualData.end_date}
                     </>
                   )}
                 </p>
+                {forecastVsActualData && forecastVsActualData.valid_points_count > 0 && (
+                  <p className="mt-2 text-xs text-slate-500">
+                    💡 <strong>Note:</strong> WAPE is calculated over all {forecastVsActualData.valid_points_count} dates in the range. 
+                    Individual date errors are shown in the "% Error" column. 
+                    A single date matching perfectly doesn't guarantee WAPE = 0% if other dates have errors.
+                  </p>
+                )}
               </div>
 
               {forecastVsActualLoading && (

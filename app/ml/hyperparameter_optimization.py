@@ -162,6 +162,10 @@ def optimize_prophet_hyperparameters(
         f"{n_splits} CV folds"
     )
     
+    # Timing: Start optimization
+    import time
+    opt_start_time = time.time()
+    
     # Generate CV splits
     cv_splits = time_series_cv_splits(df, n_splits=n_splits, test_size=14, gap=0)
     

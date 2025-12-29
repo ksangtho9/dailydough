@@ -42,6 +42,7 @@ def require_admin_mode():
 class RetrainRequest(BaseModel):
     """Request body for starting a retrain job."""
     product_ids: Optional[List[int]] = None
+    optimize_hyperparameters: str = "auto"  # "auto", "true", or "false"
 
 
 class RetrainResponse(BaseModel):
@@ -69,7 +70,11 @@ class CancelResponse(BaseModel):
     message: str
 
 
-def run_training_job(job_id: str, product_ids: Optional[List[int]] = None):
+def run_training_job(
+    job_id: str, 
+    product_ids: Optional[List[int]] = None,
+    optimize_hyperparameters: str = "auto"
+):
     """
     Background task to run training job.
     
@@ -149,6 +154,7 @@ def run_training_job(job_id: str, product_ids: Optional[List[int]] = None):
                     db=db,
                     model_name="prophet",  # Use default model
                     job_id=job_id,  # Pass job_id for cancellation
+                    optimize_hyperparameters=optimize_hyperparameters,  # Pass optimization flag
                 )
                 
                 product_duration = time.time() - product_start_time
@@ -164,7 +170,8 @@ def run_training_job(job_id: str, product_ids: Optional[List[int]] = None):
                 
                 # Check if training was successful
                 if result.get("status") not in ("skipped_no_data", "failed", None):
-                    # Precompute forecasts
+                    # Timing: Forecast precomputation + DB write
+                    forecast_start_time = time.time()
                     try:
                         product = db.query(Product).filter(Product.id == product_id).first()
                         if product:
@@ -180,9 +187,17 @@ def run_training_job(job_id: str, product_ids: Optional[List[int]] = None):
                                     product=product,
                                     forecast=forecast_out,
                                 )
-                                logger.info(f"Training job {job_id}: Precomputed forecasts for product {product_id}")
+                                forecast_duration = time.time() - forecast_start_time
+                                logger.info(
+                                    f"Training job {job_id}: Precomputed forecasts for product {product_id} "
+                                    f"(took {forecast_duration:.2f}s)"
+                                )
                     except Exception as e:
-                        logger.warning(f"Training job {job_id}: Failed to precompute forecasts for product {product_id}: {e}")
+                        forecast_duration = time.time() - forecast_start_time
+                        logger.warning(
+                            f"Training job {job_id}: Failed to precompute forecasts for product {product_id}: {e} "
+                            f"(took {forecast_duration:.2f}s)"
+                        )
                         # Don't fail the job for forecast precomputation errors
                 
                 # Update progress
@@ -307,7 +322,13 @@ async def start_retrain(
     
     # Launch background task using FastAPI BackgroundTasks
     # Note: BackgroundTasks executes after the response is sent
-    background_tasks.add_task(run_training_job, job_id, request.product_ids)
+    # Pass optimize_hyperparameters to the background task
+    background_tasks.add_task(
+        run_training_job, 
+        job_id, 
+        request.product_ids,
+        request.optimize_hyperparameters
+    )
     
     logger.info(
         f"Training job {job_id} queued for background execution: {total} products",

@@ -27,6 +27,14 @@ class Settings(BaseSettings):
 	
 	# Evaluation window for validation (last N valid days)
 	eval_window_days: int = int(os.getenv("EVAL_WINDOW_DAYS", "14"))
+	
+	# Hyperparameter reuse settings
+	hyperparam_reuse_days: int = int(os.getenv("HYPERPARAM_REUSE_DAYS", "7"))
+	
+	# Reduced optimization settings for retraining (configurable, not hard-coded)
+	prophet_opt_max_iter_retrain: int = int(os.getenv("PROPHET_OPT_MAX_ITER_RETRAIN", "4"))
+	xgb_opt_max_iter_retrain: int = int(os.getenv("XGB_OPT_MAX_ITER_RETRAIN", "9"))
+	cv_splits_retrain: int = int(os.getenv("CV_SPLITS_RETRAIN", "2"))
 
 	class Config:
 		env_file = ".env"

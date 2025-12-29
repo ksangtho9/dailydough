@@ -1,10 +1,15 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Literal, Optional, Callable, Tuple
+from datetime import datetime, timezone, timedelta
+import hashlib
+import logging
+import time
 
 import numpy as np
 import pandas as pd
+from sqlalchemy.orm import Session
 
 from .preprocessing import CleanedTimeSeries
 from .features import FeatureEngineer
@@ -17,6 +22,9 @@ from .hyperparameter_optimization import (
     optimize_xgboost_hyperparameters,
 )
 from app.core.config import settings
+from app.services.admin_training_jobs import CancelledError
+
+logger = logging.getLogger("bakezy.training")
 
 
 ModelName = Literal["prophet", "xgboost", "ensemble", "seasonal_naive", "rolling_mean"]
@@ -34,6 +42,108 @@ class TrainResult:
 class ModelTrainer:
     def __init__(self, feature_engineer: Optional[FeatureEngineer] = None):
         self.feature_engineer = feature_engineer or FeatureEngineer()
+    
+    def _compute_feature_version(self, feature_cols: list[str]) -> str:
+        """Compute a version identifier for feature engineering based on feature columns."""
+        if not feature_cols:
+            return "v0"
+        sorted_cols = sorted(feature_cols)
+        cols_str = ",".join(sorted_cols)
+        return hashlib.md5(cols_str.encode()).hexdigest()[:8]
+    
+    def _should_optimize_hyperparameters(
+        self,
+        optimize_hyperparameters: str,
+        product_id: Optional[int],
+        db: Optional[Session],
+        current_feature_version: str,
+        selected_model_type: str,
+    ) -> Tuple[bool, Optional[dict]]:
+        """
+        Determine if we should optimize hyperparameters or reuse stored ones.
+        
+        Returns:
+            (should_optimize, stored_hyperparameters)
+            If should_optimize=False, stored_hyperparameters contains hyperparams to reuse.
+        """
+        if optimize_hyperparameters == "false":
+            return False, None
+        if optimize_hyperparameters == "true":
+            return True, None
+        
+        # "auto" mode: check if we can reuse stored hyperparameters
+        if product_id is None or db is None:
+            return True, None  # Can't check, optimize
+        
+        try:
+            from app.models import ModelRun
+            from datetime import datetime, timezone, timedelta
+            
+            model_run = db.query(ModelRun).filter(
+                ModelRun.product_id == product_id,
+                ModelRun.is_active == True,
+                ModelRun.feature_version == current_feature_version,
+                ModelRun.selected_model_type == selected_model_type,  # Must match current decision
+                ModelRun.created_at >= datetime.now(timezone.utc) - timedelta(days=settings.hyperparam_reuse_days)
+            ).first()
+            
+            if model_run is None:
+                return True, None  # No stored hyperparameters or model type mismatch, optimize
+            
+            # Reuse without expensive validation - let normal post-fit validation catch issues
+            return False, model_run.hyperparameters_json
+        except Exception as e:
+            logger.warning(f"Error checking ModelRun for product {product_id}: {e}")
+            return True, None  # On error, optimize
+    
+    def _quick_prophet_viability_check(
+        self,
+        train_df_for_training: pd.DataFrame,
+        eval_df: pd.DataFrame,
+        holidays_df: Optional[pd.DataFrame] = None,
+        weather_df: Optional[pd.DataFrame] = None,
+        promotions_df: Optional[pd.DataFrame] = None,
+        events_df: Optional[pd.DataFrame] = None,
+        product_info: Optional[dict] = None,
+    ) -> bool:
+        """Quick check if Prophet is viable before expensive optimization.
+        
+        Keep it minimal: fit once, predict on eval slice, run guardrail.
+        No component decomposition, no heavy logging - just summary stats.
+        """
+        if eval_df.empty or len(eval_df) < 7:  # Need at least 7 days for meaningful eval
+            logger.info("Skipping Prophet viability check: insufficient eval data.")
+            return True  # Assume viable if not enough data to check
+        
+        try:
+            # Fit with default config (fast, no optimization)
+            quick_model = ProphetSalesModel(config=ProphetConfig())
+            quick_model.fit(train_df_for_training)
+            
+            # Predict on eval slice (already computed, small window)
+            raw_yhat = self._get_raw_predictions(
+                quick_model, "prophet", eval_df, train_df_for_training,
+                holidays_df=holidays_df, weather_df=weather_df, promotions_df=promotions_df,
+                events_df=events_df, product_info=product_info,
+            )
+            
+            # Check guardrail (minimal check, no heavy diagnostics)
+            if len(raw_yhat) > 0 and "y" in eval_df.columns:
+                should_fallback, _ = self._check_guardrail(
+                    eval_df, raw_yhat, train_df_for_training["y"]
+                )
+                passes = not should_fallback
+            else:
+                passes = True  # Can't check, assume passes
+            
+            # Log only summary: pass/fail
+            if not passes:
+                logger.info("Prophet viability check failed, skipping optimization")
+            
+            return passes
+        except Exception as e:
+            logger.warning(f"Prophet viability check exception, assuming not viable: {e}")
+            return False  # If check fails, assume not viable
     
     def _get_raw_predictions(
         self,
@@ -293,6 +403,9 @@ class ModelTrainer:
         optimize_with_wape: bool = True,
         sample_weights: Optional[np.ndarray] = None,
         should_cancel: Optional[Callable[[], bool]] = None,  # New parameter: cancellation callback
+        optimize_hyperparameters: str = "auto",  # "auto", "true", or "false"
+        db: Optional[Session] = None,  # For ModelRun queries
+        product_id: Optional[int] = None,  # For ModelRun queries
     ) -> TrainResult:
         """
         High-level training routine for a single product time series.
@@ -501,6 +614,11 @@ class ModelTrainer:
                 # Index matches, convert back to array for XGBoost
                 final_sample_weights = weight_series.values
 
+        # Determine selected_model_type FIRST (before any optimization)
+        # This is critical for auto mode to check stored hyperparameters correctly
+        selected_model_type = model_name
+        metadata = None
+        
         # Prophet eligibility check (on training window, not full historical)
         if model_name == "prophet":
             nonzero_days = (train_df_for_training["y"] > 0).sum() if "y" in train_df_for_training.columns else 0
@@ -521,13 +639,63 @@ class ModelTrainer:
                 }
                 
                 # Fall back to XGBoost
+                selected_model_type = "xgboost"
                 model_name = "xgboost"
             else:
-                metadata = None
+                # Prophet is eligible - run quick viability check BEFORE optimization
+                if eval_df is not None and len(eval_df) >= 7:
+                    viability_start_time = time.time()
+                    prophet_viable = self._quick_prophet_viability_check(
+                        train_df_for_training, eval_df, holidays_df, weather_df, promotions_df, events_df, product_info
+                    )
+                    viability_duration = time.time() - viability_start_time
+                    logger.info(f"Prophet viability check took {viability_duration:.2f}s. Viable: {prophet_viable}")
+                    
+                    if not prophet_viable:
+                        logger.info("Prophet viability check failed, skipping Prophet optimization. Trying XGBoost.")
+                        metadata = {
+                            "prophet_skipped_reason": "viability_check_failed",
+                            "nonzero_days": nonzero_days,
+                            "zero_rate": zero_rate
+                        }
+                        selected_model_type = "xgboost"
+                        model_name = "xgboost"
+        
+        # Compute feature_version for auto mode check
+        current_feature_version = "v0"
+        if selected_model_type == "xgboost":
+            # For XGBoost, we'll compute feature_version after feature engineering
+            # For now, use a placeholder - will be computed after model training
+            current_feature_version = "v1"  # Placeholder
+        elif selected_model_type == "prophet":
+            current_feature_version = "v1"  # Placeholder for Prophet
+        
+        # Check if we should optimize (auto mode logic)
+        should_optimize, stored_hyperparams = self._should_optimize_hyperparameters(
+            optimize_hyperparameters=optimize_hyperparameters,
+            product_id=product_id,
+            db=db,
+            current_feature_version=current_feature_version,
+            selected_model_type=selected_model_type,
+        )
+        
+        # Update optimize_with_wape based on should_optimize
+        # If we're reusing hyperparameters, don't optimize
+        if not should_optimize and stored_hyperparams:
+            optimize_with_wape = False
+            hyperparameters = stored_hyperparams
+            logger.info(f"Reusing stored hyperparameters for {selected_model_type} (auto mode)")
+        elif should_optimize and optimize_hyperparameters == "auto":
+            # Use reduced optimization settings for retraining
+            logger.info(f"Running optimization with reduced settings for {selected_model_type} (auto mode)")
 
         if model_name == "prophet":
-            # Optimize hyperparameters if requested
+            # Optimize hyperparameters if requested (with reduced settings in auto mode)
             if optimize_with_wape:
+                # Use reduced settings for retraining (auto mode)
+                n_splits = settings.cv_splits_retrain if optimize_hyperparameters == "auto" else 3
+                max_iter = settings.prophet_opt_max_iter_retrain if optimize_hyperparameters == "auto" else None
+                
                 opt_result = optimize_prophet_hyperparameters(
                     ts=CleanedTimeSeries(product_id=ts.product_id, df=df, shelf_life_days=ts.shelf_life_days),
                     holidays_df=holidays_df,
@@ -535,8 +703,9 @@ class ModelTrainer:
                     promotions_df=promotions_df,
                     events_df=events_df,
                     product_info=product_info,
-                    n_splits=3,
-                    max_iter=None,  # Try all combinations
+                    n_splits=n_splits,
+                    max_iter=max_iter,
+                    should_cancel=should_cancel,
                 )
                 # Use optimized hyperparameters
                 config = ProphetConfig(
@@ -605,8 +774,12 @@ class ModelTrainer:
             return TrainResult(model_name="prophet", model=model, metadata=metadata)
 
         elif model_name == "xgboost":
-            # Optimize hyperparameters if requested
+            # Optimize hyperparameters if requested (with reduced settings in auto mode)
             if optimize_with_wape:
+                # Use reduced settings for retraining (auto mode)
+                n_splits = settings.cv_splits_retrain if optimize_hyperparameters == "auto" else 3
+                max_iter = settings.xgb_opt_max_iter_retrain if optimize_hyperparameters == "auto" else 27
+                
                 opt_result = optimize_xgboost_hyperparameters(
                     ts=CleanedTimeSeries(product_id=ts.product_id, df=df, shelf_life_days=ts.shelf_life_days),
                     holidays_df=holidays_df,
@@ -614,8 +787,8 @@ class ModelTrainer:
                     promotions_df=promotions_df,
                     events_df=events_df,
                     product_info=product_info,
-                    n_splits=3,
-                    max_iter=27,  # Limit combinations for speed
+                    n_splits=n_splits,
+                    max_iter=max_iter,
                     use_wape_loss=True,  # Also use WAPE objective
                     should_cancel=should_cancel,  # Pass cancellation callback
                 )
@@ -763,6 +936,10 @@ class ModelTrainer:
             # Train both Prophet and XGBoost models
             # Train Prophet
             if optimize_with_wape:
+                # Use reduced settings for retraining (auto mode)
+                n_splits = settings.cv_splits_retrain if optimize_hyperparameters == "auto" else 3
+                max_iter = settings.prophet_opt_max_iter_retrain if optimize_hyperparameters == "auto" else None
+                
                 prophet_opt_result = optimize_prophet_hyperparameters(
                     ts=CleanedTimeSeries(product_id=ts.product_id, df=df, shelf_life_days=ts.shelf_life_days),
                     holidays_df=holidays_df,
@@ -770,8 +947,9 @@ class ModelTrainer:
                     promotions_df=promotions_df,
                     events_df=events_df,
                     product_info=product_info,
-                    n_splits=3,
-                    max_iter=None,
+                    n_splits=n_splits,
+                    max_iter=max_iter,
+                    should_cancel=should_cancel,
                 )
                 prophet_config = ProphetConfig(
                     changepoint_prior_scale=prophet_opt_result.best_params.get("changepoint_prior_scale", 0.05),
@@ -799,6 +977,10 @@ class ModelTrainer:
             
             # Train XGBoost
             if optimize_with_wape:
+                # Use reduced settings for retraining (auto mode)
+                n_splits = settings.cv_splits_retrain if optimize_hyperparameters == "auto" else 3
+                max_iter = settings.xgb_opt_max_iter_retrain if optimize_hyperparameters == "auto" else 27
+                
                 xgb_opt_result = optimize_xgboost_hyperparameters(
                     ts=CleanedTimeSeries(product_id=ts.product_id, df=df, shelf_life_days=ts.shelf_life_days),
                     holidays_df=holidays_df,
@@ -806,8 +988,8 @@ class ModelTrainer:
                     promotions_df=promotions_df,
                     events_df=events_df,
                     product_info=product_info,
-                    n_splits=3,
-                    max_iter=27,
+                    n_splits=n_splits,
+                    max_iter=max_iter,
                     use_wape_loss=True,
                     should_cancel=should_cancel,  # Pass cancellation callback
                 )
