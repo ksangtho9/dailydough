@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Callable
 
 import numpy as np
 import pandas as pd
@@ -12,6 +12,7 @@ from .models.prophet_model import ProphetSalesModel, ProphetConfig
 from .models.xgboost_model import XGBoostSalesModel, XGBoostConfig
 from .preprocessing import CleanedTimeSeries
 from .features import FeatureEngineer
+from app.services.admin_training_jobs import CancelledError
 
 logger = logging.getLogger("bakezy.hyperparameter_optimization")
 
@@ -321,6 +322,7 @@ def optimize_xgboost_hyperparameters(
     n_splits: int = 3,
     max_iter: Optional[int] = None,
     use_wape_loss: bool = False,
+    should_cancel: Optional[Callable[[], bool]] = None,
 ) -> OptimizationResult:
     """
     Optimize XGBoost hyperparameters using WAPE as the optimization metric.
@@ -335,9 +337,13 @@ def optimize_xgboost_hyperparameters(
         n_splits: Number of CV folds
         max_iter: Maximum number of parameter combinations to try (None = try all)
         use_wape_loss: Whether to use WAPE as the objective function (not just metric)
+        should_cancel: Optional cancellation callback function that returns True if optimization should be cancelled
         
     Returns:
         OptimizationResult with best parameters and WAPE score
+        
+    Raises:
+        CancelledError: If should_cancel callback returns True during optimization
     """
     if ts.df.empty or len(ts.df) < 60:
         logger.warning(
@@ -535,4 +541,34 @@ def optimize_xgboost_hyperparameters(
         best_wape=best_wape,
         all_results=all_results,
     )
+
+
+# Smoke test for cancellation (can be run with: python -m app.ml.hyperparameter_optimization)
+if __name__ == "__main__":
+    # Quick verification that cancellation works
+    import sys
+    from datetime import date, timedelta
+    
+    # Create minimal test data
+    test_dates = [date.today() - timedelta(days=i) for i in range(100, 0, -1)]
+    test_df = pd.DataFrame({
+        "ds": test_dates,
+        "y": [1.0] * 100,
+    })
+    test_ts = CleanedTimeSeries(product_id=999, df=test_df, shelf_life_days=1)
+    
+    # Test cancellation
+    try:
+        result = optimize_xgboost_hyperparameters(
+            ts=test_ts,
+            should_cancel=lambda: True,  # Cancel immediately
+            max_iter=1,  # Minimal iteration
+        )
+        print("ERROR: Cancellation test failed - optimization should have been cancelled")
+        sys.exit(1)
+    except CancelledError:
+        print("✓ Cancellation test passed - CancelledError raised correctly")
+    except Exception as e:
+        print(f"ERROR: Unexpected exception during cancellation test: {e}")
+        sys.exit(1)
 

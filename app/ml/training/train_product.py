@@ -21,6 +21,167 @@ import hashlib
 logger = logging.getLogger("bakezy.training")
 
 
+def _compute_raw_prediction_stats_future(
+    raw_yhat_values: np.ndarray,
+    model_name: str,
+    feature_version: Optional[str] = None,
+) -> Optional[Dict[str, Any]]:
+    """
+    Compute raw prediction statistics for the future forecast slice.
+    
+    Args:
+        raw_yhat_values: Raw predictions (before clamping) for future dates
+        model_name: Name of the model used
+        feature_version: Feature version used
+    
+    Returns:
+        Dictionary with raw prediction stats, or None if computation fails.
+    """
+    if raw_yhat_values is None or len(raw_yhat_values) == 0:
+        return None
+    
+    # Compute statistics
+    raw_neg_pct = (raw_yhat_values < 0).sum() / len(raw_yhat_values) * 100
+    raw_zero_pct = (raw_yhat_values == 0.0).sum() / len(raw_yhat_values) * 100
+    
+    yhat_values = np.maximum(raw_yhat_values, 0.0)  # After clamping
+    clamped_zero_pct = (yhat_values == 0.0).sum() / len(yhat_values) * 100
+    
+    min_raw_yhat = float(np.min(raw_yhat_values))
+    mean_raw_yhat = float(np.mean(raw_yhat_values))
+    max_raw_yhat = float(np.max(raw_yhat_values))
+    
+    # Compute percentiles
+    sorted_raw = np.sort(raw_yhat_values)
+    raw_p05 = float(np.percentile(sorted_raw, 5)) if len(sorted_raw) > 0 else None
+    raw_p50 = float(np.percentile(sorted_raw, 50)) if len(sorted_raw) > 0 else None
+    raw_p95 = float(np.percentile(sorted_raw, 95)) if len(sorted_raw) > 0 else None
+    
+    return {
+        "raw_min": min_raw_yhat,
+        "raw_mean": mean_raw_yhat,
+        "raw_p05": raw_p05,
+        "raw_p50": raw_p50,
+        "raw_p95": raw_p95,
+        "raw_max": max_raw_yhat,
+        "raw_neg_pct": float(raw_neg_pct),
+        "raw_zero_pct": float(raw_zero_pct),
+        "clamped_zero_pct": float(clamped_zero_pct),
+        "n_points_future": len(raw_yhat_values),
+        "model_name": model_name,
+        "feature_version": feature_version,
+    }
+
+
+def _compute_raw_prediction_stats_eval(
+    train_result,
+    train_df_for_analysis: pd.DataFrame,
+    model_name: str,
+) -> Optional[Dict[str, Any]]:
+    """
+    Compute raw prediction statistics for the evaluation (training) slice.
+    
+    Returns a dictionary with raw prediction stats, or None if computation fails.
+    """
+    if train_df_for_analysis.empty or "y" not in train_df_for_analysis.columns:
+        return None
+    
+    raw_yhat_values = None
+    yhat_values = None
+    
+    try:
+        if model_name == "prophet":
+            # Prophet: Get predictions for training period
+            forecast_df = train_result.model.predict(0)  # includes training range
+            if not forecast_df.empty and "yhat" in forecast_df.columns:
+                # Merge with training dates
+                merged = forecast_df.merge(
+                    train_df_for_analysis[["ds", "y"]], 
+                    on="ds", 
+                    how="inner"
+                )
+                if not merged.empty:
+                    raw_yhat_values = merged["yhat"].values  # Before clamping
+                    yhat_values = np.maximum(raw_yhat_values, 0.0)  # After clamping
+        elif model_name == "xgboost":
+            # XGBoost: Predict on training data
+            if train_result.model.feature_cols is not None:
+                # Need to apply feature engineering to get predictions
+                from app.ml.features import FeatureEngineer
+                feature_engineer = FeatureEngineer()
+                feature_df = train_df_for_analysis.copy()
+                feature_df["ds"] = pd.to_datetime(feature_df["ds"])
+                feature_df = feature_engineer.transform(feature_df)
+                
+                X = feature_df[train_result.model.feature_cols].values
+                raw_yhat_values = train_result.model.model.predict(X)  # Can be negative
+                yhat_values = np.maximum(raw_yhat_values, 0.0)  # After clamping
+        elif model_name == "ensemble":
+            # Ensemble: Use ensemble prediction
+            from app.ml.features import FeatureEngineer
+            feature_engineer = FeatureEngineer()
+            feature_df = train_df_for_analysis.copy()
+            feature_df["ds"] = pd.to_datetime(feature_df["ds"])
+            feature_df = feature_engineer.transform(feature_df)
+            
+            # Get ensemble predictions
+            predictions = train_result.model.predict(feature_df)
+            if predictions is not None and len(predictions) > 0:
+                raw_yhat_values = np.array(predictions)  # Can be negative
+                yhat_values = np.maximum(raw_yhat_values, 0.0)  # After clamping
+        elif model_name in ["seasonal_naive", "rolling_mean"]:
+            # Baseline models: predict on training data dates
+            # Get last date from training data
+            if not train_df_for_analysis.empty and "ds" in train_df_for_analysis.columns:
+                last_date = pd.to_datetime(train_df_for_analysis["ds"].max())
+                horizon_days = len(train_df_for_analysis)
+                forecast_df = train_result.model.predict(horizon_days, last_date=last_date)
+                if not forecast_df.empty and "yhat" in forecast_df.columns:
+                    # Merge with training dates to get aligned predictions
+                    merged = forecast_df.merge(
+                        train_df_for_analysis[["ds"]], 
+                        on="ds", 
+                        how="inner"
+                    )
+                    if not merged.empty:
+                        raw_yhat_values = merged["yhat"].values  # Can be negative
+                        yhat_values = np.maximum(raw_yhat_values, 0.0)  # After clamping
+    except Exception as e:
+        logger.warning(f"Could not compute raw prediction stats for eval slice: {e}")
+        return None
+    
+    if raw_yhat_values is None or len(raw_yhat_values) == 0:
+        return None
+    
+    # Compute statistics
+    raw_neg_pct = (raw_yhat_values < 0).sum() / len(raw_yhat_values) * 100
+    raw_zero_pct = (raw_yhat_values == 0.0).sum() / len(raw_yhat_values) * 100
+    clamped_zero_pct = (yhat_values == 0.0).sum() / len(yhat_values) * 100 if yhat_values is not None else 0.0
+    
+    min_raw_yhat = float(np.min(raw_yhat_values))
+    mean_raw_yhat = float(np.mean(raw_yhat_values))
+    max_raw_yhat = float(np.max(raw_yhat_values))
+    
+    # Compute percentiles
+    sorted_raw = np.sort(raw_yhat_values)
+    raw_p05 = float(np.percentile(sorted_raw, 5)) if len(sorted_raw) > 0 else None
+    raw_p50 = float(np.percentile(sorted_raw, 50)) if len(sorted_raw) > 0 else None
+    raw_p95 = float(np.percentile(sorted_raw, 95)) if len(sorted_raw) > 0 else None
+    
+    return {
+        "raw_min": min_raw_yhat,
+        "raw_mean": mean_raw_yhat,
+        "raw_p05": raw_p05,
+        "raw_p50": raw_p50,
+        "raw_p95": raw_p95,
+        "raw_max": max_raw_yhat,
+        "raw_neg_pct": float(raw_neg_pct),
+        "raw_zero_pct": float(raw_zero_pct),
+        "clamped_zero_pct": float(clamped_zero_pct),
+        "n_points_eval": len(raw_yhat_values),
+    }
+
+
 def _compute_metrics(train_result, cleaned_df) -> tuple[Optional[float], Optional[float], Optional[float], Optional[float]]:
     """
     Compute MAPE, RMSE, WAPE, and Adjusted WAPE metrics.
@@ -340,6 +501,15 @@ def train_product(
         db.commit()
         db.refresh(metrics)
 
+        # Get training data (valid days only) for analysis - needed for raw prediction stats and logging
+        # Initialize before try block so it's available for logging even if ModelRun save fails
+        train_df_for_analysis = cleaned.df.copy()
+        if "is_valid_day" in train_df_for_analysis.columns:
+            train_df_for_analysis = train_df_for_analysis[train_df_for_analysis["is_valid_day"] == 1].copy()
+        
+        # Initialize raw_prediction_stats_eval to None (will be computed in try block)
+        raw_prediction_stats_eval = None
+
         # Save ModelRun with hyperparameters and metadata
         try:
             # Extract hyperparameters from trained model
@@ -426,6 +596,62 @@ def train_product(
                 ModelRun.is_active == True
             ).update({"is_active": False})
 
+            # Compute raw prediction stats for eval slice BEFORE building metrics_json_data
+            # train_df_for_analysis is already defined above
+            raw_prediction_stats_eval = _compute_raw_prediction_stats_eval(
+                train_result,
+                train_df_for_analysis,
+                train_result.model_name,
+            )
+
+            # Build enhanced metrics_json with diagnostic information
+            metrics_json_data = {
+                "wape": float(wape) if wape is not None else None,
+                "wape_adjusted": float(wape_adjusted) if wape_adjusted is not None else None,
+                "mape": float(mape) if mape is not None else None,
+                "rmse": float(rmse) if rmse is not None else None,
+            }
+            
+            # Add training data summary if available
+            if not train_df_for_analysis.empty and "y" in train_df_for_analysis.columns:
+                total_training_days = len(train_df_for_analysis)
+                nonzero_days = (train_df_for_analysis["y"] > 0).sum()
+                zero_rate = (train_df_for_analysis["y"] == 0.0).sum() / total_training_days * 100 if total_training_days > 0 else 0.0
+                mean_y = float(train_df_for_analysis["y"].mean()) if total_training_days > 0 else 0.0
+                median_y = float(train_df_for_analysis["y"].median()) if total_training_days > 0 else 0.0
+                max_y = float(train_df_for_analysis["y"].max()) if total_training_days > 0 else 0.0
+                
+                is_valid_day_count = total_training_days
+                supply_capped_count = 0
+                supply_capped_pct = 0.0
+                if "is_supply_capped_day" in train_df_for_analysis.columns:
+                    supply_capped_count = (train_df_for_analysis["is_supply_capped_day"] == 1).sum()
+                    supply_capped_pct = (supply_capped_count / total_training_days * 100) if total_training_days > 0 else 0.0
+                
+                metrics_json_data["training_data_summary"] = {
+                    "total_training_days": total_training_days,
+                    "nonzero_days": int(nonzero_days),
+                    "zero_rate": float(zero_rate),
+                    "mean_y": mean_y,
+                    "median_y": median_y,
+                    "max_y": max_y,
+                    "is_valid_day_count": is_valid_day_count,
+                    "supply_capped_count": supply_capped_count,
+                    "supply_capped_pct": supply_capped_pct,
+                }
+            
+            # Add raw prediction summary for eval slice if available
+            if raw_prediction_stats_eval is not None:
+                metrics_json_data["raw_prediction_summary_eval"] = {
+                    **raw_prediction_stats_eval,
+                    "model_name": train_result.model_name,
+                    "feature_version": feature_version,
+                }
+            
+            # Add model selection path from metadata
+            if train_result.metadata and "model_selection_path" in train_result.metadata:
+                metrics_json_data["model_selection_path"] = train_result.metadata["model_selection_path"]
+            
             # Create new ModelRun
             model_run = ModelRun(
                 product_id=product_id,
@@ -435,18 +661,31 @@ def train_product(
                 hyperparameters_json=hyperparams if hyperparams else None,
                 training_window_end=training_window_end,
                 feature_version=feature_version,
-                metrics_json={
-                    "wape": float(wape) if wape is not None else None,
-                    "wape_adjusted": float(wape_adjusted) if wape_adjusted is not None else None,
-                    "mape": float(mape) if mape is not None else None,
-                    "rmse": float(rmse) if rmse is not None else None,
-                },
+                metrics_json=metrics_json_data,
                 is_active=True,
                 is_best=False,  # Can be set later if we implement best run tracking
             )
             db.add(model_run)
             db.commit()
             logger.info(f"Saved ModelRun for product {product_id}: model_type={model_name}, selected={selected_model_type}, hyperparams={bool(hyperparams)}")
+            
+            # Dense Product Sanity Trigger: Warn if healthy training data but high zero forecasts
+            if (raw_prediction_stats_eval is not None and 
+                not train_df_for_analysis.empty and "y" in train_df_for_analysis.columns):
+                mean_y_train = float(train_df_for_analysis["y"].mean())
+                zero_rate_train = (train_df_for_analysis["y"] == 0.0).sum() / len(train_df_for_analysis) * 100
+                clamped_zero_pct_eval = raw_prediction_stats_eval.get("clamped_zero_pct", 0.0)
+                
+                # Check eval slice for now (will check future slice when available)
+                if (mean_y_train > 5 and 
+                    zero_rate_train < 30.0 and 
+                    clamped_zero_pct_eval > 50.0):
+                    logger.warning(
+                        f"DENSE_PRODUCT_ZERO_FORECAST: Product {product_id} has healthy training data "
+                        f"(mean_y={mean_y_train:.2f}, zero_rate={zero_rate_train:.1f}%) but "
+                        f"{clamped_zero_pct_eval:.1f}% of eval forecasts are clamped to zero. "
+                        f"Likely negative clamp or future regressor drift."
+                    )
         except Exception as e:
             logger.warning(f"Failed to save ModelRun for product {product_id}: {e}")
             # Don't fail training if ModelRun save fails
@@ -459,11 +698,7 @@ def train_product(
             n_points = len(cleaned.df)
         
         # Enhanced post-training logging: Comprehensive metrics to distinguish data problems vs model bugs
-        # Get training data (valid days only) for analysis
-        train_df_for_analysis = cleaned.df.copy()
-        if "is_valid_day" in train_df_for_analysis.columns:
-            train_df_for_analysis = train_df_for_analysis[train_df_for_analysis["is_valid_day"] == 1].copy()
-        
+        # train_df_for_analysis is already defined above, reuse it
         if not train_df_for_analysis.empty and "y" in train_df_for_analysis.columns:
             # Training data statistics
             zero_count = (train_df_for_analysis["y"] == 0.0).sum()
@@ -479,74 +714,15 @@ def train_product(
                 capped_count = int((train_df_for_analysis["is_supply_capped_day"] == 1).sum())
                 capped_pct = (capped_count / total_count * 100) if total_count > 0 else 0
             
-            # Predicted distribution on training data (consistent evaluation set)
-            # Get predictions from the model for the training period (training fitted values)
+            # Use raw prediction stats from eval slice (already computed above)
             yhat_mean = None
             yhat_zero_pct = None
             raw_yhat_neg_pct = None
-            yhat_values = None
-            raw_yhat_values = None
             
-            try:
-                if train_result.model_name == "prophet":
-                    # Prophet: Get predictions for training period
-                    forecast_df = train_result.model.predict(0)  # includes training range
-                    if not forecast_df.empty and "yhat" in forecast_df.columns:
-                        # Merge with training dates
-                        merged = forecast_df.merge(
-                            train_df_for_analysis[["ds", "y"]], 
-                            on="ds", 
-                            how="inner"
-                        )
-                        if not merged.empty:
-                            raw_yhat_values = merged["yhat"].values  # Before clamping
-                            yhat_values = np.maximum(raw_yhat_values, 0.0)  # After clamping
-                            yhat_mean = float(yhat_values.mean())
-                            yhat_zero_count = (yhat_values == 0.0).sum()
-                            yhat_zero_pct = (yhat_zero_count / len(yhat_values) * 100) if len(yhat_values) > 0 else 0
-                            # Calculate negative prediction percentage
-                            raw_yhat_neg_count = (raw_yhat_values < 0).sum()
-                            raw_yhat_neg_pct = (raw_yhat_neg_count / len(raw_yhat_values) * 100) if len(raw_yhat_values) > 0 else 0
-                elif train_result.model_name == "xgboost":
-                    # XGBoost: Predict on training data
-                    if train_result.model.feature_cols is not None:
-                        # Need to apply feature engineering to get predictions
-                        from app.ml.features import FeatureEngineer
-                        feature_engineer = FeatureEngineer()
-                        feature_df = train_df_for_analysis.copy()
-                        feature_df["ds"] = pd.to_datetime(feature_df["ds"])
-                        feature_df = feature_engineer.transform(feature_df)
-                        
-                        X = feature_df[train_result.model.feature_cols].values
-                        raw_yhat_values = train_result.model.model.predict(X)  # Can be negative
-                        yhat_values = np.maximum(raw_yhat_values, 0.0)  # After clamping
-                        yhat_mean = float(yhat_values.mean())
-                        yhat_zero_count = (yhat_values == 0.0).sum()
-                        yhat_zero_pct = (yhat_zero_count / len(yhat_values) * 100) if len(yhat_values) > 0 else 0
-                        # Calculate negative prediction percentage
-                        raw_yhat_neg_count = (raw_yhat_values < 0).sum()
-                        raw_yhat_neg_pct = (raw_yhat_neg_count / len(raw_yhat_values) * 100) if len(raw_yhat_values) > 0 else 0
-                elif train_result.model_name == "ensemble":
-                    # Ensemble: Use ensemble prediction
-                    from app.ml.features import FeatureEngineer
-                    feature_engineer = FeatureEngineer()
-                    feature_df = train_df_for_analysis.copy()
-                    feature_df["ds"] = pd.to_datetime(feature_df["ds"])
-                    feature_df = feature_engineer.transform(feature_df)
-                    
-                    # Get ensemble predictions
-                    predictions = train_result.model.predict(feature_df)
-                    if predictions is not None and len(predictions) > 0:
-                        raw_yhat_values = np.array(predictions)  # Can be negative
-                        yhat_values = np.maximum(raw_yhat_values, 0.0)  # After clamping
-                        yhat_mean = float(yhat_values.mean())
-                        yhat_zero_count = (yhat_values == 0.0).sum()
-                        yhat_zero_pct = (yhat_zero_count / len(yhat_values) * 100) if len(yhat_values) > 0 else 0
-                        # Calculate negative prediction percentage
-                        raw_yhat_neg_count = (raw_yhat_values < 0).sum()
-                        raw_yhat_neg_pct = (raw_yhat_neg_count / len(raw_yhat_values) * 100) if len(raw_yhat_values) > 0 else 0
-            except Exception as e:
-                logger.warning(f"Could not compute predicted distribution for logging: {e}")
+            if raw_prediction_stats_eval is not None:
+                yhat_mean = raw_prediction_stats_eval.get("raw_mean")
+                yhat_zero_pct = raw_prediction_stats_eval.get("clamped_zero_pct")
+                raw_yhat_neg_pct = raw_prediction_stats_eval.get("raw_neg_pct")
             
             # Log comprehensive metrics (on consistent evaluation set: training fitted values)
             log_msg = (

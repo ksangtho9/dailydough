@@ -21,6 +21,7 @@ from .promotions import router as promotions_router
 from .weather import router as weather_router
 from .walk_forward_validation import router as walk_forward_validation_router
 from .admin.training import router as admin_training_router
+from .admin.diagnostics import router as admin_diagnostics_router
 
 api_router = APIRouter()
 
@@ -45,3 +46,4 @@ api_router.include_router(dashboard_summary_router)
 api_router.include_router(ai_assistant_router)
 api_router.include_router(walk_forward_validation_router)
 api_router.include_router(admin_training_router)
+api_router.include_router(admin_diagnostics_router)

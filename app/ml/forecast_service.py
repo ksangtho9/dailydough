@@ -78,6 +78,9 @@ class ProductForecast:
     product_name: str
     horizon_days: int
     points: List[ForecastPoint]
+    # Optional fields for future stats computation (used by train_all_products.py)
+    raw_yhat_values: Optional[np.ndarray] = None
+    model_name: Optional[str] = None
 
 
 class ForecastService:
@@ -627,8 +630,39 @@ class ForecastService:
             if model_run:
                 model_run.forecast_model_override_reason = forecast_model_override_reason
                 db.commit()
+        
+        # Phase 2: Log model/hyperparams used in forecasting (gated by debug_zero_forecasts)
+        from app.core.config import settings
+        if settings.debug_zero_forecasts or product_id == 156:  # Always log for product 156
+            final_model = forecast_result.model_name
+            model_run_id = model_run.id if model_run else None
+            trained_at = model_run.created_at.isoformat() if model_run and model_run.created_at else None
+            hyperparams_source = "stored" if (model_run and hyperparameters) else "defaults"
+            hyperparams_summary = {}
+            if hyperparameters:
+                # Log key hyperparameters (avoid logging full dict if too large)
+                for key in ["changepoint_prior_scale", "seasonality_prior_scale", "holidays_prior_scale", 
+                           "n_estimators", "max_depth", "learning_rate"]:
+                    if key in hyperparameters:
+                        hyperparams_summary[key] = hyperparameters[key]
+            
+            logger.info(
+                f"FORECAST_MODEL_INFO: product_id={product_id}, "
+                f"final_model={final_model}, "
+                f"model_run_id={model_run_id}, "
+                f"trained_at={trained_at}, "
+                f"hyperparams_source={hyperparams_source}, "
+                f"hyperparams_summary={hyperparams_summary}, "
+                f"requested_model={requested_model}, "
+                f"model_override={forecast_result.model_name != requested_model}"
+            )
 
         df = forecast_result.forecast_df
+        
+        # Extract raw predictions before clamping for future stats computation
+        raw_yhat_values = None
+        if not df.empty and "yhat" in df.columns:
+            raw_yhat_values = df["yhat"].values.copy()
 
         # #region agent log
         try:
@@ -874,6 +908,11 @@ class ForecastService:
             horizon_days=horizon_days,
             points=points,
         )
+        
+        # Store raw predictions as an attribute for future stats computation
+        # This is used by train_all_products.py to compute raw_prediction_summary_future
+        result.raw_yhat_values = raw_yhat_values
+        result.model_name = forecast_result.model_name
 
         # Store in cache for subsequent requests.
         try:

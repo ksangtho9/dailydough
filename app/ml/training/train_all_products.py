@@ -5,10 +5,15 @@ from typing import List, Dict, Any, Optional
 from sqlalchemy.orm import Session
 
 from app.database.database import SessionLocal
-from app.models import Product
+from app.models import Product, ModelRun
 from app.ml.inference.forecast_service import get_forecast_for_product
+from app.ml.forecast_service import ForecastService
 from app.services.daily_forecast_service import upsert_product_daily_forecasts
-from .train_product import train_product
+from .train_product import train_product, _compute_raw_prediction_stats_future
+import logging
+import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 def train_all_products(
@@ -47,15 +52,49 @@ def train_all_products(
                     while forecast_attempts < max_forecast_attempts and not forecast_success:
                         try:
                             forecast_attempts += 1
-                            forecast_out = get_forecast_for_product(
-                                product_id=product.id,
-                                days_ahead=60,
+                            
+                            # Call forecast service directly to get raw predictions for future stats
+                            forecast_service = ForecastService()
+                            forecast_result = forecast_service.generate_prophet_forecast_for_product(
                                 db=db,
+                                product_id=product.id,
+                                horizon_days=60,
                             )
                             
                             # Validate that we got a forecast with points
-                            if not forecast_out or not forecast_out.points:
+                            if not forecast_result or not forecast_result.points:
                                 raise ValueError(f"Forecast returned empty points for product_id={product.id}")
+                            
+                            # Convert to ProductForecastOut for upsert
+                            from app.schemas.sales_record import ForecastPointOut, ProductForecastOut
+                            from datetime import date as date_type
+                            forecast_out = ProductForecastOut(
+                                product_id=forecast_result.product_id,
+                                product_name=forecast_result.product_name,
+                                horizon_days=forecast_result.horizon_days,
+                                points=[
+                                    ForecastPointOut(
+                                        date=date_type.fromisoformat(point.date),
+                                        yhat=point.yhat,
+                                        yhat_lower=point.yhat_lower,
+                                        yhat_upper=point.yhat_upper,
+                                        revenue=getattr(point, "revenue", None),
+                                        cost=getattr(point, "cost", None),
+                                        waste_cost=getattr(point, "waste_cost", None),
+                                        profit=getattr(point, "profit", None),
+                                        waste_quantity=getattr(point, "waste_quantity", None),
+                                        optimal_quantity=getattr(point, "optimal_quantity", None),
+                                        expected_stockout_cost=getattr(point, "expected_stockout_cost", None),
+                                        expected_waste_cost=getattr(point, "expected_waste_cost", None),
+                                        expected_total_cost=getattr(point, "expected_total_cost", None),
+                                        is_predicted_spike=getattr(point, "is_predicted_spike", False),
+                                        spike_probability=getattr(point, "spike_probability", None),
+                                        spike_magnitude=getattr(point, "spike_magnitude", None),
+                                        spike_confidence=getattr(point, "spike_confidence", None),
+                                    )
+                                    for point in forecast_result.points
+                                ],
+                            )
                             
                             upsert_product_daily_forecasts(
                                 db,
@@ -67,6 +106,79 @@ def train_all_products(
                                 f"Successfully precomputed forecasts for product_id={product.id}, product_name={product.name} "
                                 f"(attempt {forecast_attempts}/{max_forecast_attempts})"
                             )
+                            
+                            # Phase 1b: Compute and store future slice raw prediction stats
+                            if forecast_result.raw_yhat_values is not None and len(forecast_result.raw_yhat_values) > 0:
+                                try:
+                                    # Get the active ModelRun for this product
+                                    model_run = (
+                                        db.query(ModelRun)
+                                        .filter(
+                                            ModelRun.product_id == product.id,
+                                            ModelRun.is_active == True
+                                        )
+                                        .order_by(ModelRun.created_at.desc())
+                                        .first()
+                                    )
+                                    
+                                    if model_run:
+                                        # Get feature_version from ModelRun
+                                        feature_version = model_run.feature_version
+                                        model_name = forecast_result.model_name or model_run.selected_model_type
+                                        
+                                        # Compute future slice stats
+                                        raw_prediction_stats_future = _compute_raw_prediction_stats_future(
+                                            forecast_result.raw_yhat_values,
+                                            model_name,
+                                            feature_version,
+                                        )
+                                        
+                                        if raw_prediction_stats_future is not None:
+                                            # Update ModelRun.metrics_json with future stats
+                                            if model_run.metrics_json is None:
+                                                model_run.metrics_json = {}
+                                            
+                                            model_run.metrics_json["raw_prediction_summary_future"] = raw_prediction_stats_future
+                                            db.commit()
+                                            
+                                            logger.info(
+                                                f"Updated ModelRun for product_id={product.id} with future slice raw prediction stats: "
+                                                f"raw_neg_pct={raw_prediction_stats_future.get('raw_neg_pct', 0):.1f}%, "
+                                                f"clamped_zero_pct={raw_prediction_stats_future.get('clamped_zero_pct', 0):.1f}%"
+                                            )
+                                            
+                                            # Phase 5: Dense product sanity warning for future slice
+                                            training_data_summary = model_run.metrics_json.get("training_data_summary", {})
+                                            mean_y_train = training_data_summary.get("mean_y", 0.0)
+                                            zero_rate_train = training_data_summary.get("zero_rate", 100.0)
+                                            clamped_zero_pct_future = raw_prediction_stats_future.get("clamped_zero_pct", 0.0)
+                                            
+                                            if (mean_y_train > 10 and 
+                                                zero_rate_train < 30.0 and 
+                                                clamped_zero_pct_future > 50.0):
+                                                logger.warning(
+                                                    f"DENSE_PRODUCT_ZERO_FORECAST: Product {product.id} has healthy training data "
+                                                    f"(mean_y={mean_y_train:.2f}, zero_rate={zero_rate_train:.1f}%) but "
+                                                    f"{clamped_zero_pct_future:.1f}% of future forecasts are clamped to zero. "
+                                                    f"Likely negative clamp or future feature/regressor issue."
+                                                )
+                                        else:
+                                            logger.warning(
+                                                f"Failed to compute future slice stats for product_id={product.id}"
+                                            )
+                                    else:
+                                        logger.warning(
+                                            f"No active ModelRun found for product_id={product.id} to update with future stats"
+                                        )
+                                except Exception as stats_error:
+                                    logger.warning(
+                                        f"Failed to compute/store future slice stats for product_id={product.id}: {stats_error}",
+                                        exc_info=True
+                                    )
+                            else:
+                                logger.debug(
+                                    f"No raw predictions available for product_id={product.id} to compute future stats"
+                                )
                         except Exception as e:
                             if forecast_attempts >= max_forecast_attempts:
                                 # Final attempt failed - log as error and mark in result

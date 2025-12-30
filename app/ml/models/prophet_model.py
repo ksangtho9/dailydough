@@ -6,6 +6,8 @@ import logging
 
 import pandas as pd
 
+from app.core.config import settings
+
 try:
     from prophet import Prophet
 except ImportError:  # pragma: no cover
@@ -298,6 +300,7 @@ class ProphetSalesModel:
         horizon_days: int,
         historical_delivery: Optional[pd.Series] = None,
         future_regressors: Optional[pd.DataFrame] = None,
+        product_id: Optional[int] = None,  # For gated diagnostic logging
     ) -> pd.DataFrame:
         """
         Returns a DataFrame with columns including:
@@ -539,6 +542,129 @@ class ProphetSalesModel:
         for col in future_for_predict.columns:
             if col != "ds":
                 future_for_predict[col] = future_for_predict[col].astype(float)
+        
+        # Step 5: Model-specific checks (Prophet) - gated logging
+        should_log = settings.debug_zero_forecasts or (product_id is not None)  # TODO: Check flagged set
+        if should_log:
+            # Log growth type and hyperparameters
+            growth_type = getattr(self.model, 'growth', 'linear')
+            self.logger.info(
+                f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                f"step=prophet_checks, growth_type={growth_type}, "
+                f"changepoint_prior_scale={self.config.changepoint_prior_scale}, "
+                f"seasonality_mode={self.config.seasonality_mode}"
+            )
+            
+            # Log regressor usage
+            regressors_used = len(regressors) > 0
+            regressor_imputation_count = 0
+            for regressor in regressors:
+                if regressor not in future.columns:
+                    regressor_imputation_count += 1
+                elif regressor in future_for_predict.columns:
+                    # Check if values were imputed (all same value or all zero)
+                    reg_data = future_for_predict[regressor]
+                    if reg_data.nunique() == 1 or (reg_data == 0.0).all():
+                        regressor_imputation_count += 1
+            
+            self.logger.info(
+                f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                f"step=prophet_checks, regressors_used={regressors_used}, "
+                f"regressor_count={len(regressors)}, "
+                f"regressor_imputation_count={regressor_imputation_count}"
+            )
+            
+            if regressors_used and regressor_imputation_count == len(regressors):
+                self.logger.warning(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                    f"step=prophet_checks, WARNING: All regressors were imputed"
+                )
+            
+            # Log detailed regressor stats (only if gated)
+            if should_log and regressors:
+                # Log regressor list
+                self.logger.info(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                    f"step=prophet_checks, regressor_list={regressors}"
+                )
+                
+                # For each regressor, log min/mean/max/null_count and % imputed
+                for regressor in regressors:
+                    if regressor in future_for_predict.columns:
+                        reg_data = future_for_predict[regressor]
+                        reg_numeric = pd.to_numeric(reg_data, errors='coerce')
+                        reg_valid = reg_numeric.dropna()
+                        null_count = reg_numeric.isna().sum()
+                        null_pct = (null_count / len(reg_numeric) * 100) if len(reg_numeric) > 0 else 0.0
+                        
+                        # Check if values were imputed (all same value or all zero/NaN)
+                        imputed_pct = 0.0
+                        if len(reg_valid) > 0:
+                            # If all values are the same, likely imputed
+                            if reg_valid.nunique() == 1:
+                                imputed_pct = 100.0
+                            # If all are zero, likely imputed
+                            elif (reg_valid == 0.0).all():
+                                imputed_pct = 100.0
+                            else:
+                                # Check if values match training data (indicating forward-fill)
+                                if hasattr(self, '_training_df') and regressor in self._training_df.columns:
+                                    training_last = pd.to_numeric(self._training_df[regressor], errors='coerce').dropna()
+                                    if len(training_last) > 0:
+                                        training_last_val = float(training_last.iloc[-1])
+                                        # If all future values match last training value, likely imputed
+                                        if (reg_valid == training_last_val).all():
+                                            imputed_pct = 100.0
+                        
+                        min_val = float(reg_valid.min()) if len(reg_valid) > 0 else None
+                        mean_val = float(reg_valid.mean()) if len(reg_valid) > 0 else None
+                        max_val = float(reg_valid.max()) if len(reg_valid) > 0 else None
+                        
+                        min_str = f"{min_val:.6f}" if min_val is not None else "None"
+                        mean_str = f"{mean_val:.6f}" if mean_val is not None else "None"
+                        max_str = f"{max_val:.6f}" if max_val is not None else "None"
+                        self.logger.info(
+                            f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                            f"step=prophet_checks, regressor={regressor}, "
+                            f"min={min_str}, mean={mean_str}, max={max_str}, "
+                            f"null_count={int(null_count)}, null_pct={null_pct:.1f}%, "
+                            f"imputed_pct={imputed_pct:.1f}%"
+                        )
+                    else:
+                        # Regressor missing from future_df - 100% imputed
+                        self.logger.info(
+                            f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                            f"step=prophet_checks, regressor={regressor}, "
+                            f"status=missing_from_future_df, imputed_pct=100.0%"
+                        )
+                
+                # Phase 3: Log regressor values for first 3 and last 3 forecast dates
+                if should_log and regressors and len(future_for_predict) > 0:
+                    # Determine indices to log
+                    log_indices = set()
+                    if len(future_for_predict) >= 3:
+                        log_indices.update([0, 1, 2])  # First 3
+                        log_indices.update([len(future_for_predict) - 3, len(future_for_predict) - 2, len(future_for_predict) - 1])  # Last 3
+                    else:
+                        log_indices = set(range(len(future_for_predict)))
+                    
+                    # Log regressor values for each date
+                    for idx in sorted(log_indices):
+                        if idx < len(future_for_predict):
+                            date_str = future_for_predict.iloc[idx]["ds"].strftime("%Y-%m-%d") if "ds" in future_for_predict.columns else f"idx_{idx}"
+                            regressor_values = {}
+                            for regressor in regressors:
+                                if regressor in future_for_predict.columns:
+                                    val = future_for_predict.iloc[idx][regressor]
+                                    regressor_values[regressor] = float(val) if pd.notna(val) else None
+                                else:
+                                    regressor_values[regressor] = None
+                            
+                            self.logger.info(
+                                f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                                f"step=future_regressor_health, date={date_str}, idx={idx}, "
+                                f"regressor_values={regressor_values}"
+                            )
         
         try:
             forecast = self.model.predict(future_for_predict)

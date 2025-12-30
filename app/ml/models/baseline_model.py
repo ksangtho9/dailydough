@@ -2,9 +2,14 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Optional
+import logging
 
 import numpy as np
 import pandas as pd
+
+from app.core.config import settings
+
+logger = logging.getLogger("bakezy.baseline")
 
 
 @dataclass
@@ -39,13 +44,14 @@ class SeasonalNaiveModel:
         overall_mean = df["y"].mean() if len(df) > 0 else 0.0
         self.weekday_means = {i: weekday_means.get(i, overall_mean) for i in range(7)}
     
-    def predict(self, horizon_days: int, last_date: Optional[pd.Timestamp] = None) -> pd.DataFrame:
+    def predict(self, horizon_days: int, last_date: Optional[pd.Timestamp] = None, product_id: Optional[int] = None) -> pd.DataFrame:
         """
         Predict using seasonal naive (last week's same weekday).
         
         Args:
             horizon_days: Number of days to forecast
             last_date: Last date in training data (if None, uses today)
+            product_id: For gated diagnostic logging
         
         Returns:
             DataFrame with columns 'ds' and 'yhat'
@@ -67,6 +73,14 @@ class SeasonalNaiveModel:
             weekday = date.dayofweek
             yhat = self.weekday_means[weekday]
             predictions.append(yhat)
+        
+        # Step 5: Log baseline selection (gated)
+        should_log = settings.debug_zero_forecasts or (product_id is not None)  # TODO: Check flagged set
+        if should_log:
+            logger.info(
+                f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                f"step=baseline_checks, Baseline selected: seasonal_naive"
+            )
         
         return pd.DataFrame({
             "ds": future_dates,
@@ -103,13 +117,14 @@ class RollingMeanModel:
         else:
             self.mean_value = 0.0
     
-    def predict(self, horizon_days: int, last_date: Optional[pd.Timestamp] = None) -> pd.DataFrame:
+    def predict(self, horizon_days: int, last_date: Optional[pd.Timestamp] = None, product_id: Optional[int] = None) -> pd.DataFrame:
         """
         Predict using rolling mean.
         
         Args:
             horizon_days: Number of days to forecast
             last_date: Last date in training data (if None, uses today)
+            product_id: For gated diagnostic logging
         
         Returns:
             DataFrame with columns 'ds' and 'yhat'
@@ -127,6 +142,14 @@ class RollingMeanModel:
         
         # Predict using mean value
         predictions = [self.mean_value] * horizon_days
+        
+        # Step 5: Log baseline selection (gated)
+        should_log = settings.debug_zero_forecasts or (product_id is not None)  # TODO: Check flagged set
+        if should_log:
+            logger.info(
+                f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                f"step=baseline_checks, Baseline selected: rolling_mean, mean_value={self.mean_value:.2f}"
+            )
         
         return pd.DataFrame({
             "ds": future_dates,

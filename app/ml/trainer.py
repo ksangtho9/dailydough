@@ -43,6 +43,14 @@ class ModelTrainer:
     def __init__(self, feature_engineer: Optional[FeatureEngineer] = None):
         self.feature_engineer = feature_engineer or FeatureEngineer()
     
+    def _should_log_deep_diagnostics(self, product_id: Optional[int]) -> bool:
+        """Check if deep diagnostic logging should be enabled for this product."""
+        if settings.debug_zero_forecasts:
+            return True
+        # TODO: Could check against flagged_product_ids set from diagnostics endpoint
+        # For now, rely on settings.debug_zero_forecasts
+        return False
+    
     def _compute_feature_version(self, feature_cols: list[str]) -> str:
         """Compute a version identifier for feature engineering based on feature columns."""
         if not feature_cols:
@@ -163,9 +171,6 @@ class ModelTrainer:
         Returns:
             numpy array of raw predictions (can be negative)
         """
-        import logging
-        logger = logging.getLogger("bakezy.training")
-        
         try:
             if model_name == "prophet":
                 # Prophet: predict on eval_df dates
@@ -440,6 +445,31 @@ class ModelTrainer:
         else:
             train_df = df.copy()
 
+        # Step 2: Log training data characteristics (gated)
+        if self._should_log_deep_diagnostics(product_id) and not train_df.empty and "y" in train_df.columns:
+            total_training_days = len(train_df)
+            nonzero_days = (train_df["y"] > 0).sum()
+            zero_rate = (train_df["y"] == 0.0).sum() / total_training_days * 100 if total_training_days > 0 else 0.0
+            mean_y = float(train_df["y"].mean()) if total_training_days > 0 else 0.0
+            median_y = float(train_df["y"].median()) if total_training_days > 0 else 0.0
+            max_y = float(train_df["y"].max()) if total_training_days > 0 else 0.0
+            
+            is_valid_day_count = total_training_days  # train_df already filtered to is_valid_day == 1
+            supply_capped_count = 0
+            supply_capped_pct = 0.0
+            if "is_supply_capped_day" in train_df.columns:
+                supply_capped_count = (train_df["is_supply_capped_day"] == 1).sum()
+                supply_capped_pct = (supply_capped_count / total_training_days * 100) if total_training_days > 0 else 0.0
+            
+            logger.info(
+                f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                f"step=training_data_stats, total_training_days={total_training_days}, "
+                f"nonzero_days={nonzero_days}, zero_rate={zero_rate:.1f}%, "
+                f"mean_y={mean_y:.2f}, median_y={median_y:.2f}, max_y={max_y:.2f}, "
+                f"is_valid_day_count={is_valid_day_count}, "
+                f"supply_capped_count={supply_capped_count}, supply_capped_pct={supply_capped_pct:.1f}%"
+            )
+
         # Explicit validation that invalid days are excluded
         # Weight Policy:
         # - is_valid_day == 0: Excluded from training (never gets a weight)
@@ -448,8 +478,6 @@ class ModelTrainer:
         if "is_valid_day" in train_df.columns:
             invalid_count = (train_df["is_valid_day"] == 0).sum()
             if invalid_count > 0:
-                import logging
-                logger = logging.getLogger("bakezy.training")
                 logger.error(f"CRITICAL: {invalid_count} invalid days found in train_df. Removing them.")
                 train_df = train_df[train_df["is_valid_day"] == 1].copy()
 
@@ -459,8 +487,6 @@ class ModelTrainer:
         
         # Diagnostic logging: Check for potential issues that could cause zero predictions
         if not train_df.empty and "y" in train_df.columns:
-            import logging
-            logger = logging.getLogger("bakezy.training")
             zero_count = (train_df["y"] == 0.0).sum()
             total_count = len(train_df)
             zero_pct = (zero_count / total_count * 100) if total_count > 0 else 0
@@ -495,8 +521,6 @@ class ModelTrainer:
 
         # Handle tiny training windows
         if len(train_df) < settings.min_training_window:
-            import logging
-            logger = logging.getLogger("bakezy.training")
             logger.info(
                 f"Training window too small ({len(train_df)} days < {settings.min_training_window}). "
                 f"Skipping Prophet and XGBoost, using seasonal naive."
@@ -519,8 +543,6 @@ class ModelTrainer:
             # Split: use last eval_window_days for evaluation
             eval_df = train_df.tail(settings.eval_window_days).copy()
             train_df_for_training = train_df.iloc[:-settings.eval_window_days].copy()
-            import logging
-            logger = logging.getLogger("bakezy.training")
             logger.info(
                 f"Split training data: {len(train_df_for_training)} days for training, "
                 f"{len(eval_df)} days for evaluation"
@@ -540,8 +562,6 @@ class ModelTrainer:
             capped_count = int((train_df_for_training["is_supply_capped_day"] == 1).sum())
             total_valid = len(train_df_for_training)
             if total_valid > 0:
-                import logging
-                logger = logging.getLogger("bakezy.training")
                 logger.info(
                     f"Sample weights computed - {capped_count}/{total_valid} supply-capped days "
                     f"(weight=0.3), {total_valid - capped_count} normal days (weight=1.0)"
@@ -554,8 +574,6 @@ class ModelTrainer:
                 if len(train_df_for_training) < len(train_df):
                     # We split the data, so slice the weights
                     computed_sample_weights = initial_sample_weights[:len(train_df_for_training)]
-                    import logging
-                    logger = logging.getLogger("bakezy.training")
                     logger.info(
                         f"Sliced sample weights from {len(initial_sample_weights)} to {len(computed_sample_weights)} "
                         f"to match training split"
@@ -567,8 +585,6 @@ class ModelTrainer:
                 computed_sample_weights = initial_sample_weights
             else:
                 # Length mismatch - recompute from train_df_for_training
-                import logging
-                logger = logging.getLogger("bakezy.training")
                 logger.warning(
                     f"Sample weights length ({len(initial_sample_weights)}) doesn't match training data length ({len(train_df_for_training)}). "
                     f"Computing weights from train_df_for_training instead."
@@ -588,9 +604,6 @@ class ModelTrainer:
         # Index-based validation: Ensure weights align with training data by index, not just length
         # This catches subtle bugs where row count matches but ordering differs
         if final_sample_weights is not None:
-            import logging
-            logger = logging.getLogger("bakezy.training")
-            
             # Convert to Series aligned to train_df_for_training.index for index-based validation
             weight_series = pd.Series(final_sample_weights, index=train_df_for_training.index)
             
@@ -614,10 +627,93 @@ class ModelTrainer:
                 # Index matches, convert back to array for XGBoost
                 final_sample_weights = weight_series.values
 
+        # Step 3: Check ModelRun status and log model selection (gated)
+        model_run_exists = False
+        last_trained_at = None
+        training_status = None
+        if db is not None and product_id is not None:
+            from app.models import ModelRun, ForecastMetrics
+            from datetime import datetime, timezone, timedelta
+            
+            model_run = db.query(ModelRun).filter(
+                ModelRun.product_id == product_id,
+                ModelRun.is_active == True,
+            ).order_by(ModelRun.created_at.desc()).first()
+            
+            if model_run:
+                model_run_exists = True
+                last_trained_at = model_run.created_at
+                # #region agent log
+                try:
+                    import json
+                    now_utc = datetime.now(timezone.utc)
+                    created_at = model_run.created_at
+                    now_aware = now_utc.tzinfo is not None
+                    created_aware = created_at.tzinfo is not None if created_at else None
+                    with open(r"c:\Users\forfl\Documents\dailydough-1\.cursor\debug.log", "a", encoding="utf-8") as f:
+                        f.write(json.dumps({"id":f"log_{int(time.time()*1000)}","timestamp":int(time.time()*1000),"location":"trainer.py:665","message":"ModelRun datetime check","data":{"product_id":product_id,"now_utc_type":type(now_utc).__name__,"now_aware":now_aware,"created_at_type":type(created_at).__name__,"created_aware":created_aware,"created_at_repr":str(created_at) if created_at else None},"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}) + "\n")
+                except Exception:
+                    pass
+                # #endregion
+                # Check if stale (>7 days old)
+                # Handle timezone-aware vs naive datetime mismatch
+                now_utc = datetime.now(timezone.utc)
+                created_at = model_run.created_at
+                # If created_at is naive, assume it's UTC and make it aware
+                if created_at.tzinfo is None:
+                    # #region agent log
+                    try:
+                        import json
+                        with open(r"c:\Users\forfl\Documents\dailydough-1\.cursor\debug.log", "a", encoding="utf-8") as f:
+                            f.write(json.dumps({"id":f"log_{int(time.time()*1000)}","timestamp":int(time.time()*1000),"location":"trainer.py:675","message":"Converting naive datetime to UTC","data":{"product_id":product_id,"created_at_before":str(created_at)},"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + "\n")
+                    except Exception:
+                        pass
+                    # #endregion
+                    created_at = created_at.replace(tzinfo=timezone.utc)
+                days_since_training = (now_utc - created_at).days
+                # #region agent log
+                try:
+                    import json
+                    with open(r"c:\Users\forfl\Documents\dailydough-1\.cursor\debug.log", "a", encoding="utf-8") as f:
+                        f.write(json.dumps({"id":f"log_{int(time.time()*1000)}","timestamp":int(time.time()*1000),"location":"trainer.py:680","message":"Days since training calculated","data":{"product_id":product_id,"days_since_training":days_since_training,"created_at_after":str(created_at)},"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}) + "\n")
+                except Exception:
+                    pass
+                # #endregion
+                if days_since_training > settings.hyperparam_reuse_days:
+                    if self._should_log_deep_diagnostics(product_id):
+                        logger.warning(
+                            f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                            f"step=model_run_status, No recent training / stale ModelRun "
+                            f"(last_trained_at={last_trained_at}, {days_since_training} days ago)"
+                        )
+            else:
+                # Check ForecastMetrics as fallback
+                forecast_metrics = db.query(ForecastMetrics).filter(
+                    ForecastMetrics.product_id == product_id
+                ).first()
+                if forecast_metrics:
+                    last_trained_at = forecast_metrics.last_trained_at
+                    # Handle timezone-aware vs naive datetime mismatch for ForecastMetrics too
+                    if last_trained_at and last_trained_at.tzinfo is None:
+                        last_trained_at = last_trained_at.replace(tzinfo=timezone.utc)
+                    training_status = forecast_metrics.status
+                    if self._should_log_deep_diagnostics(product_id):
+                        logger.warning(
+                            f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                            f"step=model_run_status, No ModelRun exists, using ForecastMetrics "
+                            f"(last_trained_at={last_trained_at}, status={training_status})"
+                        )
+                elif self._should_log_deep_diagnostics(product_id):
+                    logger.warning(
+                        f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                        f"step=model_run_status, No ModelRun or ForecastMetrics found"
+                    )
+        
         # Determine selected_model_type FIRST (before any optimization)
         # This is critical for auto mode to check stored hyperparameters correctly
         selected_model_type = model_name
         metadata = None
+        model_selection_path = [f"{model_name} (requested)"]
         
         # Prophet eligibility check (on training window, not full historical)
         if model_name == "prophet":
@@ -631,6 +727,12 @@ class ModelTrainer:
                     f"Using XGBoost-only as fallback."
                 )
                 
+                if self._should_log_deep_diagnostics(product_id):
+                    logger.info(
+                        f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                        f"step=model_selection, Prophet skipped: {skip_reason}"
+                    )
+                
                 # Store in metadata for dashboard debugging
                 metadata = {
                     "prophet_skipped_reason": skip_reason,
@@ -641,6 +743,7 @@ class ModelTrainer:
                 # Fall back to XGBoost
                 selected_model_type = "xgboost"
                 model_name = "xgboost"
+                model_selection_path.append("Prophet → failed eligibility → XGBoost")
             else:
                 # Prophet is eligible - run quick viability check BEFORE optimization
                 if eval_df is not None and len(eval_df) >= 7:
@@ -653,6 +756,11 @@ class ModelTrainer:
                     
                     if not prophet_viable:
                         logger.info("Prophet viability check failed, skipping Prophet optimization. Trying XGBoost.")
+                        if self._should_log_deep_diagnostics(product_id):
+                            logger.info(
+                                f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                                f"step=model_selection, Prophet skipped: viability_check_failed"
+                            )
                         metadata = {
                             "prophet_skipped_reason": "viability_check_failed",
                             "nonzero_days": nonzero_days,
@@ -660,6 +768,7 @@ class ModelTrainer:
                         }
                         selected_model_type = "xgboost"
                         model_name = "xgboost"
+                        model_selection_path.append("Prophet → failed viability → XGBoost")
         
         # Compute feature_version for auto mode check
         current_feature_version = "v0"
@@ -746,8 +855,6 @@ class ModelTrainer:
                         eval_df, raw_yhat, train_df_for_training["y"]
                     )
                     if should_fallback:
-                        import logging
-                        logger = logging.getLogger("bakezy.training")
                         logger.warning(
                             f"Prophet validation failed on eval slice: {guardrail_info}. "
                             f"Falling back to XGBoost."
@@ -761,6 +868,14 @@ class ModelTrainer:
                         # Don't return - continue to xgboost block
                     else:
                         # Prophet passed validation
+                        if self._should_log_deep_diagnostics(product_id):
+                            logger.info(
+                                f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                                f"step=model_selection, Final model selected: prophet"
+                            )
+                        if metadata is None:
+                            metadata = {}
+                        metadata["model_selection_path"] = " → ".join(model_selection_path) if model_selection_path else "prophet"
                         return TrainResult(model_name="prophet", model=model, metadata=metadata)
                 else:
                     # Couldn't get predictions, accept model
@@ -823,8 +938,6 @@ class ModelTrainer:
                 
                 # XGBoost feature diagnostics
                 if eval_df is not None and model.feature_cols is not None:
-                    import logging
-                    logger = logging.getLogger("bakezy.training")
                     eval_df_processed = eval_df.copy()
                     eval_df_processed["ds"] = pd.to_datetime(eval_df_processed["ds"])
                     eval_df_processed = self.feature_engineer.transform(
@@ -896,8 +1009,6 @@ class ModelTrainer:
                             eval_df, raw_yhat, train_df_for_training["y"]
                         )
                         if should_fallback:
-                            import logging
-                            logger = logging.getLogger("bakezy.training")
                             logger.warning(
                                 f"XGBoost validation failed on eval slice: {guardrail_info}. "
                                 f"Falling back to seasonal naive."
@@ -909,9 +1020,27 @@ class ModelTrainer:
                             metadata["fallback_reason"] = "xgboost_validation_failed_negative_predictions"
                             model = SeasonalNaiveModel()
                             model.fit(train_df_for_training)
+                            if self._should_log_deep_diagnostics(product_id):
+                                logger.info(
+                                    f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                                    f"step=model_selection, XGBoost skipped: validation_failed, "
+                                    f"Baseline selected: seasonal_naive"
+                                )
+                            if metadata is None:
+                                metadata = {}
+                            model_selection_path.append("XGBoost → failed validation → seasonal_naive")
+                            metadata["model_selection_path"] = " → ".join(model_selection_path)
                             return TrainResult(model_name="seasonal_naive", model=model, metadata=metadata)
                         else:
                             # XGBoost passed validation
+                            if self._should_log_deep_diagnostics(product_id):
+                                logger.info(
+                                    f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                                    f"step=model_selection, Final model selected: xgboost"
+                                )
+                            if metadata is None:
+                                metadata = {}
+                            metadata["model_selection_path"] = " → ".join(model_selection_path) if model_selection_path else "xgboost"
                             return TrainResult(model_name="xgboost", model=model, metadata=metadata)
                     else:
                         # Couldn't get predictions, accept model
@@ -921,8 +1050,6 @@ class ModelTrainer:
                     return TrainResult(model_name="xgboost", model=model, metadata=metadata)
             except Exception as e:
                 # If XGBoost fails, fall back to seasonal naive
-                import logging
-                logger = logging.getLogger("bakezy.training")
                 logger.warning(f"XGBoost training failed: {e}. Falling back to seasonal naive.")
                 if metadata is None:
                     metadata = {}
@@ -930,6 +1057,16 @@ class ModelTrainer:
                 metadata["fallback_to"] = "seasonal_naive"
                 model = SeasonalNaiveModel()
                 model.fit(train_df_for_training)
+                if self._should_log_deep_diagnostics(product_id):
+                    logger.info(
+                        f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                        f"step=model_selection, XGBoost skipped: training_failed, "
+                        f"Baseline selected: seasonal_naive"
+                    )
+                if metadata is None:
+                    metadata = {}
+                model_selection_path.append("XGBoost → failed training → seasonal_naive")
+                metadata["model_selection_path"] = " → ".join(model_selection_path)
                 return TrainResult(model_name="seasonal_naive", model=model, metadata=metadata)
 
         elif model_name == "ensemble":
@@ -1049,8 +1186,6 @@ class ModelTrainer:
                         eval_df, raw_yhat, train_df_for_training["y"]
                     )
                     if should_fallback:
-                        import logging
-                        logger = logging.getLogger("bakezy.training")
                         logger.warning(
                             f"Ensemble validation failed on eval slice: {guardrail_info}. "
                             f"Falling back to XGBoost."

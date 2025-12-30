@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from app.models import DailyForecast, Product
 from app.schemas.sales_record import ProductForecastOut
 from app.utils.db_retry import retry_db_operation, is_database_locked_error
+from app.core.config import settings
 
 logger = logging.getLogger("bakezy.daily_forecast_service")
 
@@ -48,6 +49,24 @@ def _upsert_product_daily_forecasts_internal(
     )
     existing_by_date = {row.date: row for row in existing_rows}
 
+    # Step 6: Log sample of predictions before DB write (gated)
+    should_log = settings.debug_zero_forecasts  # TODO: Check flagged set or auto-flag
+    pre_write_samples = []
+    if should_log and points_by_date:
+        # Get first 5 and last 5 points
+        sorted_dates = sorted(points_by_date.keys())
+        sample_dates = sorted_dates[:5] + sorted_dates[-5:] if len(sorted_dates) > 10 else sorted_dates
+        for sample_date in sample_dates:
+            sample_point = points_by_date[sample_date]
+            pre_write_samples.append({
+                "date": sample_date,
+                "yhat": sample_point.yhat,
+            })
+        logger.info(
+            f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+            f"step=storage_verification, pre_write_samples={pre_write_samples}"
+        )
+    
     for point_date, point in points_by_date.items():
         # #region agent log
         try:
@@ -76,6 +95,9 @@ def _upsert_product_daily_forecasts_internal(
             pass
         # #endregion
         
+        # Step 6: Log raw yhat before storage (gated)
+        raw_yhat_before_storage = point.yhat
+        
         # Validate yhat before storing - skip if None or invalid
         if point.yhat is None:
             logger.warning(
@@ -86,7 +108,8 @@ def _upsert_product_daily_forecasts_internal(
         try:
             yhat = float(point.yhat)
             # Validate yhat is a valid number (not NaN, not infinite)
-            if not (np.isfinite(yhat) and yhat >= 0):
+            validation_result = np.isfinite(yhat) and yhat >= 0
+            if not validation_result:
                 logger.warning(
                     f"Skipping forecast for product_id={product_id}, date={point_date} - invalid yhat value: {yhat}"
                 )
@@ -96,6 +119,15 @@ def _upsert_product_daily_forecasts_internal(
                 f"Skipping forecast for product_id={product_id}, date={point_date} - cannot convert yhat to float: {e}"
             )
             continue
+        
+        # Step 6: Log storage verification (gated)
+        if should_log:
+            logger.info(
+                f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                f"step=storage_verification, date={point_date}, "
+                f"raw_yhat_before_storage={raw_yhat_before_storage}, "
+                f"validation_result={validation_result}"
+            )
         
         yhat_lower = None
         if point.yhat_lower is not None:
@@ -133,9 +165,129 @@ def _upsert_product_daily_forecasts_internal(
             row.yhat = yhat
             row.yhat_lower = yhat_lower
             row.yhat_upper = yhat_upper
+            
+            # Step 6: Verify stored value matches input (gated, after update)
+            if should_log:
+                retrieved_yhat_from_db = row.yhat
+                values_match = abs(retrieved_yhat_from_db - yhat) < 1e-6 if retrieved_yhat_from_db is not None and yhat is not None else False
+                logger.info(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                    f"step=storage_verification, date={point_date}, "
+                    f"retrieved_yhat_from_db={retrieved_yhat_from_db}, "
+                    f"values_match={values_match}"
+                )
+                
+                # Check for "last write wins = 0" behavior
+                if raw_yhat_before_storage is not None and raw_yhat_before_storage > 0 and retrieved_yhat_from_db == 0.0:
+                    logger.warning(
+                        f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                        f"step=storage_verification, WARNING: pre_write_yhat={raw_yhat_before_storage} > 0 "
+                        f"but stored_yhat={retrieved_yhat_from_db} == 0.0 (possible overwrite)"
+                    )
 
     try:
-        db.flush()
+        db.commit()
+        
+        # Step 6: Read back after commit and verify stored values match pre-write (gated)
+        if should_log and pre_write_samples:
+            sample_dates = [s["date"] for s in pre_write_samples]
+            retrieved_rows = (
+                db.query(DailyForecast)
+                .filter(
+                    DailyForecast.bakery_id == bakery_id,
+                    DailyForecast.product_id == product_id,
+                    DailyForecast.date.in_(sample_dates),
+                )
+                .all()
+            )
+            
+            retrieved_by_date = {row.date: row for row in retrieved_rows}
+            mismatches = []
+            for sample in pre_write_samples:
+                sample_date = sample["date"]
+                pre_write_yhat = sample["yhat"]
+                retrieved_row = retrieved_by_date.get(sample_date)
+                if retrieved_row:
+                    retrieved_yhat = retrieved_row.yhat
+                    if pre_write_yhat is not None and retrieved_yhat is not None:
+                        if abs(pre_write_yhat - retrieved_yhat) > 1e-6:
+                            mismatches.append({
+                                "date": sample_date,
+                                "pre_write": pre_write_yhat,
+                                "retrieved": retrieved_yhat,
+                            })
+                        elif pre_write_yhat > 0 and retrieved_yhat == 0.0:
+                            mismatches.append({
+                                "date": sample_date,
+                                "pre_write": pre_write_yhat,
+                                "retrieved": retrieved_yhat,
+                                "issue": "non_zero_to_zero"
+                            })
+                else:
+                    mismatches.append({
+                        "date": sample_date,
+                        "pre_write": pre_write_yhat,
+                        "retrieved": None,
+                        "issue": "missing_after_commit"
+                    })
+            
+            if mismatches:
+                logger.warning(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                    f"step=storage_verification, WARNING: {len(mismatches)} mismatches found: {mismatches}"
+                )
+            else:
+                logger.info(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                    f"step=storage_verification, All {len(pre_write_samples)} sample values match after commit"
+                )
+        
+        # Detect duplicates (gated)
+        if should_log:
+            from sqlalchemy import func
+            duplicate_query = (
+                db.query(
+                    DailyForecast.bakery_id,
+                    DailyForecast.product_id,
+                    DailyForecast.date,
+                    func.count(DailyForecast.id).label("count")
+                )
+                .filter(
+                    DailyForecast.bakery_id == bakery_id,
+                    DailyForecast.product_id == product_id,
+                    DailyForecast.date.in_(dates),
+                )
+                .group_by(
+                    DailyForecast.bakery_id,
+                    DailyForecast.product_id,
+                    DailyForecast.date,
+                )
+                .having(func.count(DailyForecast.id) > 1)
+            )
+            duplicates = duplicate_query.all()
+            if duplicates:
+                logger.warning(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                    f"step=storage_verification, WARNING: Found {len(duplicates)} duplicate (bakery_id, product_id, date) pairs. "
+                    f"Checking for 'last write wins = 0' behavior..."
+                )
+                # Check if any duplicates have zero yhat
+                for dup in duplicates:
+                    dup_rows = (
+                        db.query(DailyForecast)
+                        .filter(
+                            DailyForecast.bakery_id == dup.bakery_id,
+                            DailyForecast.product_id == dup.product_id,
+                            DailyForecast.date == dup.date,
+                        )
+                        .all()
+                    )
+                    zero_count = sum(1 for r in dup_rows if r.yhat == 0.0)
+                    if zero_count > 0:
+                        logger.warning(
+                            f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                            f"step=storage_verification, WARNING: Duplicate for date={dup.date} has {zero_count}/{len(dup_rows)} rows with yhat=0.0"
+                        )
     except sa_exc.IntegrityError as e:
         # Handle UNIQUE constraint violations (race condition)
         # Rollback and re-query to get existing rows, then update them

@@ -79,6 +79,31 @@ export async function apiFetch<T>(
 }
 
 // Product API helpers
+export type Product = {
+  id: number;
+  name: string;
+  sku?: string | null;
+  category?: string | null;
+  bakery_id: number;
+  price?: number | null;
+  cost_per_unit?: number | null;
+  shelf_life_days?: number | null;
+  stockout_cost_ratio?: number | null;
+};
+
+/**
+ * Fetch list of products, optionally filtered by bakery_id.
+ */
+export async function fetchProducts(bakeryId?: number): Promise<Product[]> {
+  const params = new URLSearchParams();
+  if (bakeryId != null) {
+    params.append("bakery_id", String(bakeryId));
+  }
+  const queryString = params.toString();
+  const url = `/api/products${queryString ? `?${queryString}` : ""}`;
+  return apiFetch<Product[]>(url);
+}
+
 export async function updateProduct(
   productId: number,
   data: { name?: string; sku?: string; category?: string; price?: number | null; cost_per_unit?: number | null; shelf_life_days?: number | null; stockout_cost_ratio?: number | null }
@@ -110,6 +135,7 @@ export async function deleteAllProducts(bakeryId: number): Promise<{
 
 export type RetrainRequest = {
   product_ids?: number[] | null;
+  bakery_id?: number | null;
 };
 
 export type RetrainResponse = {
@@ -132,11 +158,16 @@ export type JobStatusResponse = {
  * Start a retrain job for all products or selected products.
  */
 export async function adminStartRetrain(
-  productIds?: number[] | null
+  productIds?: number[] | null,
+  bakeryId?: number | null
 ): Promise<RetrainResponse> {
+  const body: RetrainRequest = { product_ids: productIds ?? null };
+  if (bakeryId != null) {
+    body.bakery_id = bakeryId;
+  }
   return apiFetch<RetrainResponse>("/api/admin/training/retrain", {
     method: "POST",
-    body: JSON.stringify({ product_ids: productIds ?? null }),
+    body: JSON.stringify(body),
   });
 }
 

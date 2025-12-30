@@ -35,6 +35,9 @@ class Settings(BaseSettings):
 	prophet_opt_max_iter_retrain: int = int(os.getenv("PROPHET_OPT_MAX_ITER_RETRAIN", "4"))
 	xgb_opt_max_iter_retrain: int = int(os.getenv("XGB_OPT_MAX_ITER_RETRAIN", "9"))
 	cv_splits_retrain: int = int(os.getenv("CV_SPLITS_RETRAIN", "2"))
+	
+	# Zero forecast investigation: enable deep diagnostic logging
+	debug_zero_forecasts: bool = os.getenv("DEBUG_ZERO_FORECASTS", "false").lower() == "true"
 
 	class Config:
 		env_file = ".env"

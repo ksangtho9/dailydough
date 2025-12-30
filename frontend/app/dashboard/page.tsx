@@ -11,7 +11,7 @@ import { BAKERY_SELECTION_CHANGED_EVENT } from "@/lib/bakeries";
 import { TopProductsCard } from "@/components/TopProductsCard";
 import { GettingStartedChecklist } from "@/components/GettingStartedChecklist";
 import { TextShimmer } from "@/components/ui/text-shimmer";
-import { apiFetch, adminStartRetrain, adminGetTrainingStatus, adminCancelTrainingJob, type JobStatusResponse } from "@/lib/api";
+import { apiFetch, adminStartRetrain, adminGetTrainingStatus, adminCancelTrainingJob, type JobStatusResponse, fetchProducts, type Product } from "@/lib/api";
 import type { ForecastMetrics } from "@/lib/metrics";
 import { ForecastConfidenceBadge } from "@/components/ForecastConfidenceBadge";
 import { AdminOnly } from "@/components/AdminOnly";
@@ -273,6 +273,8 @@ export default function DashboardPage() {
   const [retrainLoading, setRetrainLoading] = useState(false);
   const [selectedProductIds, setSelectedProductIds] = useState<number[]>([]);
   const [pollingInterval, setPollingInterval] = useState<NodeJS.Timeout | null>(null);
+  const [productsLoading, setProductsLoading] = useState(false);
+  const [productsError, setProductsError] = useState<string | null>(null);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -331,7 +333,7 @@ export default function DashboardPage() {
   const startRetrain = async (productIds?: number[] | null) => {
     try {
       setRetrainLoading(true);
-      const response = await adminStartRetrain(productIds);
+      const response = await adminStartRetrain(productIds, bakeryId);
       setRetrainJobStatus({
         status: "running",
         job_id: response.job_id,
@@ -423,6 +425,41 @@ export default function DashboardPage() {
       }
     };
   }, [pollingInterval]);
+
+  // Load products when retrain modal opens
+  useEffect(() => {
+    if (!showRetrainModal || bakeryId == null) {
+      return;
+    }
+
+    let cancelled = false;
+
+    async function loadProductsForRetrain() {
+      setProductsLoading(true);
+      setProductsError(null);
+      try {
+        const fetchedProducts = await fetchProducts(bakeryId);
+        if (!cancelled) {
+          setProducts(fetchedProducts);
+        }
+      } catch (err: any) {
+        if (!cancelled) {
+          setProductsError(err?.message ?? "Failed to load products.");
+          setProducts([]);
+        }
+      } finally {
+        if (!cancelled) {
+          setProductsLoading(false);
+        }
+      }
+    }
+
+    loadProductsForRetrain();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [showRetrainModal, bakeryId]);
 
   useEffect(() => {
     function handleSelectionChange() {
@@ -1347,10 +1384,10 @@ export default function DashboardPage() {
       {/* Retrain Modal */}
       {showRetrainModal && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
-          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4">
+          <div className="bg-white rounded-lg shadow-xl p-6 max-w-md w-full mx-4 max-h-[90vh] flex flex-col">
             <h3 className="text-lg font-semibold text-slate-900 mb-4">Retrain Models</h3>
             
-            <div className="space-y-4">
+            <div className="space-y-4 flex-1 overflow-y-auto">
               <button
                 type="button"
                 onClick={() => startRetrain(null)}
@@ -1361,37 +1398,82 @@ export default function DashboardPage() {
               </button>
               
               <div className="border-t pt-4">
-                <label className="block text-sm font-medium text-slate-700 mb-2">
-                  Or select specific products:
-                </label>
-                <select
-                  multiple
-                  value={selectedProductIds.map(String)}
-                  onChange={(e) => {
-                    const values = Array.from(e.target.selectedOptions, (opt) => Number(opt.value));
-                    setSelectedProductIds(values);
-                  }}
-                  className="w-full rounded border border-slate-300 px-3 py-2 text-sm"
-                  size={5}
-                >
-                  {products.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name} (ID: {p.id})
-                    </option>
-                  ))}
-                </select>
+                <div className="flex items-center justify-between mb-2">
+                  <label className="block text-sm font-medium text-slate-700">
+                    Or select specific products:
+                  </label>
+                  {products.length > 0 && (
+                    <div className="flex gap-2">
+                      <button
+                        type="button"
+                        onClick={() => {
+                          if (selectedProductIds.length === products.length) {
+                            setSelectedProductIds([]);
+                          } else {
+                            setSelectedProductIds(products.map(p => p.id));
+                          }
+                        }}
+                        className="text-xs px-2 py-1 rounded border border-slate-300 bg-white text-slate-700 hover:bg-slate-50"
+                      >
+                        {selectedProductIds.length === products.length ? "Deselect All" : "Select All"}
+                      </button>
+                    </div>
+                  )}
+                </div>
+                
+                {productsLoading && (
+                  <div className="text-sm text-slate-500 py-4 text-center">Loading products...</div>
+                )}
+                
+                {productsError && (
+                  <div className="text-sm text-red-600 py-4 text-center">{productsError}</div>
+                )}
+                
+                {!productsLoading && !productsError && products.length === 0 && (
+                  <div className="text-sm text-slate-500 py-4 text-center">No products found for this bakery.</div>
+                )}
+                
+                {!productsLoading && !productsError && products.length > 0 && (
+                  <div className="border border-slate-300 rounded-lg max-h-64 overflow-y-auto p-2">
+                    {products.map((p) => (
+                      <label
+                        key={p.id}
+                        className="flex items-center gap-2 p-2 hover:bg-slate-50 rounded cursor-pointer"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedProductIds.includes(p.id)}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setSelectedProductIds([...selectedProductIds, p.id]);
+                            } else {
+                              setSelectedProductIds(selectedProductIds.filter(id => id !== p.id));
+                            }
+                          }}
+                          className="rounded border-slate-300 text-purple-600 focus:ring-purple-500"
+                        />
+                        <span className="text-sm text-slate-900 flex-1">
+                          {p.name}
+                          {p.sku && <span className="text-slate-500 ml-1">({p.sku})</span>}
+                          <span className="text-slate-400 ml-1">ID: {p.id}</span>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                )}
+                
                 <button
                   type="button"
                   onClick={() => startRetrain(selectedProductIds.length > 0 ? selectedProductIds : null)}
                   disabled={retrainLoading || selectedProductIds.length === 0}
-                  className="mt-2 w-full rounded-lg border border-purple-300 bg-purple-50 px-4 py-2 text-sm font-medium text-purple-700 hover:bg-purple-100 disabled:opacity-50"
+                  className="mt-3 w-full rounded-lg border border-purple-300 bg-purple-50 px-4 py-2 text-sm font-medium text-purple-700 hover:bg-purple-100 disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   Retrain Selected ({selectedProductIds.length})
                 </button>
               </div>
             </div>
             
-            <div className="mt-4 flex justify-end gap-2">
+            <div className="mt-4 flex justify-end gap-2 border-t pt-4">
               <button
                 type="button"
                 onClick={() => {
@@ -1458,7 +1540,7 @@ export default function DashboardPage() {
             </div>
             {retrainJobStatus.current_product_id && (
               <div className="text-xs text-slate-500">
-                Current: Product {retrainJobStatus.current_product_id}
+                Current: Product {retrainJobStatus.progress.completed + 1} of {retrainJobStatus.progress.total}
               </div>
             )}
             {retrainJobStatus.errors.length > 0 && (

@@ -17,10 +17,13 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.database.database import get_db, SessionLocal
 from app.models import Product
-from app.ml.training.train_product import train_product
+from app.ml.training.train_product import train_product, _compute_raw_prediction_stats_future
 from app.ml.inference.forecast_service import get_forecast_for_product
+from app.ml.forecast_service import ForecastService
 from app.services.daily_forecast_service import upsert_product_daily_forecasts
 from app.services.admin_training_jobs import job_manager, TrainingError, CancelledError
+from app.models import ModelRun
+import numpy as np
 
 logger = logging.getLogger("bakezy.admin.training")
 
@@ -40,8 +43,15 @@ def require_admin_mode():
 
 
 class RetrainRequest(BaseModel):
-    """Request body for starting a retrain job."""
+    """Request body for starting a retrain job.
+    
+    Filtering behavior:
+    - If product_ids is provided: train exactly those products (ignore bakery_id)
+    - Else if bakery_id is provided: train only products with that bakery_id
+    - Else: train all products (backward compatibility)
+    """
     product_ids: Optional[List[int]] = None
+    bakery_id: Optional[int] = None
     optimize_hyperparameters: str = "auto"  # "auto", "true", or "false"
 
 
@@ -73,7 +83,8 @@ class CancelResponse(BaseModel):
 def run_training_job(
     job_id: str, 
     product_ids: Optional[List[int]] = None,
-    optimize_hyperparameters: str = "auto"
+    optimize_hyperparameters: str = "auto",
+    bakery_id: Optional[int] = None
 ):
     """
     Background task to run training job.
@@ -89,21 +100,35 @@ def run_training_job(
         logger.info(f"Training job {job_id}: Database session created")
         logger.info(f"Training job {job_id}: Resolving product list...")
         
-        # Resolve product list
-        if product_ids is None:
-            # Get all products
-            logger.info(f"Training job {job_id}: Fetching all products from database...")
-            products = db.query(Product).order_by(Product.id.asc()).all()
-            product_ids = [p.id for p in products]
-            logger.info(f"Training job {job_id}: Found {len(product_ids)} products")
-        else:
-            logger.info(f"Training job {job_id}: Using provided product_ids: {len(product_ids)} products")
+        # Preserve requested product_ids for logging
+        requested_product_ids = product_ids
         
-        total = len(product_ids)
-        if total == 0:
-            logger.warning(f"Training job {job_id}: No products to train")
-            job_manager.complete_job(job_id, status="failed")
+        # Centralize filtering logic using explicit query builder pattern
+        query = db.query(Product)
+        if product_ids is not None:
+            query = query.filter(Product.id.in_(product_ids))
+        elif bakery_id is not None:
+            query = query.filter(Product.bakery_id == bakery_id)
+        products = query.order_by(Product.id.asc()).all()
+        resolved_product_ids = [p.id for p in products]
+        
+        # Add clear logging at job start
+        logger.info(
+            f"Training job {job_id}: Starting retrain job - "
+            f"bakery_id={bakery_id}, "
+            f"requested_product_ids={requested_product_ids}, "
+            f"resolved_product_ids={resolved_product_ids}, "
+            f"resolved_product_count={len(resolved_product_ids)}"
+        )
+        
+        # Handle empty product list
+        if len(resolved_product_ids) == 0:
+            logger.info(f"Training job {job_id}: No products found, completing immediately")
+            job_manager.complete_job(job_id, status="completed")
             return
+        
+        total = len(resolved_product_ids)
+        product_ids = resolved_product_ids  # Use resolved list for training loop
         
         logger.info(f"Training job {job_id}: Updating progress - total={total}, completed=0")
         job_manager.update_job_progress(job_id, total=total, completed=0)
@@ -175,18 +200,121 @@ def run_training_job(
                     try:
                         product = db.query(Product).filter(Product.id == product_id).first()
                         if product:
-                            forecast_out = get_forecast_for_product(
-                                product_id=product_id,
-                                days_ahead=60,
+                            # Call forecast service directly to get raw predictions for future stats
+                            forecast_service = ForecastService()
+                            forecast_result = forecast_service.generate_prophet_forecast_for_product(
                                 db=db,
+                                product_id=product_id,
+                                horizon_days=60,
                             )
                             
-                            if forecast_out and forecast_out.points:
+                            if forecast_result and forecast_result.points:
+                                # Convert to ProductForecastOut for upsert
+                                from app.schemas.sales_record import ForecastPointOut, ProductForecastOut
+                                from datetime import date as date_type
+                                forecast_out = ProductForecastOut(
+                                    product_id=forecast_result.product_id,
+                                    product_name=forecast_result.product_name,
+                                    horizon_days=forecast_result.horizon_days,
+                                    points=[
+                                        ForecastPointOut(
+                                            date=date_type.fromisoformat(point.date),
+                                            yhat=point.yhat,
+                                            yhat_lower=point.yhat_lower,
+                                            yhat_upper=point.yhat_upper,
+                                            revenue=getattr(point, "revenue", None),
+                                            cost=getattr(point, "cost", None),
+                                            waste_cost=getattr(point, "waste_cost", None),
+                                            profit=getattr(point, "profit", None),
+                                            waste_quantity=getattr(point, "waste_quantity", None),
+                                            optimal_quantity=getattr(point, "optimal_quantity", None),
+                                            expected_stockout_cost=getattr(point, "expected_stockout_cost", None),
+                                            expected_waste_cost=getattr(point, "expected_waste_cost", None),
+                                            expected_total_cost=getattr(point, "expected_total_cost", None),
+                                            is_predicted_spike=getattr(point, "is_predicted_spike", False),
+                                            spike_probability=getattr(point, "spike_probability", None),
+                                            spike_magnitude=getattr(point, "spike_magnitude", None),
+                                            spike_confidence=getattr(point, "spike_confidence", None),
+                                        )
+                                        for point in forecast_result.points
+                                    ],
+                                )
+                                
                                 upsert_product_daily_forecasts(
                                     db,
                                     product=product,
                                     forecast=forecast_out,
                                 )
+                                
+                                # Phase 1b: Compute and store future slice raw prediction stats
+                                if forecast_result.raw_yhat_values is not None and len(forecast_result.raw_yhat_values) > 0:
+                                    try:
+                                        # Get the active ModelRun for this product
+                                        model_run = (
+                                            db.query(ModelRun)
+                                            .filter(
+                                                ModelRun.product_id == product_id,
+                                                ModelRun.is_active == True
+                                            )
+                                            .order_by(ModelRun.created_at.desc())
+                                            .first()
+                                        )
+                                        
+                                        if model_run:
+                                            # Get feature_version from ModelRun
+                                            feature_version = model_run.feature_version
+                                            model_name = forecast_result.model_name or model_run.selected_model_type
+                                            
+                                            # Compute future slice stats
+                                            raw_prediction_stats_future = _compute_raw_prediction_stats_future(
+                                                forecast_result.raw_yhat_values,
+                                                model_name,
+                                                feature_version,
+                                            )
+                                            
+                                            if raw_prediction_stats_future is not None:
+                                                # Update ModelRun.metrics_json with future stats
+                                                if model_run.metrics_json is None:
+                                                    model_run.metrics_json = {}
+                                                
+                                                model_run.metrics_json["raw_prediction_summary_future"] = raw_prediction_stats_future
+                                                db.commit()
+                                                
+                                                logger.info(
+                                                    f"Training job {job_id}: Updated ModelRun for product_id={product_id} with future slice stats: "
+                                                    f"raw_neg_pct={raw_prediction_stats_future.get('raw_neg_pct', 0):.1f}%, "
+                                                    f"clamped_zero_pct={raw_prediction_stats_future.get('clamped_zero_pct', 0):.1f}%"
+                                                )
+                                                
+                                                # Phase 5: Dense product sanity warning for future slice
+                                                training_data_summary = model_run.metrics_json.get("training_data_summary", {})
+                                                mean_y_train = training_data_summary.get("mean_y", 0.0)
+                                                zero_rate_train = training_data_summary.get("zero_rate", 100.0)
+                                                clamped_zero_pct_future = raw_prediction_stats_future.get("clamped_zero_pct", 0.0)
+                                                
+                                                if (mean_y_train > 10 and 
+                                                    zero_rate_train < 30.0 and 
+                                                    clamped_zero_pct_future > 50.0):
+                                                    logger.warning(
+                                                        f"Training job {job_id}: DENSE_PRODUCT_ZERO_FORECAST: Product {product_id} has healthy training data "
+                                                        f"(mean_y={mean_y_train:.2f}, zero_rate={zero_rate_train:.1f}%) but "
+                                                        f"{clamped_zero_pct_future:.1f}% of future forecasts are clamped to zero. "
+                                                        f"Likely negative clamp or future feature/regressor issue."
+                                                    )
+                                            else:
+                                                logger.warning(
+                                                    f"Training job {job_id}: Failed to compute future slice stats for product_id={product_id}"
+                                                )
+                                        else:
+                                            logger.warning(
+                                                f"Training job {job_id}: No active ModelRun found for product_id={product_id} to update with future stats"
+                                            )
+                                    except Exception as stats_error:
+                                        logger.warning(
+                                            f"Training job {job_id}: Failed to compute/store future slice stats for product_id={product_id}: {stats_error}",
+                                            exc_info=True
+                                        )
+                                
                                 forecast_duration = time.time() - forecast_start_time
                                 logger.info(
                                     f"Training job {job_id}: Precomputed forecasts for product {product_id} "
@@ -304,11 +432,20 @@ async def start_retrain(
             headers={"X-Existing-Job-Id": current_job.job_id},
         )
     
-    # Determine total count
-    if request.product_ids is None:
-        total = db.query(Product).count()
-    else:
-        total = len(request.product_ids)
+    # Determine total count using same filtering logic as run_training_job
+    query = db.query(Product)
+    if request.product_ids is not None:
+        query = query.filter(Product.id.in_(request.product_ids))
+    elif request.bakery_id is not None:
+        query = query.filter(Product.bakery_id == request.bakery_id)
+    total = query.count()
+    
+    # Handle no products found
+    if request.product_ids is not None and total == 0:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="No matching products found for given product_ids"
+        )
     
     # Start job
     try:
@@ -322,12 +459,13 @@ async def start_retrain(
     
     # Launch background task using FastAPI BackgroundTasks
     # Note: BackgroundTasks executes after the response is sent
-    # Pass optimize_hyperparameters to the background task
+    # Pass optimize_hyperparameters and bakery_id to the background task
     background_tasks.add_task(
         run_training_job, 
         job_id, 
         request.product_ids,
-        request.optimize_hyperparameters
+        request.optimize_hyperparameters,
+        request.bakery_id
     )
     
     logger.info(

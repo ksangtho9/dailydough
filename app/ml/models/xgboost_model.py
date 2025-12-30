@@ -2,9 +2,12 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from typing import Optional, Tuple, TYPE_CHECKING
+import logging
 
 import numpy as np
 import pandas as pd
+
+from app.core.config import settings
 
 if TYPE_CHECKING:
     from ..features import FeatureEngineer
@@ -13,6 +16,8 @@ try:
     from xgboost import XGBRegressor
 except ImportError:  # pragma: no cover
     XGBRegressor = None  # type: ignore
+
+logger = logging.getLogger("bakezy.xgboost")
 
 
 @dataclass
@@ -164,6 +169,7 @@ class XGBoostSalesModel:
         promotions_df: Optional[pd.DataFrame] = None,
         events_df: Optional[pd.DataFrame] = None,
         product_info: Optional[dict] = None,
+        product_id: Optional[int] = None,  # For gated diagnostic logging
     ) -> pd.DataFrame:
         """
         Predict future values with recursive feature generation.
@@ -204,7 +210,23 @@ class XGBoostSalesModel:
         if "y" not in complete_series.columns:
             complete_series["y"] = 0.0
         
+        # Step 5: Check for NaN-dominated feature frames (before predictions) - gated
+        should_log = settings.debug_zero_forecasts or (product_id is not None)  # TODO: Check flagged set
+        
+        # Track feature values for first 3 and last 3 forecast dates (Phase 3)
+        feature_log_indices = set()
+        if len(future_df) >= 3:
+            feature_log_indices.update([0, 1, 2])  # First 3
+            feature_log_indices.update([len(future_df) - 3, len(future_df) - 2, len(future_df) - 1])  # Last 3
+        else:
+            # If fewer than 3 rows, log all
+            feature_log_indices = set(range(len(future_df)))
+        
+        tracked_feature_values = {}  # idx -> {feature_name: value}
+        
         # Iteratively predict each day
+        rows_all_nan_or_zero_count = 0
+        first_row_nan_per_feature = {}
         for idx, row in future_df.iterrows():
             # Create a single-row DataFrame for this future date
             current_future = pd.DataFrame([row])
@@ -259,6 +281,115 @@ class XGBoostSalesModel:
             for col in self.feature_cols:
                 if col in X_current.columns:
                     X_current[col] = pd.to_numeric(X_current[col], errors='coerce').fillna(0.0)
+            
+            # Step 5: Check for NaN-dominated features (gated)
+            # Check if all features are NaN or zero for this row
+            row_all_nan_or_zero = True
+            for col in self.feature_cols:
+                if col in X_current.columns:
+                    val = X_current[col].iloc[0] if len(X_current) > 0 else None
+                    if pd.notna(val) and val != 0.0:
+                        row_all_nan_or_zero = False
+                        break
+            
+            if row_all_nan_or_zero:
+                rows_all_nan_or_zero_count += 1
+            
+            # Phase 3: Track feature values for first 3 and last 3 forecast dates
+            if should_log and idx in feature_log_indices:
+                tracked_feature_values[idx] = {}
+                key_features_to_track = ["lag_1", "lag_7", "lag_14", "rolling_mean_7", "rolling_mean_30"]
+                # Also track any ewma features
+                ewma_features = [f for f in self.feature_cols if f.startswith("ewma_")]
+                key_features_to_track.extend(ewma_features)
+                
+                for feat in key_features_to_track:
+                    if feat in X_current.columns:
+                        val = X_current[feat].iloc[0] if len(X_current) > 0 else None
+                        tracked_feature_values[idx][feat] = float(val) if pd.notna(val) else None
+            
+            if should_log:
+                # Log detailed stats for first row only (to avoid spam)
+                if idx == 0:
+                    for col in self.feature_cols:
+                        if col in X_current.columns:
+                            nan_count = X_current[col].isna().sum()
+                            nan_pct = (nan_count / len(X_current)) * 100 if len(X_current) > 0 else 0.0
+                            first_row_nan_per_feature[col] = nan_pct
+                    
+                    logger.info(
+                        f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                        f"step=xgboost_checks, first_row_nan_per_feature_pct={first_row_nan_per_feature}, "
+                        f"first_row_all_nan_or_zero={row_all_nan_or_zero}"
+                    )
+            
+            # Log summary after processing all rows
+            if should_log and idx == len(future_df) - 1:
+                rows_all_nan_pct = (rows_all_nan_or_zero_count / len(future_df)) * 100 if len(future_df) > 0 else 0.0
+                logger.info(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                    f"step=xgboost_checks, rows_all_nan_or_zero_pct={rows_all_nan_pct:.1f}% "
+                    f"({rows_all_nan_or_zero_count}/{len(future_df)} rows)"
+                )
+                
+                if rows_all_nan_pct > 50.0:
+                    logger.warning(
+                        f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                        f"step=xgboost_checks, WARNING: rows_all_nan_pct={rows_all_nan_pct:.1f}% > 50%"
+                    )
+                
+                # Phase 3: Log feature values for first 3 and last 3 forecast dates
+                if tracked_feature_values:
+                    # Sort indices for consistent logging
+                    sorted_indices = sorted(tracked_feature_values.keys())
+                    for feat_idx in sorted_indices:
+                        date_str = future_df.iloc[feat_idx]["ds"].strftime("%Y-%m-%d") if "ds" in future_df.columns else f"idx_{feat_idx}"
+                        feat_values = tracked_feature_values[feat_idx]
+                        logger.info(
+                            f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                            f"step=future_feature_health, date={date_str}, idx={feat_idx}, "
+                            f"feature_values={feat_values}"
+                        )
+                    
+                    # Verify iterative feature generation: check if lag_1 is updated across dates
+                    if len(tracked_feature_values) >= 2:
+                        first_idx = min(tracked_feature_values.keys())
+                        last_idx = max(tracked_feature_values.keys())
+                        if "lag_1" in tracked_feature_values[first_idx] and "lag_1" in tracked_feature_values[last_idx]:
+                            first_lag1 = tracked_feature_values[first_idx]["lag_1"]
+                            last_lag1 = tracked_feature_values[last_idx]["lag_1"]
+                            if first_lag1 != last_lag1:
+                                logger.info(
+                                    f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                                    f"step=iterative_verification, lag_1 changes from {first_lag1} (idx {first_idx}) "
+                                    f"to {last_lag1} (idx {last_idx}) - features are being updated iteratively"
+                                )
+                            else:
+                                logger.warning(
+                                    f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                                    f"step=iterative_verification, WARNING: lag_1 unchanged ({first_lag1}) "
+                                    f"across dates - features may not be updating iteratively"
+                                )
+                
+                # Log per-feature min/mean/max/null_count for key lag/rolling features
+                if should_log:
+                    # Track feature stats across all future rows
+                    key_features = [f for f in self.feature_cols if f.startswith("lag_") or f.startswith("rolling_") or f.startswith("ewma_")]
+                    if key_features:
+                        logger.info(
+                            f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                            f"step=xgboost_checks, key_lag_rolling_features={key_features}"
+                        )
+                        
+                        # For first row, log detailed stats (already computed above)
+                        if first_row_nan_per_feature:
+                            for feat in key_features:
+                                if feat in first_row_nan_per_feature:
+                                    logger.info(
+                                        f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                                        f"step=xgboost_checks, feature={feat}, "
+                                        f"first_row_nan_pct={first_row_nan_per_feature[feat]:.1f}%"
+                                    )
             
             X_current = X_current[self.feature_cols].values
             pred = self.model.predict(X_current)[0]

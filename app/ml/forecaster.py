@@ -1,14 +1,19 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Literal, Optional
+from typing import Literal, Optional, Union
 from datetime import timedelta
+import logging
 
+import numpy as np
 import pandas as pd
 
 from .preprocessing import CleanedTimeSeries
 from .trainer import ModelTrainer, TrainResult
 from .features import FeatureEngineer
+from app.core.config import settings
+
+logger = logging.getLogger("bakezy.forecaster")
 
 ModelName = Literal["prophet", "xgboost", "ensemble", "seasonal_naive", "rolling_mean"]
 
@@ -35,6 +40,58 @@ class ProductForecaster:
     def __init__(self, trainer: Optional[ModelTrainer] = None):
         self.trainer = trainer or ModelTrainer()
         self.feature_engineer = FeatureEngineer()
+    
+    def _should_log_deep_diagnostics(self, product_id: Optional[int]) -> bool:
+        """Check if deep diagnostic logging should be enabled for this product."""
+        if settings.debug_zero_forecasts:
+            return True
+        # TODO: Could check against flagged_product_ids set from diagnostics endpoint
+        return False
+    
+    def _compute_raw_predictions_stats(
+        self, 
+        raw_predictions: Union[np.ndarray, pd.Series]
+    ) -> dict:
+        """
+        Compute statistics on raw predictions (before clamping).
+        
+        Args:
+            raw_predictions: Raw model predictions (can be negative)
+            
+        Returns:
+            Dictionary with stats: min_raw_yhat, mean_raw_yhat, max_raw_yhat,
+            raw_neg_pct, raw_zero_pct, first_5_raw_predictions
+        """
+        if isinstance(raw_predictions, pd.Series):
+            raw_array = raw_predictions.values
+        else:
+            raw_array = raw_predictions
+        
+        if len(raw_array) == 0:
+            return {
+                "min_raw_yhat": None,
+                "mean_raw_yhat": None,
+                "max_raw_yhat": None,
+                "raw_neg_pct": None,
+                "raw_zero_pct": None,
+                "first_5_raw_predictions": [],
+            }
+        
+        min_raw_yhat = float(np.min(raw_array))
+        mean_raw_yhat = float(np.mean(raw_array))
+        max_raw_yhat = float(np.max(raw_array))
+        raw_neg_pct = (raw_array < 0).sum() / len(raw_array) * 100
+        raw_zero_pct = (raw_array == 0.0).sum() / len(raw_array) * 100
+        first_5_raw_predictions = [float(x) for x in raw_array[:5].tolist()]
+        
+        return {
+            "min_raw_yhat": min_raw_yhat,
+            "mean_raw_yhat": mean_raw_yhat,
+            "max_raw_yhat": max_raw_yhat,
+            "raw_neg_pct": raw_neg_pct,
+            "raw_zero_pct": raw_zero_pct,
+            "first_5_raw_predictions": first_5_raw_predictions,
+        }
 
     def forecast(
         self,
@@ -72,10 +129,53 @@ class ProductForecaster:
                 horizon_days,
                 historical_delivery=historical_delivery,
                 future_regressors=future_regressors,
+                product_id=ts.product_id,  # Pass product_id for gated logging
             )
             # keep only future rows
             last_train_date = ts.df["ds"].max()
             forecast_df = forecast_df[forecast_df["ds"] > last_train_date].reset_index(drop=True)
+            
+            # Step 4: Log raw predictions before clamping (gated)
+            if self._should_log_deep_diagnostics(ts.product_id) and not forecast_df.empty and "yhat" in forecast_df.columns:
+                raw_yhat = forecast_df["yhat"].values
+                stats = self._compute_raw_predictions_stats(raw_yhat)
+                logger.info(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={ts.product_id}, "
+                    f"step=raw_predictions, model=prophet, "
+                    f"min_raw_yhat={stats['min_raw_yhat']:.6f}, "
+                    f"mean_raw_yhat={stats['mean_raw_yhat']:.6f}, "
+                    f"max_raw_yhat={stats['max_raw_yhat']:.6f}, "
+                    f"raw_neg_pct={stats['raw_neg_pct']:.1f}%, "
+                    f"raw_zero_pct={stats['raw_zero_pct']:.1f}%, "
+                    f"first_5_raw_predictions={stats['first_5_raw_predictions']}"
+                )
+                
+                # Compute clamped predictions and forecast horizon stats
+                clamped_yhat = np.maximum(raw_yhat, 0.0)
+                zero_forecast_count = (clamped_yhat == 0.0).sum()
+                zero_forecast_pct = (zero_forecast_count / len(clamped_yhat) * 100) if len(clamped_yhat) > 0 else 0.0
+                
+                logger.info(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={ts.product_id}, "
+                    f"step=forecast_horizon_stats, model=prophet, "
+                    f"forecast_count={len(clamped_yhat)}, "
+                    f"zero_forecast_count={int(zero_forecast_count)}, "
+                    f"zero_forecast_pct={zero_forecast_pct:.1f}%"
+                )
+                
+                # Warnings
+                if stats['raw_neg_pct'] > 50.0:
+                    logger.warning(
+                        f"ZERO_FORECAST_INVESTIGATION: product_id={ts.product_id}, "
+                        f"step=warning, High negative predictions ({stats['raw_neg_pct']:.1f}%) - "
+                        f"likely being clamped to zero"
+                    )
+                elif stats['raw_zero_pct'] > 50.0 and stats['raw_neg_pct'] < 10.0:
+                    logger.warning(
+                        f"ZERO_FORECAST_INVESTIGATION: product_id={ts.product_id}, "
+                        f"step=warning, High zero predictions ({stats['raw_zero_pct']:.1f}%) but low negatives "
+                        f"({stats['raw_neg_pct']:.1f}%) - likely future feature/regressor issue"
+                    )
 
         elif train_result.model_name == "xgboost":
             # Generate future dates
@@ -111,7 +211,50 @@ class ProductForecaster:
                 promotions_df=promotions_df,
                 events_df=events_df,
                 product_info=product_info,
+                product_id=ts.product_id,  # Pass product_id for gated logging
             )
+            
+            # Step 4: Log raw predictions before clamping (gated)
+            if self._should_log_deep_diagnostics(ts.product_id) and not forecast_df.empty and "yhat" in forecast_df.columns:
+                raw_yhat = forecast_df["yhat"].values
+                stats = self._compute_raw_predictions_stats(raw_yhat)
+                logger.info(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={ts.product_id}, "
+                    f"step=raw_predictions, model=xgboost, "
+                    f"min_raw_yhat={stats['min_raw_yhat']:.6f}, "
+                    f"mean_raw_yhat={stats['mean_raw_yhat']:.6f}, "
+                    f"max_raw_yhat={stats['max_raw_yhat']:.6f}, "
+                    f"raw_neg_pct={stats['raw_neg_pct']:.1f}%, "
+                    f"raw_zero_pct={stats['raw_zero_pct']:.1f}%, "
+                    f"first_5_raw_predictions={stats['first_5_raw_predictions']}"
+                )
+                
+                # Compute clamped predictions and forecast horizon stats
+                clamped_yhat = np.maximum(raw_yhat, 0.0)
+                zero_forecast_count = (clamped_yhat == 0.0).sum()
+                zero_forecast_pct = (zero_forecast_count / len(clamped_yhat) * 100) if len(clamped_yhat) > 0 else 0.0
+                
+                logger.info(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={ts.product_id}, "
+                    f"step=forecast_horizon_stats, model=xgboost, "
+                    f"forecast_count={len(clamped_yhat)}, "
+                    f"zero_forecast_count={int(zero_forecast_count)}, "
+                    f"zero_forecast_pct={zero_forecast_pct:.1f}%"
+                )
+                
+                # Warnings
+                if stats['raw_neg_pct'] > 50.0:
+                    logger.warning(
+                        f"ZERO_FORECAST_INVESTIGATION: product_id={ts.product_id}, "
+                        f"step=warning, High negative predictions ({stats['raw_neg_pct']:.1f}%) - "
+                        f"likely being clamped to zero"
+                    )
+                elif stats['raw_zero_pct'] > 50.0 and stats['raw_neg_pct'] < 10.0:
+                    logger.warning(
+                        f"ZERO_FORECAST_INVESTIGATION: product_id={ts.product_id}, "
+                        f"step=warning, High zero predictions ({stats['raw_zero_pct']:.1f}%) but low negatives "
+                        f"({stats['raw_neg_pct']:.1f}%) - likely future feature/regressor issue"
+                    )
 
         elif train_result.model_name == "ensemble":
             # Generate future dates for ensemble
@@ -154,6 +297,48 @@ class ProductForecaster:
                 future_regressors=future_regressors,
                 historical_delivery=historical_delivery,
             )
+            
+            # Step 4: Log raw predictions before clamping (gated)
+            if self._should_log_deep_diagnostics(ts.product_id) and not forecast_df.empty and "yhat" in forecast_df.columns:
+                raw_yhat = forecast_df["yhat"].values
+                stats = self._compute_raw_predictions_stats(raw_yhat)
+                logger.info(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={ts.product_id}, "
+                    f"step=raw_predictions, model=ensemble, "
+                    f"min_raw_yhat={stats['min_raw_yhat']:.6f}, "
+                    f"mean_raw_yhat={stats['mean_raw_yhat']:.6f}, "
+                    f"max_raw_yhat={stats['max_raw_yhat']:.6f}, "
+                    f"raw_neg_pct={stats['raw_neg_pct']:.1f}%, "
+                    f"raw_zero_pct={stats['raw_zero_pct']:.1f}%, "
+                    f"first_5_raw_predictions={stats['first_5_raw_predictions']}"
+                )
+                
+                # Compute clamped predictions and forecast horizon stats
+                clamped_yhat = np.maximum(raw_yhat, 0.0)
+                zero_forecast_count = (clamped_yhat == 0.0).sum()
+                zero_forecast_pct = (zero_forecast_count / len(clamped_yhat) * 100) if len(clamped_yhat) > 0 else 0.0
+                
+                logger.info(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={ts.product_id}, "
+                    f"step=forecast_horizon_stats, model=ensemble, "
+                    f"forecast_count={len(clamped_yhat)}, "
+                    f"zero_forecast_count={int(zero_forecast_count)}, "
+                    f"zero_forecast_pct={zero_forecast_pct:.1f}%"
+                )
+                
+                # Warnings
+                if stats['raw_neg_pct'] > 50.0:
+                    logger.warning(
+                        f"ZERO_FORECAST_INVESTIGATION: product_id={ts.product_id}, "
+                        f"step=warning, High negative predictions ({stats['raw_neg_pct']:.1f}%) - "
+                        f"likely being clamped to zero"
+                    )
+                elif stats['raw_zero_pct'] > 50.0 and stats['raw_neg_pct'] < 10.0:
+                    logger.warning(
+                        f"ZERO_FORECAST_INVESTIGATION: product_id={ts.product_id}, "
+                        f"step=warning, High zero predictions ({stats['raw_zero_pct']:.1f}%) but low negatives "
+                        f"({stats['raw_neg_pct']:.1f}%) - likely future feature/regressor issue"
+                    )
         
         elif train_result.model_name in ("seasonal_naive", "rolling_mean"):
             # Baseline models: use their predict method
@@ -161,7 +346,50 @@ class ProductForecaster:
             forecast_df = train_result.model.predict(
                 horizon_days=horizon_days,
                 last_date=last_train_date,
+                product_id=ts.product_id,  # Pass product_id for gated logging
             )
+            
+            # Step 4: Log raw predictions before clamping (gated)
+            if self._should_log_deep_diagnostics(ts.product_id) and not forecast_df.empty and "yhat" in forecast_df.columns:
+                raw_yhat = forecast_df["yhat"].values
+                stats = self._compute_raw_predictions_stats(raw_yhat)
+                logger.info(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={ts.product_id}, "
+                    f"step=raw_predictions, model={train_result.model_name}, "
+                    f"min_raw_yhat={stats['min_raw_yhat']:.6f}, "
+                    f"mean_raw_yhat={stats['mean_raw_yhat']:.6f}, "
+                    f"max_raw_yhat={stats['max_raw_yhat']:.6f}, "
+                    f"raw_neg_pct={stats['raw_neg_pct']:.1f}%, "
+                    f"raw_zero_pct={stats['raw_zero_pct']:.1f}%, "
+                    f"first_5_raw_predictions={stats['first_5_raw_predictions']}"
+                )
+                
+                # Compute clamped predictions and forecast horizon stats
+                clamped_yhat = np.maximum(raw_yhat, 0.0)
+                zero_forecast_count = (clamped_yhat == 0.0).sum()
+                zero_forecast_pct = (zero_forecast_count / len(clamped_yhat) * 100) if len(clamped_yhat) > 0 else 0.0
+                
+                logger.info(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={ts.product_id}, "
+                    f"step=forecast_horizon_stats, model={train_result.model_name}, "
+                    f"forecast_count={len(clamped_yhat)}, "
+                    f"zero_forecast_count={int(zero_forecast_count)}, "
+                    f"zero_forecast_pct={zero_forecast_pct:.1f}%"
+                )
+                
+                # Warnings
+                if stats['raw_neg_pct'] > 50.0:
+                    logger.warning(
+                        f"ZERO_FORECAST_INVESTIGATION: product_id={ts.product_id}, "
+                        f"step=warning, High negative predictions ({stats['raw_neg_pct']:.1f}%) - "
+                        f"likely being clamped to zero"
+                    )
+                elif stats['raw_zero_pct'] > 50.0 and stats['raw_neg_pct'] < 10.0:
+                    logger.warning(
+                        f"ZERO_FORECAST_INVESTIGATION: product_id={ts.product_id}, "
+                        f"step=warning, High zero predictions ({stats['raw_zero_pct']:.1f}%) but low negatives "
+                        f"({stats['raw_neg_pct']:.1f}%) - likely future feature/regressor issue"
+                    )
             
         else:
             raise ValueError(f"Unsupported model: {train_result.model_name}")
