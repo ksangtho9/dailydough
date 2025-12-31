@@ -45,29 +45,13 @@ def forecast_product_sales(
     """
     
     # POST_RETRIEVAL_ENTRY: Log entry point
-    bakery_id = current_user.bakery_id if current_user else None
+    # Get bakery_id from product (User model doesn't have bakery_id)
+    product_check = db.query(Product).filter(Product.id == product_id).first()
+    bakery_id = product_check.bakery_id if product_check else None
     horizon_days = request.days or 14
     logger.info(
         f"POST_RETRIEVAL_ENTRY: product_id={product_id}, horizon_days={horizon_days}, bakery_id={bakery_id}"
     )
-    
-    # Verify product belongs to current bakery (defensive check)
-    if current_user:
-        product_check = (
-            db.query(Product)
-            .filter(Product.id == product_id, Product.bakery_id == current_user.bakery_id)
-            .first()
-        )
-        if product_check is None:
-            # Product doesn't exist or doesn't belong to this bakery
-            logger.warning(
-                f"POST_RETRIEVAL_ENTRY: product_id={product_id} not found or doesn't belong to bakery_id={bakery_id}"
-            )
-            # Still continue - let ML layer handle product existence validation
-        else:
-            logger.debug(
-                f"POST_RETRIEVAL_ENTRY: product_id={product_id} verified to belong to bakery_id={bakery_id}"
-            )
 
     try:
         forecast_result = get_forecast_for_product(

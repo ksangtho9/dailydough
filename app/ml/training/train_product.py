@@ -67,7 +67,7 @@ def _compute_raw_prediction_stats_future(
         "raw_neg_pct": float(raw_neg_pct),
         "raw_zero_pct": float(raw_zero_pct),
         "clamped_zero_pct": float(clamped_zero_pct),
-        "n_points_future": len(raw_yhat_values),
+        "n_points_future": int(len(raw_yhat_values)),  # Ensure Python int for JSON serialization
         "model_name": model_name,
         "feature_version": feature_version,
     }
@@ -178,7 +178,7 @@ def _compute_raw_prediction_stats_eval(
         "raw_neg_pct": float(raw_neg_pct),
         "raw_zero_pct": float(raw_zero_pct),
         "clamped_zero_pct": float(clamped_zero_pct),
-        "n_points_eval": len(raw_yhat_values),
+        "n_points_eval": int(len(raw_yhat_values)),  # Ensure Python int for JSON serialization
     }
 
 
@@ -625,25 +625,36 @@ def train_product(
                 supply_capped_count = 0
                 supply_capped_pct = 0.0
                 if "is_supply_capped_day" in train_df_for_analysis.columns:
-                    supply_capped_count = (train_df_for_analysis["is_supply_capped_day"] == 1).sum()
-                    supply_capped_pct = (supply_capped_count / total_training_days * 100) if total_training_days > 0 else 0.0
+                    supply_capped_count = int((train_df_for_analysis["is_supply_capped_day"] == 1).sum())  # Convert numpy int64 to Python int
+                    supply_capped_pct = float((supply_capped_count / total_training_days * 100) if total_training_days > 0 else 0.0)
                 
                 metrics_json_data["training_data_summary"] = {
-                    "total_training_days": total_training_days,
-                    "nonzero_days": int(nonzero_days),
+                    "total_training_days": int(total_training_days),  # Ensure Python int
+                    "nonzero_days": int(nonzero_days),  # Already converted, but ensure int
                     "zero_rate": float(zero_rate),
                     "mean_y": mean_y,
                     "median_y": median_y,
                     "max_y": max_y,
-                    "is_valid_day_count": is_valid_day_count,
-                    "supply_capped_count": supply_capped_count,
-                    "supply_capped_pct": supply_capped_pct,
+                    "is_valid_day_count": int(is_valid_day_count),  # Ensure Python int
+                    "supply_capped_count": int(supply_capped_count),  # Ensure Python int
+                    "supply_capped_pct": float(supply_capped_pct),  # Ensure Python float
                 }
             
             # Add raw prediction summary for eval slice if available
             if raw_prediction_stats_eval is not None:
+                # Ensure all values in raw_prediction_stats_eval are JSON-serializable (convert numpy types)
+                cleaned_stats = {}
+                for k, v in raw_prediction_stats_eval.items():
+                    if isinstance(v, (np.integer, np.int64, np.int32)):
+                        cleaned_stats[k] = int(v)
+                    elif isinstance(v, (np.floating, np.float64, np.float32)):
+                        cleaned_stats[k] = float(v)
+                    elif isinstance(v, np.ndarray):
+                        cleaned_stats[k] = v.tolist()  # Convert arrays to lists
+                    else:
+                        cleaned_stats[k] = v
                 metrics_json_data["raw_prediction_summary_eval"] = {
-                    **raw_prediction_stats_eval,
+                    **cleaned_stats,
                     "model_name": train_result.model_name,
                     "feature_version": feature_version,
                 }
