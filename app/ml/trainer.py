@@ -26,6 +26,9 @@ from app.services.admin_training_jobs import CancelledError
 
 logger = logging.getLogger("bakezy.training")
 
+# Startup banner to prove updated code is running
+logger.info("TRAINER_STARTUP_BANNER: trainer.py loaded with force_model support - UUID: a2b3ce5e-fix-zero-forecasts")
+
 
 ModelName = Literal["prophet", "xgboost", "ensemble", "seasonal_naive", "rolling_mean"]
 
@@ -47,8 +50,8 @@ class ModelTrainer:
         """Check if deep diagnostic logging should be enabled for this product."""
         if settings.debug_zero_forecasts:
             return True
-        # TODO: Could check against flagged_product_ids set from diagnostics endpoint
-        # For now, rely on settings.debug_zero_forecasts
+        if product_id is not None and product_id in settings.debug_forecast_product_ids:
+            return True
         return False
     
     def _compute_feature_version(self, feature_cols: list[str]) -> str:
@@ -411,6 +414,8 @@ class ModelTrainer:
         optimize_hyperparameters: str = "auto",  # "auto", "true", or "false"
         db: Optional[Session] = None,  # For ModelRun queries
         product_id: Optional[int] = None,  # For ModelRun queries
+        force_model: bool = False,  # If True, bypass early pre-training gates for requested model
+        forecast_run_id: Optional[str] = None,  # Correlation ID for end-to-end tracing
     ) -> TrainResult:
         """
         High-level training routine for a single product time series.
@@ -425,7 +430,24 @@ class ModelTrainer:
             product_info: Optional product metadata dict
             optimize_with_wape: If True, optimize hyperparameters using WAPE
         """
+        # Diagnostic: Log entry to trace force_model parameter (always log, unconditional)
+        logger.info(
+            f"TRAIN_ENTRY: forecast_run_id={forecast_run_id if forecast_run_id is not None else 'N/A'}, product_id={product_id}, model_name={model_name}, "
+            f"force_model={force_model}"
+        )
+        
         df = ts.df.copy()
+        
+        # Verify delivery removal: Check that ts.df doesn't contain delivery
+        # Delivery should be removed before training since it's unknown for future dates
+        if "delivery" in df.columns:
+            logger.warning(
+                f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                f"step=trainer_delivery_check, WARNING: delivery found in ts.df! "
+                f"This should have been removed before training. Removing now."
+            )
+            # Remove delivery to prevent Prophet from expecting it in future_df
+            df = df.drop(columns=["delivery"])
 
         # Feature engineering (on all data first, including invalid days for feature computation)
         df["ds"] = pd.to_datetime(df["ds"])
@@ -717,58 +739,65 @@ class ModelTrainer:
         
         # Prophet eligibility check (on training window, not full historical)
         if model_name == "prophet":
-            nonzero_days = (train_df_for_training["y"] > 0).sum() if "y" in train_df_for_training.columns else 0
-            zero_rate = (train_df_for_training["y"] == 0.0).sum() / len(train_df_for_training) if len(train_df_for_training) > 0 and "y" in train_df_for_training.columns else 1.0
-            
-            if nonzero_days < settings.prophet_min_nonzero_days or zero_rate > settings.prophet_max_zero_rate:
-                skip_reason = f"nonzero_days={nonzero_days},zero_rate={zero_rate:.2f}"
+            # If force_model=True, bypass early pre-training gates to allow Prophet to be trained
+            # The forecaster will then check viability on the actual predictions
+            if force_model:
                 logger.info(
-                    f"Prophet skipped ({skip_reason}). "
-                    f"Using XGBoost-only as fallback."
+                    f"TRAIN_FORCE_MODEL: product_id={product_id}, model=prophet, bypassed_prechecks=True"
                 )
-                
-                if self._should_log_deep_diagnostics(product_id):
-                    logger.info(
-                        f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
-                        f"step=model_selection, Prophet skipped: {skip_reason}"
-                    )
-                
-                # Store in metadata for dashboard debugging
-                metadata = {
-                    "prophet_skipped_reason": skip_reason,
-                    "nonzero_days": nonzero_days,
-                    "zero_rate": zero_rate
-                }
-                
-                # Fall back to XGBoost
-                selected_model_type = "xgboost"
-                model_name = "xgboost"
-                model_selection_path.append("Prophet → failed eligibility → XGBoost")
             else:
-                # Prophet is eligible - run quick viability check BEFORE optimization
-                if eval_df is not None and len(eval_df) >= 7:
-                    viability_start_time = time.time()
-                    prophet_viable = self._quick_prophet_viability_check(
-                        train_df_for_training, eval_df, holidays_df, weather_df, promotions_df, events_df, product_info
+                nonzero_days = (train_df_for_training["y"] > 0).sum() if "y" in train_df_for_training.columns else 0
+                zero_rate = (train_df_for_training["y"] == 0.0).sum() / len(train_df_for_training) if len(train_df_for_training) > 0 and "y" in train_df_for_training.columns else 1.0
+                
+                if nonzero_days < settings.prophet_min_nonzero_days or zero_rate > settings.prophet_max_zero_rate:
+                    skip_reason = f"nonzero_days={nonzero_days},zero_rate={zero_rate:.2f}"
+                    logger.info(
+                        f"Prophet skipped ({skip_reason}). "
+                        f"Using XGBoost-only as fallback."
                     )
-                    viability_duration = time.time() - viability_start_time
-                    logger.info(f"Prophet viability check took {viability_duration:.2f}s. Viable: {prophet_viable}")
                     
-                    if not prophet_viable:
-                        logger.info("Prophet viability check failed, skipping Prophet optimization. Trying XGBoost.")
-                        if self._should_log_deep_diagnostics(product_id):
-                            logger.info(
-                                f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
-                                f"step=model_selection, Prophet skipped: viability_check_failed"
-                            )
-                        metadata = {
-                            "prophet_skipped_reason": "viability_check_failed",
-                            "nonzero_days": nonzero_days,
-                            "zero_rate": zero_rate
-                        }
-                        selected_model_type = "xgboost"
-                        model_name = "xgboost"
-                        model_selection_path.append("Prophet → failed viability → XGBoost")
+                    if self._should_log_deep_diagnostics(product_id):
+                        logger.info(
+                            f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                            f"step=model_selection, Prophet skipped: {skip_reason}"
+                        )
+                    
+                    # Store in metadata for dashboard debugging
+                    metadata = {
+                        "prophet_skipped_reason": skip_reason,
+                        "nonzero_days": nonzero_days,
+                        "zero_rate": zero_rate
+                    }
+                    
+                    # Fall back to XGBoost
+                    selected_model_type = "xgboost"
+                    model_name = "xgboost"
+                    model_selection_path.append("Prophet → failed eligibility → XGBoost")
+                else:
+                    # Prophet is eligible - run quick viability check BEFORE optimization
+                    if eval_df is not None and len(eval_df) >= 7:
+                        viability_start_time = time.time()
+                        prophet_viable = self._quick_prophet_viability_check(
+                            train_df_for_training, eval_df, holidays_df, weather_df, promotions_df, events_df, product_info
+                        )
+                        viability_duration = time.time() - viability_start_time
+                        logger.info(f"Prophet viability check took {viability_duration:.2f}s. Viable: {prophet_viable}")
+                        
+                        if not prophet_viable:
+                            logger.info("Prophet viability check failed, skipping Prophet optimization. Trying XGBoost.")
+                            if self._should_log_deep_diagnostics(product_id):
+                                logger.info(
+                                    f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                                    f"step=model_selection, Prophet skipped: viability_check_failed"
+                                )
+                            metadata = {
+                                "prophet_skipped_reason": "viability_check_failed",
+                                "nonzero_days": nonzero_days,
+                                "zero_rate": zero_rate
+                            }
+                            selected_model_type = "xgboost"
+                            model_name = "xgboost"
+                            model_selection_path.append("Prophet → failed viability → XGBoost")
         
         # Compute feature_version for auto mode check
         current_feature_version = "v0"

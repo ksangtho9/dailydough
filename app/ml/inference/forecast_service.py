@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import logging
+import uuid
 from datetime import date
 from typing import Optional
 
@@ -7,6 +9,11 @@ from sqlalchemy.orm import Session
 
 from app.ml.forecast_service import ForecastService
 from app.schemas.sales_record import ForecastPointOut, ProductForecastOut
+
+logger = logging.getLogger("bakezy.inference")
+
+# Startup banner to identify module
+logger.info("INFERENCE_SERVICE_MODULE_LOADED: app/ml/inference/forecast_service.py - UUID: inference-service-v1")
 
 
 def _iso_to_date(value: str) -> date:
@@ -29,12 +36,30 @@ def get_forecast_for_product(
     if db is None:
         raise ValueError("Database session is required to forecast a product.")
 
+    # Generate correlation ID for end-to-end tracing
+    forecast_run_id = uuid.uuid4().hex[:8]
+    
+    # Diagnostic: Log entry point
+    logger.info(
+        f"INFERENCE_ENTRY: forecast_run_id={forecast_run_id}, product_id={product_id}, days_ahead={days_ahead}"
+    )
+
     service = ForecastService()
     result = service.generate_prophet_forecast_for_product(
         db=db,
         product_id=product_id,
         horizon_days=days_ahead,
+        forecast_run_id=forecast_run_id,
     )
+    
+    # Diagnostic: Log result before conversion
+    if result.points:
+        first_3_yhat = [p.yhat for p in result.points[:3]]
+        last_3_yhat = [p.yhat for p in result.points[-3:]]
+        logger.info(
+            f"INFERENCE_RESULT: forecast_run_id={forecast_run_id}, source={result.source}, "
+            f"points_count={len(result.points)}, first_3_yhat={first_3_yhat}, last_3_yhat={last_3_yhat}"
+        )
 
     points = [
         ForecastPointOut(
@@ -59,12 +84,18 @@ def get_forecast_for_product(
         for point in result.points
     ]
 
-    return ProductForecastOut(
+    forecast_out = ProductForecastOut(
         product_id=result.product_id,
         product_name=result.product_name,
         horizon_days=result.horizon_days,
         points=points,
     )
+    
+    # Note: forecast_run_id and source are logged in INFERENCE_RESULT above
+    # They cannot be added to the Pydantic model without schema changes
+    # The API route will access them from the result for logging purposes
+    
+    return forecast_out
 
 
 

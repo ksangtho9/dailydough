@@ -190,7 +190,7 @@ for regressor in regressor_candidates:
         print(f"  Future (Nov 1-10): NOT PRESENT")
     
     if is_imputed:
-        print(f"  ⚠️  IMPUTED: {imputation_type}")
+        print(f"  WARNING: IMPUTED: {imputation_type}")
     
     # Check for distribution mismatch
     if (train_vals is not None and len(train_vals) > 0 and 
@@ -198,9 +198,9 @@ for regressor in regressor_candidates:
         future_mean is not None and train_mean is not None):
         # Check if future values are way off
         if abs(future_mean - train_mean) > abs(train_mean) * 0.5:  # More than 50% difference
-            print(f"  ⚠️  DISTRIBUTION MISMATCH: Future mean ({future_mean:.6f}) differs significantly from training mean ({train_mean:.6f})")
+            print(f"  WARNING: DISTRIBUTION MISMATCH: Future mean ({future_mean:.6f}) differs significantly from training mean ({train_mean:.6f})")
         if future_min is not None and train_min is not None and future_min < train_min * 0.5:
-            print(f"  ⚠️  DISTRIBUTION MISMATCH: Future min ({future_min:.6f}) is much lower than training min ({train_min:.6f})")
+            print(f"  WARNING: DISTRIBUTION MISMATCH: Future min ({future_min:.6f}) is much lower than training min ({train_min:.6f})")
     
     print()
 

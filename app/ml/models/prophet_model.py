@@ -544,7 +544,8 @@ class ProphetSalesModel:
                 future_for_predict[col] = future_for_predict[col].astype(float)
         
         # Step 5: Model-specific checks (Prophet) - gated logging
-        should_log = settings.debug_zero_forecasts or (product_id is not None)  # TODO: Check flagged set
+        # Ensure logging is triggered for flagged products
+        should_log = settings.debug_zero_forecasts or (product_id is not None and product_id in settings.debug_forecast_product_ids)
         if should_log:
             # Log growth type and hyperparameters
             growth_type = getattr(self.model, 'growth', 'linear')
@@ -575,9 +576,25 @@ class ProphetSalesModel:
             )
             
             if regressors_used and regressor_imputation_count == len(regressors):
+                # Fix 4: Log which regressors were imputed
+                imputed_regressors = []
+                for regressor in regressors:
+                    if regressor in future_for_predict.columns:
+                        reg_data = pd.to_numeric(future_for_predict[regressor], errors='coerce')
+                        reg_valid = reg_data.dropna()
+                        if len(reg_valid) > 0:
+                            # Check if constant (likely imputed)
+                            if reg_valid.nunique() == 1 or (reg_valid == 0.0).all():
+                                imputed_regressors.append(regressor)
+                        else:
+                            imputed_regressors.append(regressor)  # All NaN
+                    else:
+                        imputed_regressors.append(regressor)  # Missing
+                
                 self.logger.warning(
                     f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
-                    f"step=prophet_checks, WARNING: All regressors were imputed"
+                    f"step=prophet_checks, WARNING: All regressors were imputed, "
+                    f"imputed_regressors={imputed_regressors}, total_regressors={len(regressors)}"
                 )
             
             # Log detailed regressor stats (only if gated)
@@ -680,5 +697,40 @@ class ProphetSalesModel:
             except Exception as e2:
                 self.logger.error(f"Prophet predict failed even with minimal columns: {e2}")
                 raise RuntimeError(f"Prophet prediction failed: {e2}") from e2
+        
+        # Add summary log after Prophet prediction showing which regressors were used vs imputed
+        if should_log and regressors:
+            # Determine which regressors were actually used (not imputed)
+            used_regressors = []
+            imputed_regressor_list = []
+            
+            for regressor in regressors:
+                if regressor in future_for_predict.columns:
+                    reg_data = pd.to_numeric(future_for_predict[regressor], errors='coerce')
+                    reg_valid = reg_data.dropna()
+                    if len(reg_valid) > 0:
+                        # Check if constant (likely imputed)
+                        if reg_valid.nunique() == 1 or (reg_valid == 0.0).all():
+                            imputed_regressor_list.append(regressor)
+                        else:
+                            used_regressors.append(regressor)
+                    else:
+                        imputed_regressor_list.append(regressor)  # All NaN
+                else:
+                    imputed_regressor_list.append(regressor)  # Missing
+            
+            self.logger.info(
+                f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                f"step=prophet_prediction_summary, total_regressors={len(regressors)}, "
+                f"used_regressors={used_regressors}, used_count={len(used_regressors)}, "
+                f"imputed_regressors={imputed_regressor_list}, imputed_count={len(imputed_regressor_list)}"
+            )
+            
+            if len(imputed_regressor_list) == len(regressors) and len(regressors) > 0:
+                self.logger.warning(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                    f"step=prophet_prediction_summary, WARNING: ALL regressors were imputed! "
+                    f"This may cause zero forecasts."
+                )
         
         return forecast

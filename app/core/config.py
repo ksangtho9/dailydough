@@ -38,6 +38,13 @@ class Settings(BaseSettings):
 	
 	# Zero forecast investigation: enable deep diagnostic logging
 	debug_zero_forecasts: bool = os.getenv("DEBUG_ZERO_FORECASTS", "false").lower() == "true"
+	
+	# Product IDs for which to enable deep diagnostic logging (comma-separated, e.g., "194,156")
+	debug_forecast_product_ids: list[int] = [
+		int(pid.strip()) 
+		for pid in os.getenv("DEBUG_FORECAST_PRODUCT_IDS", "").split(",") 
+		if pid.strip().isdigit()
+	]
 
 	class Config:
 		env_file = ".env"

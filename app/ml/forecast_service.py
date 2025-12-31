@@ -12,6 +12,7 @@ from datetime import date, datetime, timedelta, timezone
 from sqlalchemy.orm import Session
 import pandas as pd
 import numpy as np
+import time
 
 from app.models import SalesRecord, Product, Event, Promotion, WeatherData, ModelRun
 from app.services.profit_calculator import ProfitCalculator
@@ -81,6 +82,9 @@ class ProductForecast:
     # Optional fields for future stats computation (used by train_all_products.py)
     raw_yhat_values: Optional[np.ndarray] = None
     model_name: Optional[str] = None
+    # Source metadata for tracing (cache|db|fresh_generate)
+    source: Optional[str] = None
+    forecast_run_id: Optional[str] = None
 
 
 class ForecastService:
@@ -408,6 +412,7 @@ class ForecastService:
         db: Session,
         product_id: int,
         horizon_days: int = 14,
+        forecast_run_id: Optional[str] = None,
     ) -> ProductForecast:
         """
         Main entrypoint for forecasting.
@@ -449,32 +454,48 @@ class ForecastService:
             int(horizon_days),
             last_trained_at_iso,
         )
+        
+        # Log cache key inputs
+        logger.info(
+            f"CACHE_KEY_INPUTS: forecast_run_id={forecast_run_id}, product_id={product.id}, "
+            f"bakery_id={getattr(product, 'bakery_id', 0) or 0}, horizon_days={horizon_days}, "
+            f"last_trained_at={last_trained_at_iso}, key={cache_key}"
+        )
 
         # Look for a fresh cached forecast
         now = datetime.now(timezone.utc)
         cached = self._forecast_cache.get(cache_key)
         if cached is not None:
-            created_at, cached_forecast = cached
+            created_at, cached_forecast, cached_source = cached
             age_seconds = (now - created_at).total_seconds()
             if age_seconds <= self._CACHE_TTL_SECONDS:
-                logger.info(
-                    "Forecast cache hit: product_id=%d bakery_id=%d horizon_days=%d age=%.1fs",
-                    product.id,
-                    getattr(product, "bakery_id", 0) or 0,
-                    horizon_days,
-                    age_seconds,
-                )
+                # Log cache hit with values
+                if cached_forecast.points:
+                    first_3_yhat = [p.yhat for p in cached_forecast.points[:3]]
+                    last_3_yhat = [p.yhat for p in cached_forecast.points[-3:]]
+                    logger.info(
+                        f"CACHE_HIT: forecast_run_id={forecast_run_id}, key={cache_key}, age_seconds={age_seconds:.1f}, "
+                        f"source={cached_source}, points_count={len(cached_forecast.points)}, "
+                        f"first_3_yhat={first_3_yhat}, last_3_yhat={last_3_yhat}"
+                    )
+                else:
+                    logger.info(
+                        f"CACHE_HIT: forecast_run_id={forecast_run_id}, key={cache_key}, age_seconds={age_seconds:.1f}, "
+                        f"source={cached_source}, points_count=0"
+                    )
+                # Set source and forecast_run_id on returned forecast
+                cached_forecast.source = cached_source
+                cached_forecast.forecast_run_id = forecast_run_id
                 return cached_forecast
             else:
                 # Expired entry – remove it so the cache doesn't grow without bound.
+                logger.info(
+                    f"CACHE_MISS: forecast_run_id={forecast_run_id}, key={cache_key}, reason=expired, age_seconds={age_seconds:.1f}"
+                )
                 self._forecast_cache.pop(cache_key, None)
-
+        
         logger.info(
-            "Forecast cache miss: product_id=%d bakery_id=%d horizon_days=%d last_trained_at=%s",
-            product.id,
-            getattr(product, "bakery_id", 0) or 0,
-            horizon_days,
-            last_trained_at_iso,
+            f"CACHE_MISS: forecast_run_id={forecast_run_id}, key={cache_key}, reason=not_found"
         )
 
         # 2) Preprocess → CleanedTimeSeries (fill missing days, sort, etc.)
@@ -512,9 +533,35 @@ class ForecastService:
             product_info=product_info,
         )
 
+        # CRITICAL: Remove delivery from training data BEFORE training
+        # Delivery is unknown for future dates, so we shouldn't train with it
+        # This prevents Prophet from expecting delivery in future_df
+        if "delivery" in df.columns:
+            delivery_training = pd.to_numeric(df["delivery"], errors='coerce').dropna()
+            if len(delivery_training) > 0:
+                logger.info(
+                    f"Removing delivery regressor from training data for product {product_id} "
+                    f"(training mean: {delivery_training.mean():.2f}) - unknown for future dates"
+                )
+                df = df.drop(columns=["delivery"])
+        
         # Update cleaned_ts with enhanced features
         # All historical data is used for maximum model accuracy
         cleaned_ts.df = df
+        
+        # Fix 3: Verify delivery is not in cleaned_ts.df before training
+        from app.core.config import settings
+        if settings.debug_zero_forecasts or (product_id is not None and product_id in settings.debug_forecast_product_ids):
+            if "delivery" in cleaned_ts.df.columns:
+                logger.error(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                    f"step=training_data_check, ERROR: delivery still in cleaned_ts.df!"
+                )
+            else:
+                logger.info(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                    f"step=training_data_check, delivery correctly removed from cleaned_ts.df"
+                )
 
         # 2.8) Generate future regressor values for forecast period
         last_date = df["ds"].max()
@@ -535,46 +582,413 @@ class ForecastService:
             product_info=product_info,
         )
 
-        # Fill lag features with last known values or rolling means
-        # Ensure all values are numeric
-        if "lag_1" in df.columns:
-            last_y = pd.to_numeric(df["y"].iloc[-1], errors='coerce') if len(df) > 0 else 0.0
-            future_df["lag_1"] = float(last_y) if pd.notna(last_y) else 0.0
-        if "lag_7" in df.columns:
-            y_series = pd.to_numeric(df["y"], errors='coerce')
-            last_7_avg = float(y_series.tail(7).mean()) if len(df) >= 7 else (float(y_series.mean()) if len(df) > 0 and pd.notna(y_series.mean()) else 0.0)
-            future_df["lag_7"] = last_7_avg
-        if "lag_14" in df.columns:
-            y_series = pd.to_numeric(df["y"], errors='coerce')
-            last_14_avg = float(y_series.tail(14).mean()) if len(df) >= 14 else (float(y_series.mean()) if len(df) > 0 and pd.notna(y_series.mean()) else 0.0)
-            future_df["lag_14"] = last_14_avg
-        if "lag_30" in df.columns:
-            y_series = pd.to_numeric(df["y"], errors='coerce')
-            last_30_avg = float(y_series.tail(30).mean()) if len(df) >= 30 else (float(y_series.mean()) if len(df) > 0 and pd.notna(y_series.mean()) else 0.0)
-            future_df["lag_30"] = last_30_avg
-
-        # Fill rolling features with last known values
-        for col in ["rolling_mean_7", "rolling_mean_30", "rolling_std_7", "rolling_std_30"]:
-            if col in df.columns:
-                last_val = pd.to_numeric(df[col].iloc[-1], errors='coerce') if len(df) > 0 else 0.0
-                future_df[col] = float(last_val) if pd.notna(last_val) else 0.0
+        # CRITICAL FIX: Iterative future feature generation for lag/rolling/EWMA
+        # Feature engineering doesn't create lag/rolling features for future_df (no "y" column)
+        # So we need to create them manually and populate them iteratively
         
-        # Ensure all columns in future_df are numeric (except 'ds')
-        # Remove any non-numeric columns that might have been added by feature engineering
-        cols_to_remove = []
+        # Ensure lag/rolling/EWMA columns exist in future_df (create if missing)
+        lag_rolling_cols = ["lag_1", "lag_7", "lag_14", "lag_30",
+                           "rolling_mean_7", "rolling_mean_30", "rolling_std_7", "rolling_std_30",
+                           "ewma_7", "ewma_30", "ewma_7_halflife_3", "ewma_30_halflife_14"]
+        for col in lag_rolling_cols:
+            if col not in future_df.columns:
+                future_df[col] = np.nan  # Initialize as NaN, will be filled below
+        
+        # Seed history series with actual training data
+        y_hist = pd.to_numeric(df["y"], errors='coerce').dropna().tolist()
+        if len(y_hist) == 0:
+            y_hist = [0.0]  # Fallback if no valid data
+        
+        # For Prophet (which predicts all dates at once), we need to estimate future values
+        # to compute evolving lag/rolling features. Use a simple approach:
+        # - For first date: use training history
+        # - For subsequent dates: use training history + estimated predictions based on trend/seasonality
+        # This ensures regressors evolve rather than being constant
+        
+        # Compute simple trend from last 30 days for estimation
+        # For new products, ensure we have a reasonable baseline to avoid all-zero features
+        if len(y_hist) >= 30:
+            recent_y = y_hist[-30:]
+            trend_slope = (recent_y[-1] - recent_y[0]) / 30.0 if len(recent_y) > 1 else 0.0
+            base_level = recent_y[-1]
+        else:
+            trend_slope = 0.0
+            base_level = y_hist[-1] if len(y_hist) > 0 else 0.0
+        
+        # CRITICAL FIX: For new products with limited/zero history, use mean of non-zero values
+        # This ensures lag/rolling features have variation instead of being all zero/constant
+        if base_level == 0.0 and len(y_hist) > 0:
+            non_zero_values = [y for y in y_hist if y > 0]
+            if len(non_zero_values) > 0:
+                base_level = np.mean(non_zero_values)
+                logger.info(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                    f"step=baseline_adjustment, base_level was 0, using mean of non-zero values: {base_level:.2f}"
+                )
+            elif len(y_hist) > 0:
+                # If all zeros, use a small positive baseline to ensure features vary
+                # Use 1.0 as minimum to ensure lag/rolling features aren't all zero
+                base_level = 1.0
+                logger.info(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                    f"step=baseline_adjustment, all training values are zero, using minimum baseline: {base_level:.2f}"
+                )
+        
+        # Iteratively generate regressors for each future date
+        from app.core.config import settings
+        should_log_iterative = settings.debug_zero_forecasts or (product_id is not None and product_id in settings.debug_forecast_product_ids)
+        
+        if should_log_iterative:
+            logger.info(
+                f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                f"step=iterative_generation_start, total_iterations={len(future_dates)}, "
+                f"y_hist_length={len(y_hist)}, base_level={base_level:.2f}, trend_slope={trend_slope:.4f}"
+            )
+        
+        for i, future_date in enumerate(future_dates):
+            # Estimate y for this date (for computing lag/rolling)
+            # Use base level + trend, clamped to non-negative
+            # Add small random variation to prevent all features from being exactly constant
+            # This helps Prophet when training data is limited
+            estimated_y = max(0.0, base_level + trend_slope * (i + 1))
+            
+            # For very new products, add small variation to prevent all-zero/constant features
+            # This is a heuristic to ensure lag/rolling features have some variation
+            if base_level > 0 and base_level < 5.0:  # Small baseline
+                # Add small day-of-week variation (0-10% variation)
+                day_of_week = future_date.dayofweek
+                variation_factor = 1.0 + (day_of_week % 3) * 0.05  # 0%, 5%, 10% variation
+                estimated_y = estimated_y * variation_factor
+            
+            # Build extended history: training + estimated future values so far
+            # For iterative building, we need to accumulate: [y_hist] + [est_0, est_1, ..., est_i]
+            if i == 0:
+                extended_y_hist = y_hist + [estimated_y]
+            else:
+                # Get previous estimated values from future_df if available, or use current estimate
+                extended_y_hist = y_hist + [estimated_y] * (i + 1)
+            
+            # Enhanced debug logging for first 3 iterations
+            if should_log_iterative and i < 3:
+                logger.info(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                    f"step=iterative_generation, iteration={i}, "
+                    f"future_date={future_date.strftime('%Y-%m-%d')}, estimated_y={estimated_y:.2f}, "
+                    f"extended_y_hist_length={len(extended_y_hist)}"
+                )
+            
+            # Compute lag features from extended history
+            # Columns are guaranteed to exist (created above if missing)
+            if "lag_1" in future_df.columns:
+                lag_1_val = extended_y_hist[-1] if len(extended_y_hist) >= 1 else 0.0
+                future_df.loc[i, "lag_1"] = lag_1_val
+                # Enhanced debug logging for first 3 iterations
+                if should_log_iterative and i < 3:
+                    logger.info(
+                        f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                        f"step=iterative_generation, iteration={i}, "
+                        f"lag_1_val={lag_1_val:.6f}, set_in_future_df={future_df.loc[i, 'lag_1']:.6f}"
+                    )
+            
+            if "lag_7" in future_df.columns:
+                lag_7_val = np.mean(extended_y_hist[-7:]) if len(extended_y_hist) >= 7 else (np.mean(extended_y_hist) if len(extended_y_hist) > 0 else 0.0)
+                future_df.loc[i, "lag_7"] = lag_7_val
+                if should_log_iterative and i < 3:
+                    logger.info(
+                        f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                        f"step=iterative_generation, iteration={i}, lag_7_val={lag_7_val:.6f}"
+                    )
+            
+            if "lag_14" in future_df.columns:
+                lag_14_val = np.mean(extended_y_hist[-14:]) if len(extended_y_hist) >= 14 else (np.mean(extended_y_hist) if len(extended_y_hist) > 0 else 0.0)
+                future_df.loc[i, "lag_14"] = lag_14_val
+            
+            if "lag_30" in future_df.columns:
+                lag_30_val = np.mean(extended_y_hist[-30:]) if len(extended_y_hist) >= 30 else (np.mean(extended_y_hist) if len(extended_y_hist) > 0 else 0.0)
+                future_df.loc[i, "lag_30"] = lag_30_val
+            
+            # Compute rolling features from extended history
+            if "rolling_mean_7" in future_df.columns:
+                rolling_mean_7_val = np.mean(extended_y_hist[-7:]) if len(extended_y_hist) >= 7 else (np.mean(extended_y_hist) if len(extended_y_hist) > 0 else 0.0)
+                future_df.loc[i, "rolling_mean_7"] = rolling_mean_7_val
+                if should_log_iterative and i < 3:
+                    logger.info(
+                        f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                        f"step=iterative_generation, iteration={i}, rolling_mean_7_val={rolling_mean_7_val:.6f}"
+                    )
+            
+            if "rolling_mean_30" in future_df.columns:
+                rolling_mean_30_val = np.mean(extended_y_hist[-30:]) if len(extended_y_hist) >= 30 else (np.mean(extended_y_hist) if len(extended_y_hist) > 0 else 0.0)
+                future_df.loc[i, "rolling_mean_30"] = rolling_mean_30_val
+                if should_log_iterative and i < 3:
+                    logger.info(
+                        f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                        f"step=iterative_generation, iteration={i}, rolling_mean_30_val={rolling_mean_30_val:.6f}"
+                    )
+            
+            if "rolling_std_7" in future_df.columns:
+                rolling_std_7_val = np.std(extended_y_hist[-7:]) if len(extended_y_hist) >= 7 else 0.0
+                future_df.loc[i, "rolling_std_7"] = rolling_std_7_val
+            
+            if "rolling_std_30" in future_df.columns:
+                rolling_std_30_val = np.std(extended_y_hist[-30:]) if len(extended_y_hist) >= 30 else 0.0
+                future_df.loc[i, "rolling_std_30"] = rolling_std_30_val
+            
+            # Compute EWMA features (evolving)
+            # Use halflife-based EWMA calculation (matches feature engineering)
+            if "ewma_7_halflife_3" in future_df.columns:
+                if len(extended_y_hist) >= 7:
+                    # EWMA with halflife=3 (alpha = 1 - exp(-ln(2)/halflife))
+                    halflife = 3.0
+                    alpha = 1.0 - np.exp(-np.log(2.0) / halflife)
+                    ewma_val = extended_y_hist[-1]
+                    for val in reversed(extended_y_hist[-7:-1]):
+                        ewma_val = alpha * val + (1 - alpha) * ewma_val
+                else:
+                    ewma_val = np.mean(extended_y_hist) if len(extended_y_hist) > 0 else 0.0
+                future_df.loc[i, "ewma_7_halflife_3"] = ewma_val
+            
+            if "ewma_30_halflife_14" in future_df.columns:
+                if len(extended_y_hist) >= 30:
+                    # EWMA with halflife=14
+                    halflife = 14.0
+                    alpha = 1.0 - np.exp(-np.log(2.0) / halflife)
+                    ewma_val = extended_y_hist[-1]
+                    for val in reversed(extended_y_hist[-30:-1]):
+                        ewma_val = alpha * val + (1 - alpha) * ewma_val
+                else:
+                    ewma_val = np.mean(extended_y_hist) if len(extended_y_hist) > 0 else 0.0
+                future_df.loc[i, "ewma_30_halflife_14"] = ewma_val
+            
+            # Also set legacy ewma_7/ewma_30 if they exist
+            if "ewma_7" in future_df.columns:
+                # Use same calculation as ewma_7_halflife_3
+                if len(extended_y_hist) >= 7:
+                    halflife = 3.0
+                    alpha = 1.0 - np.exp(-np.log(2.0) / halflife)
+                    ewma_val = extended_y_hist[-1]
+                    for val in reversed(extended_y_hist[-7:-1]):
+                        ewma_val = alpha * val + (1 - alpha) * ewma_val
+                else:
+                    ewma_val = np.mean(extended_y_hist) if len(extended_y_hist) > 0 else 0.0
+                future_df.loc[i, "ewma_7"] = ewma_val
+            
+            if "ewma_30" in future_df.columns:
+                # Use same calculation as ewma_30_halflife_14
+                if len(extended_y_hist) >= 30:
+                    halflife = 14.0
+                    alpha = 1.0 - np.exp(-np.log(2.0) / halflife)
+                    ewma_val = extended_y_hist[-1]
+                    for val in reversed(extended_y_hist[-30:-1]):
+                        ewma_val = alpha * val + (1 - alpha) * ewma_val
+                else:
+                    ewma_val = np.mean(extended_y_hist) if len(extended_y_hist) > 0 else 0.0
+                future_df.loc[i, "ewma_30"] = ewma_val
+        
+        # Enhanced logging: Log summary statistics after iterative loop completes
+        if should_log_iterative:
+            logger.info(
+                f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                f"step=iterative_generation_complete, total_iterations={len(future_dates)}"
+            )
+            
+            # Log summary statistics for critical lag/rolling features
+            critical_features = ["lag_1", "lag_7", "rolling_mean_7", "rolling_mean_30"]
+            for feat in critical_features:
+                if feat in future_df.columns:
+                    feat_data = pd.to_numeric(future_df[feat], errors='coerce')
+                    feat_valid = feat_data.dropna()
+                    nan_count = feat_data.isna().sum()
+                    nan_pct = (nan_count / len(feat_data) * 100) if len(feat_data) > 0 else 0.0
+                    
+                    if len(feat_valid) > 0:
+                        min_val = float(feat_valid.min())
+                        max_val = float(feat_valid.max())
+                        mean_val = float(feat_valid.mean())
+                        unique_count = feat_valid.nunique()
+                        is_constant = unique_count == 1
+                        
+                        logger.info(
+                            f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                            f"step=iterative_generation_summary, feature={feat}, "
+                            f"min={min_val:.6f}, max={max_val:.6f}, mean={mean_val:.6f}, "
+                            f"nan_count={int(nan_count)}, nan_pct={nan_pct:.1f}%, "
+                            f"unique_values={unique_count}, is_constant={is_constant}"
+                        )
+                    else:
+                        logger.warning(
+                            f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                            f"step=iterative_generation_summary, feature={feat}, "
+                            f"ERROR: All values are NaN!"
+                        )
+        
+        # Add validation after iterative loop: Check critical features
+        critical_features = ["lag_1", "lag_7", "rolling_mean_7", "rolling_mean_30"]
+        validation_failed = False
+        for feat in critical_features:
+            if feat in future_df.columns:
+                feat_data = pd.to_numeric(future_df[feat], errors='coerce')
+                nan_count = feat_data.isna().sum()
+                nan_pct = (nan_count / len(feat_data) * 100) if len(feat_data) > 0 else 0.0
+                
+                if nan_pct > 50.0:  # More than 50% NaN
+                    logger.warning(
+                        f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                        f"step=feature_validation, WARNING: {feat} has {nan_pct:.1f}% NaN values"
+                    )
+                    validation_failed = True
+                
+                # Check if constant (all same value)
+                feat_valid = feat_data.dropna()
+                if len(feat_valid) > 0 and feat_valid.nunique() == 1:
+                    logger.warning(
+                        f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                        f"step=feature_validation, WARNING: {feat} is CONSTANT (value={feat_valid.iloc[0]:.6f})"
+                    )
+                    validation_failed = True
+        
+        if validation_failed:
+            logger.warning(
+                f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                f"step=feature_validation, WARNING: Some critical features failed validation. "
+                f"This may cause zero forecasts."
+            )
+        else:
+            logger.info(
+                f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                f"step=feature_validation, All critical features passed validation"
+            )
+        
+        # B) Delivery regressor handling: Remove it (unknown for future dates)
+        # Delivery is a cause (supply/production plan input), not a feature we can forecast
+        if "delivery" in future_df.columns:
+            if "delivery" in df.columns:
+                delivery_training = pd.to_numeric(df["delivery"], errors='coerce').dropna()
+                if len(delivery_training) > 0:
+                    # Option A: Remove from future_df (recommended)
+                    future_df = future_df.drop(columns=["delivery"])
+                    logger.warning(
+                        f"Delivery regressor removed from future_df for product {product_id} - "
+                        f"unknown for future dates (training mean: {delivery_training.mean():.2f})"
+                    )
+                else:
+                    # Delivery was always NaN in training - remove it
+                    future_df = future_df.drop(columns=["delivery"])
+            else:
+                # Delivery not in training - remove it
+                future_df = future_df.drop(columns=["delivery"])
+        
+        # C) Feature-type aware NaN handling
+        # For lag/rolling/EWMA: Should be computed from history, avoid NaN by design
+        # For unknown future inputs: Use scenario default (median) + log warning
+        # Only use 0 if the feature is structurally binary and 0 is valid
         for col in future_df.columns:
             if col != "ds":
-                try:
-                    # Try to convert to numeric
-                    future_df[col] = pd.to_numeric(future_df[col], errors='coerce').fillna(0.0)
-                except (ValueError, TypeError):
-                    # If conversion fails, remove the column
-                    cols_to_remove.append(col)
+                if col in ["lag_1", "lag_7", "lag_14", "lag_30", 
+                          "rolling_mean_7", "rolling_mean_30", "rolling_std_7", "rolling_std_30",
+                          "ewma_7", "ewma_30", "ewma_7_halflife_3", "ewma_30_halflife_14"]:
+                    # These should be computed from history - NaN means computation failed
+                    # Fill with training mean/median as fallback
+                    if col in df.columns:
+                        training_vals = pd.to_numeric(df[col], errors='coerce').dropna()
+                        if len(training_vals) > 0:
+                            fill_val = float(training_vals.mean())
+                            nan_count = future_df[col].isna().sum()
+                            if nan_count > 0:
+                                future_df[col] = future_df[col].fillna(fill_val)
+                                logger.warning(
+                                    f"Regressor {col} had {nan_count} NaN values in future_df - "
+                                    f"filled with training mean ({fill_val:.2f})"
+                                )
+                        else:
+                            future_df[col] = future_df[col].fillna(0.0)
+                    else:
+                        future_df[col] = future_df[col].fillna(0.0)
+                elif col == "delivery":
+                    # Already handled above - should be removed
+                    pass
+                else:
+                    # Other regressors: Try forward-fill from training, then median, then 0
+                    try:
+                        future_df[col] = pd.to_numeric(future_df[col], errors='coerce')
+                        nan_count = future_df[col].isna().sum()
+                        if nan_count > 0:
+                            if col in df.columns:
+                                training_vals = pd.to_numeric(df[col], errors='coerce').dropna()
+                                if len(training_vals) > 0:
+                                    # Forward-fill from last training value
+                                    last_val = float(training_vals.iloc[-1])
+                                    future_df[col] = future_df[col].fillna(last_val)
+                                else:
+                                    future_df[col] = future_df[col].fillna(0.0)
+                            else:
+                                future_df[col] = future_df[col].fillna(0.0)
+                    except (ValueError, TypeError):
+                        # If conversion fails, remove the column
+                        if col in future_df.columns:
+                            future_df = future_df.drop(columns=[col])
         
-        # Remove non-numeric columns
-        for col in cols_to_remove:
-            if col in future_df.columns:
-                future_df = future_df.drop(columns=[col])
+        # D) Add validation logging (Fix 4: comprehensive diagnostics)
+        from app.core.config import settings
+        if settings.debug_zero_forecasts or (product_id is not None and product_id in settings.debug_forecast_product_ids):
+            sample_indices = [0, 1, 2] + [len(future_df) - 3, len(future_df) - 2, len(future_df) - 1]
+            sample_indices = [i for i in sample_indices if 0 <= i < len(future_df)]
+            
+            logger.info(
+                f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                f"step=future_regressor_validation, future_df_shape={future_df.shape}, "
+                f"future_df_columns_count={len(future_df.columns)}, "
+                f"future_df_columns={list(future_df.columns)[:20]}"  # First 20 columns
+            )
+            
+            # Log all regressor columns and their NaN counts (Fix 4)
+            regressor_cols = [col for col in future_df.columns if col != "ds"]
+            for col in regressor_cols[:30]:  # First 30 regressors
+                nan_count = future_df[col].isna().sum()
+                nan_pct = (nan_count / len(future_df) * 100) if len(future_df) > 0 else 0.0
+                if nan_pct > 50.0:  # Log if more than 50% NaN
+                    logger.warning(
+                        f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                        f"step=regressor_nan_check, regressor={col}, "
+                        f"nan_count={nan_count}, nan_pct={nan_pct:.1f}%"
+                    )
+            
+            for regressor in ["lag_1", "lag_7", "rolling_mean_7", "rolling_mean_30", "delivery"]:
+                if regressor in future_df.columns:
+                    values = pd.to_numeric(future_df[regressor], errors='coerce')
+                    if len(values) > 0:
+                        # Check if constant
+                        valid_values = values.dropna()
+                        if len(valid_values) > 0:
+                            if valid_values.nunique() == 1:
+                                logger.warning(
+                                    f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                                    f"step=regressor_check, regressor={regressor} is CONSTANT: {valid_values.iloc[0]:.6f}"
+                                )
+                            
+                            # Log sample values
+                            sample_values = []
+                            for i in sample_indices:
+                                if i < len(future_df):
+                                    date_str = future_df.iloc[i]["ds"].strftime("%Y-%m-%d")
+                                    val = values.iloc[i] if i < len(values) else None
+                                    if pd.notna(val):
+                                        sample_values.append(f"{date_str}:{val:.6f}")
+                            if sample_values:
+                                logger.info(
+                                    f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                                    f"step=regressor_check, regressor={regressor}, sample_values={sample_values}"
+                                )
+                        else:
+                            logger.warning(
+                                f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                                f"step=regressor_check, regressor={regressor} has NO VALID VALUES (all NaN)"
+                            )
+                else:
+                    logger.warning(
+                        f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                        f"step=regressor_check, regressor={regressor} NOT IN future_df.columns"
+                    )
 
         # 3) Load ModelRun to get stored hyperparameters and selected model type
         model_run = (
@@ -603,6 +1017,20 @@ class ForecastService:
             logger.info(
                 f"No active ModelRun found for product {product_id}, using defaults"
             )
+        
+        # Final delivery check: Ensure cleaned_ts.df doesn't contain delivery before forecast
+        from app.core.config import settings
+        if settings.debug_zero_forecasts or (product_id is not None and product_id in settings.debug_forecast_product_ids):
+            if "delivery" in cleaned_ts.df.columns:
+                logger.error(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                    f"step=final_delivery_check, ERROR: delivery still in cleaned_ts.df before forecaster.forecast()!"
+                )
+            else:
+                logger.info(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                    f"step=final_delivery_check, delivery correctly removed from cleaned_ts.df before forecast"
+                )
         
         # 4) Forecast via selected model (gating will still run in trainer.train())
         forecast_result: ForecastResult = self.forecaster.forecast(
@@ -633,7 +1061,7 @@ class ForecastService:
         
         # Phase 2: Log model/hyperparams used in forecasting (gated by debug_zero_forecasts)
         from app.core.config import settings
-        if settings.debug_zero_forecasts or product_id == 156:  # Always log for product 156
+        if settings.debug_zero_forecasts or (product_id is not None and product_id in settings.debug_forecast_product_ids):
             final_model = forecast_result.model_name
             model_run_id = model_run.id if model_run else None
             trained_at = model_run.created_at.isoformat() if model_run and model_run.created_at else None
@@ -658,6 +1086,56 @@ class ForecastService:
             )
 
         df = forecast_result.forecast_df
+        
+        # Fix 4: Check if forecast_df is empty or has invalid yhat values
+        from app.core.config import settings
+        if settings.debug_zero_forecasts or (product_id is not None and product_id in settings.debug_forecast_product_ids):
+            if df.empty:
+                logger.error(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                    f"step=forecast_df_check, ERROR: forecast_df is EMPTY!"
+                )
+            elif "yhat" not in df.columns:
+                logger.error(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                    f"step=forecast_df_check, ERROR: 'yhat' column missing in forecast_df! "
+                    f"Columns: {list(df.columns)}"
+                )
+            else:
+                yhat_nan_count = df["yhat"].isna().sum()
+                yhat_valid_count = df["yhat"].notna().sum()
+                logger.info(
+                    f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                    f"step=forecast_df_check, forecast_df_rows={len(df)}, "
+                    f"yhat_valid={yhat_valid_count}, yhat_nan={yhat_nan_count}"
+                )
+                if yhat_valid_count > 0:
+                    sample_yhat = df["yhat"].dropna().head(5).tolist()
+                    yhat_min = float(df["yhat"].min()) if yhat_valid_count > 0 else None
+                    yhat_max = float(df["yhat"].max()) if yhat_valid_count > 0 else None
+                    yhat_mean = float(df["yhat"].mean()) if yhat_valid_count > 0 else None
+                    negative_count = (df["yhat"] < 0).sum() if yhat_valid_count > 0 else 0
+                    zero_count = (df["yhat"] == 0.0).sum() if yhat_valid_count > 0 else 0
+                    
+                    logger.info(
+                        f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                        f"step=forecast_df_check, sample_yhat_values={sample_yhat}, "
+                        f"yhat_min={yhat_min}, yhat_max={yhat_max}, yhat_mean={yhat_mean}, "
+                        f"negative_count={negative_count}, zero_count={zero_count}"
+                    )
+                    
+                    if negative_count > 0:
+                        logger.warning(
+                            f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                            f"step=forecast_df_check, WARNING: {negative_count} negative predictions "
+                            f"will be clamped to zero!"
+                        )
+                    if zero_count == yhat_valid_count:
+                        logger.warning(
+                            f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
+                            f"step=forecast_df_check, WARNING: ALL predictions are zero! "
+                            f"This suggests Prophet failed or predicted all negatives."
+                        )
         
         # Extract raw predictions before clamping for future stats computation
         raw_yhat_values = None
@@ -710,6 +1188,17 @@ class ForecastService:
 
         # 5) Convert Prophet output → list of ForecastPoint
         points: list[ForecastPoint] = []
+        
+        # Diagnostic: Log before conversion (STORAGE_PRE_WRITE)
+        # Log the forecast_df values before conversion
+        if not df_future.empty and "yhat" in df_future.columns:
+            yhat_values = df_future["yhat"].values
+            first_3_yhat = yhat_values[:3].tolist() if len(yhat_values) >= 3 else yhat_values.tolist()
+            last_3_yhat = yhat_values[-3:].tolist() if len(yhat_values) >= 3 else yhat_values.tolist()
+            logger.info(
+                f"STORAGE_PRE_WRITE: forecast_run_id={forecast_run_id}, product_id={product_id}, "
+                f"points_count={len(df_future)}, first_3_yhat={first_3_yhat}, last_3_yhat={last_3_yhat}"
+            )
 
         if "ds" not in df_future.columns:
             logger.error("Forecast failed: 'ds' column missing in Prophet output")
@@ -913,6 +1402,8 @@ class ForecastService:
         # This is used by train_all_products.py to compute raw_prediction_summary_future
         result.raw_yhat_values = raw_yhat_values
         result.model_name = forecast_result.model_name
+        result.source = "fresh_generate"
+        result.forecast_run_id = forecast_run_id
 
         # Store in cache for subsequent requests.
         try:
@@ -921,20 +1412,40 @@ class ForecastService:
             if len(self._forecast_cache) >= self._CACHE_MAX_ENTRIES:
                 oldest_key = None
                 oldest_time = now
-                for k, (created_at, _) in self._forecast_cache.items():
+                for k, (created_at, _, _) in self._forecast_cache.items():
                     if created_at <= oldest_time:
                         oldest_time = created_at
                         oldest_key = k
                 if oldest_key is not None:
                     self._forecast_cache.pop(oldest_key, None)
 
-            self._forecast_cache[cache_key] = (now, result)
-            logger.info(
-                "Stored forecast in cache: product_id=%d bakery_id=%d horizon_days=%d",
-                product.id,
-                getattr(product, "bakery_id", 0) or 0,
-                horizon_days,
-            )
+            self._forecast_cache[cache_key] = (now, result, result.source)
+            
+            # Log cache storage with values
+            if result.points:
+                first_3_yhat = [p.yhat for p in result.points[:3]]
+                last_3_yhat = [p.yhat for p in result.points[-3:]]
+                logger.info(
+                    f"CACHE_STORE: forecast_run_id={forecast_run_id}, key={cache_key}, "
+                    f"source={result.source}, points_count={len(result.points)}, "
+                    f"first_3_yhat={first_3_yhat}, last_3_yhat={last_3_yhat}"
+                )
+            else:
+                logger.info(
+                    f"CACHE_STORE: forecast_run_id={forecast_run_id}, key={cache_key}, "
+                    f"source={result.source}, points_count=0"
+                )
+            
+            # Diagnostic: Read back from cache and log (STORAGE_POST_READ)
+            cached_result = self._forecast_cache.get(cache_key)
+            if cached_result and cached_result[1] and cached_result[1].points:
+                cached_points = cached_result[1].points
+                first_3_yhat = [p.yhat for p in cached_points[:3]] if len(cached_points) >= 3 else [p.yhat for p in cached_points]
+                last_3_yhat = [p.yhat for p in cached_points[-3:]] if len(cached_points) >= 3 else [p.yhat for p in cached_points]
+                logger.info(
+                    f"STORAGE_POST_READ: forecast_run_id={forecast_run_id}, product_id={product_id}, "
+                    f"rows_read={len(cached_points)}, first_3_yhat={first_3_yhat}, last_3_yhat={last_3_yhat}"
+                )
         except Exception as e:
             # Cache must never break the main forecast path.
             logger.warning(
