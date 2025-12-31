@@ -1,11 +1,59 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import logging
+from pathlib import Path
 
 from .api.router import api_router
 from app.api.v1.routes import analytics
 from app.api.v1 import api as v1_api
 from .core.config import settings
 from app.database.database import Base, engine
+
+# ---------- Centralized logging configuration ----------
+# Configure forecast-related loggers to write to forecast.log
+# This ensures bakezy.forecast.api logs are written even if app/api/forecast.py
+# is imported before app/ml/forecast_service.py sets up bakezy.forecast logger
+LOG_DIR = Path("logs")
+LOG_DIR.mkdir(parents=True, exist_ok=True)
+LOG_FILE = LOG_DIR / "forecast.log"
+
+# Get or create the file handler for forecast.log
+# Check if bakezy.forecast logger already has handlers (from app/ml/forecast_service.py)
+forecast_logger = logging.getLogger("bakezy.forecast")
+file_handler = None
+
+if forecast_logger.handlers:
+    # Reuse existing FileHandler if available (from app/ml/forecast_service.py)
+    log_file_path = LOG_FILE.resolve()
+    for handler in forecast_logger.handlers:
+        if isinstance(handler, logging.FileHandler):
+            # Check if it's writing to the same file
+            handler_path = Path(handler.baseFilename).resolve()
+            if handler_path == log_file_path:
+                file_handler = handler
+                break
+
+# If no handler found, create a new one
+if file_handler is None:
+    file_handler = logging.FileHandler(LOG_FILE, encoding="utf-8")
+    formatter = logging.Formatter(
+        "%(asctime)s - %(levelname)s - %(name)s - %(message)s",
+        datefmt="%Y-%m-%d %H:%M:%S",
+    )
+    file_handler.setFormatter(formatter)
+    # Add to bakezy.forecast logger if it doesn't have handlers yet
+    if not forecast_logger.handlers:
+        forecast_logger.setLevel(logging.INFO)
+        forecast_logger.addHandler(file_handler)
+
+# Configure bakezy.forecast.api logger to use the same handler
+forecast_api_logger = logging.getLogger("bakezy.forecast.api")
+if not forecast_api_logger.handlers:
+    forecast_api_logger.setLevel(logging.INFO)
+    # Use the same handler as bakezy.forecast to write to the same file
+    forecast_api_logger.addHandler(file_handler)
+    # Don't propagate to root to avoid duplicate logs
+    forecast_api_logger.propagate = False
 
 app = FastAPI(title=settings.app_name)
 

@@ -68,3 +68,11 @@ class ProductForecastOut(BaseModel):
     product_name: str
     horizon_days: int
     points: List[ForecastPointOut]
+    # Debug fields (only included in dev/admin mode)
+    debug_forecast_run_id: Optional[str] = None
+    debug_source: Optional[str] = None
+    debug_points_first_3: Optional[List[float]] = None
+    
+    class Config:
+        # Allow extra fields to be ignored during serialization if not set
+        extra = "forbid"

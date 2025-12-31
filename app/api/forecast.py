@@ -9,11 +9,13 @@ from app.api.auth import get_current_user
 from app.ml.inference.forecast_service import get_forecast_for_product
 from app.schemas import sales_record
 from app.models.product import Product
+from app.core.config import settings
 
 
 class ForecastRequest(BaseModel):
     days: Optional[int] = 14
 
+# Logger configuration is centralized in app/main.py
 logger = logging.getLogger("bakezy.forecast.api")
 
 router = APIRouter(
@@ -41,19 +43,53 @@ def forecast_product_sales(
     - Trains Prophet
     - Returns next `horizon_days` predictions
     """
-
-    # You might later enforce "product belongs to this user"
-    # using current_user + bakery ownership. For now, the ML layer
-    # just validates product existence & sales data.
+    
+    # POST_RETRIEVAL_ENTRY: Log entry point
+    bakery_id = current_user.bakery_id if current_user else None
+    horizon_days = request.days or 14
+    logger.info(
+        f"POST_RETRIEVAL_ENTRY: product_id={product_id}, horizon_days={horizon_days}, bakery_id={bakery_id}"
+    )
+    
+    # Verify product belongs to current bakery (defensive check)
+    if current_user:
+        product_check = (
+            db.query(Product)
+            .filter(Product.id == product_id, Product.bakery_id == current_user.bakery_id)
+            .first()
+        )
+        if product_check is None:
+            # Product doesn't exist or doesn't belong to this bakery
+            logger.warning(
+                f"POST_RETRIEVAL_ENTRY: product_id={product_id} not found or doesn't belong to bakery_id={bakery_id}"
+            )
+            # Still continue - let ML layer handle product existence validation
+        else:
+            logger.debug(
+                f"POST_RETRIEVAL_ENTRY: product_id={product_id} verified to belong to bakery_id={bakery_id}"
+            )
 
     try:
-        horizon_days = request.days or 14
-        
         forecast_result = get_forecast_for_product(
             product_id=product_id,
             days_ahead=horizon_days,
             db=db,
         )
+        
+        # POST_RESULT_RAW: Log from forecast_result (after get_forecast_for_product call)
+        if forecast_result.points:
+            zero_count_raw = sum(1 for p in forecast_result.points if p.yhat == 0.0)
+            first_3_raw = [p.yhat for p in forecast_result.points[:3]]
+            last_3_raw = [p.yhat for p in forecast_result.points[-3:]]
+            logger.info(
+                f"POST_RESULT_RAW: product_id={product_id}, points_count={len(forecast_result.points)}, "
+                f"zero_count={zero_count_raw}, first_3_yhat={first_3_raw}, last_3_yhat={last_3_raw}, "
+                f"debug_forecast_run_id={forecast_result.debug_forecast_run_id}, debug_source={forecast_result.debug_source}"
+            )
+        else:
+            logger.warning(
+                f"POST_RESULT_RAW: product_id={product_id}, points_count=0 (empty forecast)"
+            )
     except ImportError as e:
         logger.exception("Prophet import error during forecast: product_id=%d", product_id)
         raise HTTPException(
@@ -121,5 +157,21 @@ def forecast_product_sales(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error generating forecast: {str(e)}",
         ) from e
+
+    # POST_RESULT_RESPONSE: Log from response object before return
+    # (After any schema conversion, but before FastAPI serialization)
+    if forecast_result.points:
+        zero_count_resp = sum(1 for p in forecast_result.points if p.yhat == 0.0)
+        first_3_resp = [p.yhat for p in forecast_result.points[:3]]
+        last_3_resp = [p.yhat for p in forecast_result.points[-3:]]
+        logger.info(
+            f"POST_RESULT_RESPONSE: product_id={product_id}, points_count={len(forecast_result.points)}, "
+            f"zero_count={zero_count_resp}, first_3_yhat={first_3_resp}, last_3_yhat={last_3_resp}, "
+            f"debug_forecast_run_id={forecast_result.debug_forecast_run_id}, debug_source={forecast_result.debug_source}"
+        )
+    else:
+        logger.warning(
+            f"POST_RESULT_RESPONSE: product_id={product_id}, points_count=0 (empty forecast)"
+        )
 
     return forecast_result

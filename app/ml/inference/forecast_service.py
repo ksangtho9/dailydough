@@ -84,16 +84,20 @@ def get_forecast_for_product(
         for point in result.points
     ]
 
+    # Import settings to check if debug mode is enabled
+    from app.core.config import settings
+    is_debug_mode = settings.admin_mode_enabled or settings.debug_zero_forecasts
+    
     forecast_out = ProductForecastOut(
         product_id=result.product_id,
         product_name=result.product_name,
         horizon_days=result.horizon_days,
         points=points,
+        # Include debug fields if in debug mode
+        debug_forecast_run_id=forecast_run_id if is_debug_mode else None,
+        debug_source=result.source if is_debug_mode else None,
+        debug_points_first_3=[p.yhat for p in result.points[:3]] if is_debug_mode and result.points else None,
     )
-    
-    # Note: forecast_run_id and source are logged in INFERENCE_RESULT above
-    # They cannot be added to the Pydantic model without schema changes
-    # The API route will access them from the result for logging purposes
     
     return forecast_out
 

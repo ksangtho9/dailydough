@@ -8,6 +8,7 @@ import {
   BAKERY_SELECTION_CHANGED_EVENT,
 } from "@/lib/bakeries";
 import { TextShimmer } from "@/components/ui/text-shimmer";
+import { isDevMode } from "@/lib/admin";
 
 type Bakery = {
   id: number;
@@ -166,7 +167,7 @@ export default function BakePlanPage() {
         await Promise.all(
           filteredProducts.map(async (p) => {
             try {
-              const data = await apiFetch<ForecastPoint[]>(
+              const data = await apiFetch<any>(
                 `/api/forecast/product/${p.id}`,
                 {
                   method: "POST",
@@ -174,7 +175,34 @@ export default function BakePlanPage() {
                 }
               );
 
-              const points = Array.isArray(data) ? data : [];
+              // Debug logging (dev mode only - localStorage based, not auth-bound)
+              if (isDevMode()) {
+                // Handle both response formats: ProductForecastOut object or direct array
+                const pointsArray = Array.isArray(data) ? data : (data?.points || []);
+                const first3 = pointsArray.slice(0, 3).map((pt: any) => ({
+                  date: pt.date || pt.ds,
+                  yhat: pt.yhat,
+                }));
+                const last3 = pointsArray.slice(-3).map((pt: any) => ({
+                  date: pt.date || pt.ds,
+                  yhat: pt.yhat,
+                }));
+                const debugFields = !Array.isArray(data) ? {
+                  debug_forecast_run_id: data.debug_forecast_run_id,
+                  debug_source: data.debug_source,
+                  debug_points_first_3: data.debug_points_first_3,
+                } : null;
+                
+                console.log(
+                  `BAKE_PLAN_FORECAST_RESPONSE: product_id=${p.id}, ` +
+                  `points_count=${pointsArray.length}, ` +
+                  `first3=${JSON.stringify(first3)}, ` +
+                  `last3=${JSON.stringify(last3)}` +
+                  (debugFields ? `, debug_fields=${JSON.stringify(debugFields)}` : "")
+                );
+              }
+
+              const points = Array.isArray(data) ? data : (data?.points || []);
               if (points.length === 0) return;
 
               const total = points.reduce(

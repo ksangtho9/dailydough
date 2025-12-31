@@ -171,6 +171,10 @@ export default function ProductDetailPage() {
           })(),
         ]);
 
+        // Diagnostic: Log raw response to verify field names and values
+        console.log("FORECAST_RAW_RESPONSE_FIRST_POINT", forecastData.points?.[0]);
+        console.log("FORECAST_DEBUG", forecastData.debug_forecast_run_id, forecastData.debug_source);
+
         setSalesRaw(salesData);
         setForecastRaw(forecastData);
         setMetrics(metricsDataOrError);
