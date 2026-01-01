@@ -33,3 +33,4 @@ def downgrade() -> None:
     """Drop wape_adjusted column from forecast_metrics."""
     op.drop_column("forecast_metrics", "wape_adjusted")
 
+

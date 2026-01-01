@@ -47,3 +47,4 @@ def downgrade() -> None:
     op.drop_index(op.f("ix_model_runs_id"), table_name="model_runs")
     op.drop_table("model_runs")
 
+

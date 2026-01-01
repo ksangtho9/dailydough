@@ -15,7 +15,7 @@ import { apiFetch, adminStartRetrain, adminGetTrainingStatus, adminCancelTrainin
 import type { ForecastMetrics } from "@/lib/metrics";
 import { ForecastConfidenceBadge } from "@/components/ForecastConfidenceBadge";
 import { AdminOnly } from "@/components/AdminOnly";
-import { isAdminMode } from "@/lib/admin";
+import { isAdminMode, isDevMode } from "@/lib/admin";
 
 const STORAGE_KEY = "current_bakery_id";
 const DEV_MODE_KEY = "dashboard_dev_mode";
@@ -494,6 +494,27 @@ export default function DashboardPage() {
     
     try {
       const data = await fetchBakePlan(bakeryId, dateToUse);
+      
+      // Dev-mode console logging
+      if (isDevMode()) {
+        console.log(
+          `BAKE_PLAN_API_RESPONSE: endpoint=GET /api/bakeries/${bakeryId}/bake-plan${dateToUse ? `?target_date=${dateToUse}` : ""}, ` +
+          `items_count=${data.items.length}, ` +
+          `response_shape=${JSON.stringify(Object.keys(data))}`
+        );
+        // Log risk values for first 3 items
+        const first3 = data.items.slice(0, 3).map((item) => ({
+          product_id: item.product_id,
+          product_name: item.product_name,
+          forecast_quantity: item.forecast_quantity,
+          waste_risk_prob: item.waste_risk_prob,
+          stockout_risk_prob: item.stockout_risk_prob,
+          risk_method: item.risk_method,
+          interval_level_used: item.interval_level_used,
+        }));
+        console.log("BAKE_PLAN_RISK_VALUES_FIRST_3:", JSON.stringify(first3, null, 2));
+      }
+      
       setBakePlan(data);
     } catch (err: any) {
       const errorMessage = err?.message ?? "Failed to load bake plan.";
@@ -685,12 +706,19 @@ export default function DashboardPage() {
 
   const tableRows = useMemo(() => {
     if (!displayBakePlan) return [];
-    const rows = displayBakePlan.items.map((item, index) => {
+    const rows = displayBakePlan.items.map((item) => {
       const normal = Math.round(item.forecast_quantity);
       const low = Math.max(0, Math.round(normal * 0.9));
       const high = Math.round(normal * 1.1);
-      const waste = 7 + (index % 3) * 0.6;
-      const risk = 10 + (index % 4) * 1.5;
+      
+      // Use API-provided risk metrics (convert from 0-1 probability to percentage)
+      const waste = item.waste_risk_prob != null 
+        ? item.waste_risk_prob * 100 
+        : null;
+      const risk = item.stockout_risk_prob != null 
+        ? item.stockout_risk_prob * 100 
+        : null;
+      
       return {
         ...item,
         low,
@@ -1013,10 +1041,10 @@ export default function DashboardPage() {
                           {row.recommended}
                         </td>
                         <td className="px-3 py-2 text-right text-slate-600">
-                          {row.waste.toFixed(1)}%
+                          {row.waste != null ? row.waste.toFixed(0) + "%" : "—"}
                         </td>
                         <td className="px-3 py-2 text-right text-slate-600">
-                          {row.risk.toFixed(1)}%
+                          {row.risk != null ? row.risk.toFixed(0) + "%" : "—"}
                         </td>
                       </tr>
                     ))}
