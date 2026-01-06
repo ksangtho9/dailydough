@@ -6,7 +6,8 @@ export type DashboardSummaryResponse = {
   as_of: string;
   recommended_bake: number | null;
   expected_waste_pct: number | null;
-  forecast_accuracy_pct: number | null;
+  forecast_accuracy_pct: number | null; // Deprecated: kept for backward compatibility
+  post_training_wape: number | null;
   high_risk_items: number;
 };
 
@@ -17,6 +18,7 @@ export async function fetchDashboardSummary(
     `/api/bakeries/${bakeryId}/dashboard-summary`
   );
 }
+
 
 
 

@@ -809,12 +809,12 @@ export default function DashboardPage() {
       accent: "bg-[#FFECEC] border border-rose-100",
     },
     {
-      title: "Forecast Accuracy",
+      title: "Forecast Error (WAPE)",
       value:
-        dashboardSummary?.forecast_accuracy_pct != null
-          ? `${dashboardSummary.forecast_accuracy_pct.toFixed(1)}%`
+        dashboardSummary?.post_training_wape != null
+          ? `${dashboardSummary.post_training_wape.toFixed(1)}%`
           : "—",
-      helper: "Post-training avg MAPE (lower is better)",
+      helper: "Post-training, volume-weighted error (lower is better)",
       accent: "bg-[#E9F8EF] border border-emerald-100",
     },
   ];

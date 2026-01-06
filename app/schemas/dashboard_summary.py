@@ -10,8 +10,10 @@ class DashboardSummaryResponse(BaseModel):
     as_of: date
     recommended_bake: Optional[int] = None
     expected_waste_pct: Optional[float] = None
-    forecast_accuracy_pct: Optional[float] = None
+    forecast_accuracy_pct: Optional[float] = None  # Deprecated: kept for backward compatibility
+    post_training_wape: Optional[float] = None
     high_risk_items: int
+
 
 
 

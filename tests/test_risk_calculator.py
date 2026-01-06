@@ -220,3 +220,4 @@ def test_deterministic_results():
     assert result1["risk_method"] == result2["risk_method"]
     assert result1["interval_level_used"] == result2["interval_level_used"]
 
+

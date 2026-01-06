@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 from typing import Optional, Tuple
+import logging
+
+import numpy as np
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import func
@@ -9,11 +12,181 @@ from sqlalchemy.orm import Session
 
 from app.database.database import get_db
 from app.ml.inference.forecast_service import get_forecast_for_product
+from app.ml.metrics import calculate_wape
 from app.models import Bakery, Product, ForecastMetrics, SalesRecord, DailyForecast
 from app.schemas.dashboard_summary import DashboardSummaryResponse
 from app.core.config import settings
 
+logger = logging.getLogger(__name__)
+
 router = APIRouter(tags=["dashboard-summary"])
+
+
+def calculate_post_training_wape(
+    bakery_id: int,
+    db: Session,
+) -> Optional[float]:
+    """
+    Calculate post-training WAPE for a bakery using totals-based approach.
+    
+    Uses bakery-level cutoff: max(last_trained_at) across all products.
+    Computes WAPE from raw totals: sum(|forecast - actual|) / sum(actual) * 100
+    
+    Returns WAPE as percentage (0-100+), or None if insufficient data.
+    """
+    # Step 1: Determine bakery-level cutoff (max of all product last_trained_at)
+    metrics_rows = (
+        db.query(ForecastMetrics.last_trained_at)
+        .join(Product, ForecastMetrics.product_id == Product.id)
+        .filter(Product.bakery_id == bakery_id)
+        .filter(ForecastMetrics.last_trained_at.isnot(None))
+        .all()
+    )
+    
+    if not metrics_rows:
+        # No products have been trained
+        logger.debug(f"calculate_post_training_wape: No trained products for bakery_id={bakery_id}")
+        return None
+    
+    # Get maximum training timestamp across all products
+    # This gives us a bakery-level cutoff: all forecasts/sales after this date are "post-training"
+    max_trained_at = max(row.last_trained_at for row in metrics_rows)
+    # Convert datetime to date for comparison with date columns
+    # Use strict inequality (date > cutoff_date) to exclude the training day itself
+    cutoff_date = max_trained_at.date() if isinstance(max_trained_at, datetime) else max_trained_at
+    logger.debug(f"calculate_post_training_wape: bakery_id={bakery_id}, cutoff_date={cutoff_date}")
+    
+    # Step 2: Get all product IDs for this bakery
+    products = (
+        db.query(Product.id)
+        .filter(Product.bakery_id == bakery_id)
+        .all()
+    )
+    
+    if not products:
+        return None
+    
+    product_ids = [p.id for p in products]
+    
+    # Step 3: Batch query all forecasts after cutoff date
+    # Only include dates up to today (we need actual sales to compare, which only exist for past dates)
+    today = date.today()
+    forecast_rows = (
+        db.query(
+            DailyForecast.product_id,
+            DailyForecast.date,
+            DailyForecast.yhat,
+        )
+        .filter(
+            DailyForecast.bakery_id == bakery_id,
+            DailyForecast.product_id.in_(product_ids),
+            DailyForecast.date > cutoff_date,
+            DailyForecast.date <= today,  # Only dates where we have actual sales data
+            DailyForecast.yhat.isnot(None),
+        )
+        .all()
+    )
+    logger.debug(
+        f"calculate_post_training_wape: Found {len(forecast_rows)} forecast rows "
+        f"after cutoff_date={cutoff_date} and <= today={today}"
+    )
+    
+    # Step 4: Batch query all sales after cutoff date (aggregated by product_id, date)
+    # Note: func.sum() handles None values and multiple rows per day correctly
+    sales_rows = (
+        db.query(
+            SalesRecord.product_id,
+            SalesRecord.date.label("day"),
+            func.sum(SalesRecord.quantity_sold).label("qty"),
+        )
+        .filter(
+            SalesRecord.bakery_id == bakery_id,
+            SalesRecord.product_id.in_(product_ids),
+            SalesRecord.date > cutoff_date,  # Strictly after cutoff (excludes training day)
+        )
+        .group_by(SalesRecord.product_id, SalesRecord.date)
+        .all()
+    )
+    logger.debug(f"calculate_post_training_wape: Found {len(sales_rows)} sales rows after cutoff")
+    
+    # Step 5: Build maps for efficient lookup
+    # Group forecasts by (product_id, date) -> yhat
+    # Note: DailyForecast has UniqueConstraint on (bakery_id, product_id, date),
+    # so there's only one forecast per product/date - no need to filter for "latest"
+    forecasts_by_key: dict[tuple[int, date], float] = {}
+    for row in forecast_rows:
+        if row.yhat is not None:
+            forecasts_by_key[(row.product_id, row.date)] = float(row.yhat)
+    
+    # Group sales by (product_id, date) -> quantity
+    # Note: func.sum() may return None if all values are None, so we handle that explicitly
+    # Also note: quantity_sold can be negative (refunds/adjustments), but we include them
+    # in the calculation as-is for consistency with Accuracy tab
+    actuals_by_key: dict[tuple[int, date], float] = {}
+    for row in sales_rows:
+        qty = row.qty
+        if qty is not None:
+            actuals_by_key[(row.product_id, row.day)] = float(qty)
+    
+    # Step 6: Join forecasts and actuals, compute totals
+    # Only include dates where both forecast and actual exist (and are not None)
+    # This ensures we only compute WAPE on valid data points
+    valid_keys = set(forecasts_by_key.keys()) & set(actuals_by_key.keys())
+    
+    if not valid_keys:
+        # No overlapping data points
+        logger.debug(
+            f"calculate_post_training_wape: No overlapping dates. "
+            f"Forecasts: {len(forecasts_by_key)} dates, Sales: {len(actuals_by_key)} dates"
+        )
+        return None
+    
+    logger.debug(f"calculate_post_training_wape: Found {len(valid_keys)} overlapping dates")
+    
+    # Collect all valid forecast and actual values
+    # Both forecast and actual are guaranteed to be non-None at this point
+    valid_forecasts = []
+    valid_actuals = []
+    
+    for key in valid_keys:
+        forecast_val = forecasts_by_key[key]
+        actual_val = actuals_by_key[key]
+        # Both values are already validated (non-None) from the maps
+        valid_forecasts.append(forecast_val)
+        valid_actuals.append(actual_val)
+    
+    # Step 7: Calculate WAPE from totals using calculate_wape()
+    # Check that we have data and sum of actuals is not zero (division by zero protection)
+    if not valid_actuals:
+        return None
+    
+    # Calculate sum of absolute actuals to check for zero denominator
+    # Note: calculate_wape() handles this internally, but we check here for clarity
+    total_actual = sum(abs(a) for a in valid_actuals)
+    if total_actual == 0:
+        # All actuals are zero - cannot compute WAPE
+        logger.debug("calculate_post_training_wape: Sum of actuals is zero")
+        return None
+    
+    try:
+        wape_result = calculate_wape(
+            np.array(valid_actuals),
+            np.array(valid_forecasts)
+        )
+        
+        if wape_result is None or np.isnan(wape_result):
+            logger.debug("calculate_post_training_wape: calculate_wape returned None or NaN")
+            return None
+        
+        # Convert to percentage (calculate_wape returns 0-1 range)
+        wape_pct = float(wape_result) * 100
+        logger.debug(f"calculate_post_training_wape: Calculated WAPE={wape_pct:.2f}%")
+        return wape_pct
+        
+    except Exception as e:
+        # If calculation fails, return None
+        logger.error(f"calculate_post_training_wape: Error calculating WAPE: {e}", exc_info=True)
+        return None
 
 
 def calculate_post_training_accuracy(
@@ -216,6 +389,9 @@ def get_dashboard_summary(
 
     high_risk_items = high_risk_count
 
+    # Calculate post-training WAPE
+    post_training_wape = calculate_post_training_wape(bakery_id, db)
+
     return DashboardSummaryResponse(
         bakery_id=bakery.id,
         bakery_name=bakery.name,
@@ -223,6 +399,7 @@ def get_dashboard_summary(
         recommended_bake=recommended_bake_value,
         expected_waste_pct=expected_waste_pct,
         forecast_accuracy_pct=forecast_accuracy_pct,
+        post_training_wape=post_training_wape,
         high_risk_items=high_risk_items,
     )
 
