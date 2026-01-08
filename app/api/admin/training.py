@@ -10,7 +10,7 @@ import logging
 import time
 from typing import List, Optional
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
@@ -23,6 +23,8 @@ from app.ml.forecast_service import ForecastService
 from app.services.daily_forecast_service import upsert_product_daily_forecasts
 from app.services.admin_training_jobs import job_manager, TrainingError, CancelledError
 from app.models import ModelRun
+from app.api.auth import set_user_state
+from app.core.rate_limiter import limiter
 import numpy as np
 
 logger = logging.getLogger("bakezy.admin.training")
@@ -53,6 +55,10 @@ class RetrainRequest(BaseModel):
     product_ids: Optional[List[int]] = None
     bakery_id: Optional[int] = None
     optimize_hyperparameters: str = "auto"  # "auto", "true", or "false"
+
+
+# Rebuild model to ensure it's fully defined for FastAPI schema generation
+RetrainRequest.model_rebuild()
 
 
 class RetrainResponse(BaseModel):
@@ -410,11 +416,19 @@ def run_training_job(
                 logger.error(f"Training job {job_id}: Error closing database session: {e}", exc_info=True)
 
 
-@router.post("/retrain", response_model=RetrainResponse, status_code=status.HTTP_202_ACCEPTED)
+@router.post(
+    "/retrain",
+    response_model=RetrainResponse,
+    status_code=status.HTTP_202_ACCEPTED,
+    include_in_schema=False,  # Exclude from OpenAPI schema due to SlowAPI decorator interaction issue
+)
+@limiter.limit("1/5minutes")  # Rate limit: 1 request per 5 minutes per authenticated user
 async def start_retrain(
-    request: RetrainRequest,
+    request: Request,
+    retrain_request: RetrainRequest,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
+    current_user=Depends(set_user_state),
 ):
     """
     Start a retrain job for all products or selected products.
@@ -434,14 +448,14 @@ async def start_retrain(
     
     # Determine total count using same filtering logic as run_training_job
     query = db.query(Product)
-    if request.product_ids is not None:
-        query = query.filter(Product.id.in_(request.product_ids))
-    elif request.bakery_id is not None:
-        query = query.filter(Product.bakery_id == request.bakery_id)
+    if retrain_request.product_ids is not None:
+        query = query.filter(Product.id.in_(retrain_request.product_ids))
+    elif retrain_request.bakery_id is not None:
+        query = query.filter(Product.bakery_id == retrain_request.bakery_id)
     total = query.count()
     
     # Handle no products found
-    if request.product_ids is not None and total == 0:
+    if retrain_request.product_ids is not None and total == 0:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="No matching products found for given product_ids"
@@ -449,7 +463,7 @@ async def start_retrain(
     
     # Start job
     try:
-        job_id = job_manager.start_job(product_ids=request.product_ids)
+        job_id = job_manager.start_job(product_ids=retrain_request.product_ids)
     except ValueError as e:
         # This shouldn't happen due to check above, but handle it
         raise HTTPException(
@@ -463,9 +477,9 @@ async def start_retrain(
     background_tasks.add_task(
         run_training_job, 
         job_id, 
-        request.product_ids,
-        request.optimize_hyperparameters,
-        request.bakery_id
+        retrain_request.product_ids,
+        retrain_request.optimize_hyperparameters,
+        retrain_request.bakery_id
     )
     
     logger.info(

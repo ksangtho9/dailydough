@@ -4,7 +4,7 @@
 .env.*.local
 *.env
 
-# Database files
+# SQLite database files (common)
 *.db
 *.db-shm
 *.db-wal
@@ -15,10 +15,15 @@
 logs/
 *.log
 
-# Python
+# If your repo uses this exact filename
+bakezy.db
+bakezy.db-shm
+bakezy.db-wal
+
+# Python caches
 __pycache__/
 *.py[cod]
-*.class
+*$py.class
 *.so
 .Python
 env/

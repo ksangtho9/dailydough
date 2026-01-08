@@ -1,12 +1,13 @@
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy.orm import Session
 import logging
 
 from app.database.database import get_db
-from app.api.auth import get_current_user
+from app.api.auth import set_user_state
 from app.ml.inference.forecast_service import get_forecast_for_product
 from app.schemas.forecast import ProductForecastResponse, ProductForecastPoint
 from app.crud import product as crud_product
+from app.core.rate_limiter import limiter
 
 logger = logging.getLogger("bakezy.api")
 
@@ -14,11 +15,13 @@ router = APIRouter(prefix="/forecast", tags=["forecast"])
 
 
 @router.get("/product/{product_id}", response_model=ProductForecastResponse)
+@limiter.limit("30/minute")  # Rate limit: 30 requests per minute per authenticated user (IP fallback)
 def get_product_forecast(
+    request: Request,
     product_id: int,
     horizon: int = Query(7, ge=1, le=30),
     db: Session = Depends(get_db),
-    current_user=Depends(get_current_user),
+    current_user=Depends(set_user_state),
 ):
     bakery_id = current_user.bakery_id
     

@@ -1,7 +1,7 @@
 from datetime import datetime, timedelta, UTC
 from typing import Optional
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.security import OAuth2PasswordBearer, OAuth2PasswordRequestForm
 from jose import JWTError, jwt
 from passlib.context import CryptContext
@@ -11,6 +11,7 @@ from app.database.database import get_db
 from app.models import User
 from app.user_schemas import UserCreate, UserOut, Token
 from app.core.config import settings
+from app.core.rate_limiter import limiter
 
 
 # ---- CONFIG ----
@@ -97,6 +98,20 @@ async def get_current_user(
     return user
 
 
+async def set_user_state(
+    request: Request,
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """
+    Dependency that sets request.state.user for rate limiting.
+    
+    This ensures authenticated endpoints populate request.state.user
+    so the rate limit key function can use user-based keys.
+    """
+    request.state.user = current_user
+    return current_user
+
+
 # ---------- Routes ----------
 
 @router.post("/signup", response_model=UserOut, status_code=status.HTTP_201_CREATED)
@@ -125,7 +140,9 @@ def signup(user_in: UserCreate, db: Session = Depends(get_db)):
 
 
 @router.post("/token", response_model=Token)
+@limiter.limit("5/minute")  # Rate limit: 5 requests per minute per IP
 def login_for_access_token(
+    request: Request,
     form_data: OAuth2PasswordRequestForm = Depends(),
     db: Session = Depends(get_db),
 ):

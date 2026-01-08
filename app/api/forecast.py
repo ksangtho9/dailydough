@@ -1,15 +1,16 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 from pydantic import BaseModel
 from typing import Optional
 
 from app.database.database import get_db
-from app.api.auth import get_current_user
+from app.api.auth import set_user_state
 from app.ml.inference.forecast_service import get_forecast_for_product
 from app.schemas import sales_record
 from app.models.product import Product
 from app.core.config import settings
+from app.core.rate_limiter import limiter
 
 
 class ForecastRequest(BaseModel):
@@ -29,11 +30,13 @@ router = APIRouter(
     response_model=sales_record.ProductForecastOut,
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("30/minute")  # Rate limit: 30 requests per minute per authenticated user (IP fallback)
 def forecast_product_sales(
+    request: Request,
     product_id: int,
-    request: ForecastRequest,
+    forecast_request: ForecastRequest,
     db: Session = Depends(get_db),
-    current_user = Depends(get_current_user),
+    current_user = Depends(set_user_state),
 ):
     """
     Generate a Prophet-based forecast for a single product.
@@ -48,7 +51,7 @@ def forecast_product_sales(
     # Get bakery_id from product (User model doesn't have bakery_id)
     product_check = db.query(Product).filter(Product.id == product_id).first()
     bakery_id = product_check.bakery_id if product_check else None
-    horizon_days = request.days or 14
+    horizon_days = forecast_request.days or 14
     logger.info(
         f"POST_RETRIEVAL_ENTRY: product_id={product_id}, horizon_days={horizon_days}, bakery_id={bakery_id}"
     )

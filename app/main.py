@@ -8,6 +8,10 @@ from app.api.v1.routes import analytics
 from app.api.v1 import api as v1_api
 from .core.config import settings
 from app.database.database import Base, engine
+from app.core.rate_limiter import limiter
+from slowapi.errors import RateLimitExceeded
+from slowapi.middleware import SlowAPIMiddleware
+from slowapi import _rate_limit_exceeded_handler
 
 # ---------- Centralized logging configuration ----------
 # Configure forecast-related loggers to write to forecast.log
@@ -57,6 +61,9 @@ if not forecast_api_logger.handlers:
 
 app = FastAPI(title=settings.app_name)
 
+# Attach rate limiter to app state
+app.state.limiter = limiter
+
 # CORS configuration
 # For local development, we want the Next.js frontend at
 # http://localhost:3000 or http://127.0.0.1:3000 to call the API without
@@ -71,6 +78,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Add SlowAPI middleware for rate limiting
+app.add_middleware(SlowAPIMiddleware)
+
+# Register exception handler for 429 Too Many Requests
+app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # Create DB tables (using the same Base/engine as all models)
 Base.metadata.create_all(bind=engine)
