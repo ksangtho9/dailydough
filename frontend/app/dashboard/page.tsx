@@ -533,10 +533,14 @@ export default function DashboardPage() {
 
   useEffect(() => {
     if (bakeryId == null) return;
+    // Only load bake plan when "bake" tab is active to avoid unnecessary forecast generation
+    if (activeTab !== "bake") {
+      return;
+    }
     // Only use selectedForecastDate if dev mode is enabled
     const dateToUse = devMode ? (selectedForecastDate || undefined) : undefined;
     loadPlan(dateToUse);
-  }, [bakeryId, devMode, selectedForecastDate, loadPlan]);
+  }, [bakeryId, devMode, selectedForecastDate, loadPlan, activeTab]);
 
   useEffect(() => {
     if (bakeryId == null) {
@@ -549,14 +553,24 @@ export default function DashboardPage() {
       setSummaryLoading(true);
       setSummaryError(null);
       try {
-        const data = await fetchDashboardSummary(bakeryId!);
+        // Use selected date in dev mode, otherwise use today
+        const dateToUse = devMode && selectedForecastDate ? selectedForecastDate : null;
+        const data = await fetchDashboardSummary(bakeryId!, dateToUse);
         if (!cancelled) {
           setDashboardSummary(data);
+          // Debug logging
+          console.log("Dashboard summary loaded:", {
+            post_training_wape: data?.post_training_wape,
+            has_post_training_wape: "post_training_wape" in (data || {}),
+            allKeys: data ? Object.keys(data) : [],
+            asOfDate: dateToUse,
+          });
         }
       } catch (err: any) {
         if (!cancelled) {
           setSummaryError(err?.message ?? "Failed to load summary metrics.");
           setDashboardSummary(null);
+          console.error("Error loading dashboard summary:", err);
         }
       } finally {
         if (!cancelled) {
@@ -569,7 +583,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [bakeryId]);
+  }, [bakeryId, devMode, selectedForecastDate]);
 
   // Load accuracy data when accuracy tab is active or date range changes
   useEffect(() => {
@@ -796,7 +810,7 @@ export default function DashboardPage() {
         dashboardSummary?.expected_waste_pct != null
           ? `${(dashboardSummary.expected_waste_pct * 100).toFixed(1)}%`
           : "—",
-      helper: "Based on recent sell-through",
+      helper: "Compares next-day forecast to avg daily sales over the prior 7 days",
       accent: "bg-[#FFF8EE] border border-[#F7DEC7]",
     },
     {
@@ -811,10 +825,10 @@ export default function DashboardPage() {
     {
       title: "Forecast Error (WAPE)",
       value:
-        dashboardSummary?.post_training_wape != null
+        dashboardSummary?.post_training_wape != null && dashboardSummary?.post_training_wape !== undefined
           ? `${dashboardSummary.post_training_wape.toFixed(1)}%`
           : "—",
-      helper: "Post-training, volume-weighted error (lower is better)",
+      helper: "Last 7 days, volume-weighted error (lower is better)",
       accent: "bg-[#E9F8EF] border border-emerald-100",
     },
   ];

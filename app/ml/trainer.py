@@ -1246,5 +1246,23 @@ class ModelTrainer:
                 # No eval_df, accept model
                 return TrainResult(model_name="ensemble", model=ensemble_model, metadata=metadata)
 
+        elif model_name == "seasonal_naive":
+            # Train seasonal naive baseline model
+            model = SeasonalNaiveModel()
+            model.fit(train_df_for_training)
+            if metadata is None:
+                metadata = {}
+            metadata["model_selection_path"] = "seasonal_naive (direct)"
+            return TrainResult(model_name="seasonal_naive", model=model, metadata=metadata)
+
+        elif model_name == "rolling_mean":
+            # Train rolling mean baseline model
+            model = RollingMeanModel()
+            model.fit(train_df_for_training)
+            if metadata is None:
+                metadata = {}
+            metadata["model_selection_path"] = "rolling_mean (direct)"
+            return TrainResult(model_name="rolling_mean", model=model, metadata=metadata)
+
         else:
             raise ValueError(f"Unsupported model: {model_name}")
