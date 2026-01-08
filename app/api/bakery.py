@@ -1,17 +1,21 @@
 from typing import Optional
 from datetime import date
+import logging
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from app.database.database import get_db
-from app.models import Bakery, SalesRecord, Product, ForecastMetrics
+from app.models import Bakery, SalesRecord, Product, ForecastMetrics, DailyForecast
 from app.user_schemas import BakeryCreate, BakeryOut
+from app.core.config import settings
 from app.services.sales_ingestion import (
     SchemaInferenceError,
     ingest_sales_csv,
 )
 from app.ml.training.train_all_products import train_all_products
+
+logger = logging.getLogger("bakezy.api.bakery")
 
 router = APIRouter(
     prefix="/bakeries",
@@ -49,6 +53,55 @@ def list_bakeries(db: Session = Depends(get_db)):
     return db.query(Bakery).all()
 
 
+@router.delete("/{bakery_id}", status_code=status.HTTP_200_OK)
+def delete_bakery(
+    bakery_id: int,
+    db: Session = Depends(get_db),
+):
+    """
+    Delete a bakery and all associated data.
+    
+    This will cascade delete:
+    - Products (and their ForecastMetrics, ModelRuns, WalkForwardResults)
+    - SalesRecords
+    - Events
+    - Promotions
+    - WeatherData
+    
+    Also manually deletes:
+    - DailyForecast records (no cascade relationship)
+    """
+    # Verify bakery exists
+    bakery = db.query(Bakery).filter(Bakery.id == bakery_id).first()
+    if not bakery:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Bakery not found",
+        )
+    
+    # Store bakery name for response
+    bakery_name = bakery.name
+    
+    # Delete DailyForecast records (no cascade, so manual delete)
+    daily_forecast_count = (
+        db.query(DailyForecast)
+        .filter(DailyForecast.bakery_id == bakery_id)
+        .delete(synchronize_session=False)
+    )
+    
+    # Delete the bakery (cascade will handle products, sales_records, events, promotions, weather_data)
+    # Products cascade will handle forecast_metrics, model_runs, walk_forward_results
+    db.delete(bakery)
+    db.commit()
+    
+    return {
+        "message": f"Bakery '{bakery_name}' and all associated data deleted successfully",
+        "bakery_id": bakery_id,
+        "bakery_name": bakery_name,
+        "daily_forecasts_deleted": daily_forecast_count,
+    }
+
+
 @router.post("/{bakery_id}/sales/upload", status_code=status.HTTP_201_CREATED)
 async def upload_sales_for_bakery(
     bakery_id: int,
@@ -77,6 +130,17 @@ async def upload_sales_for_bakery(
         )
 
     content_bytes = await file.read()
+    
+    # Check file size limit
+    if len(content_bytes) > settings.max_upload_size_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File size ({len(content_bytes) / (1024*1024):.1f}MB) exceeds maximum of {settings.max_upload_size_mb}MB",
+        )
+    
+    # Best-effort content-type check (don't rely solely on it)
+    if file.content_type and file.content_type not in ["text/csv", "application/csv", "text/plain"]:
+        logger.warning(f"Unexpected content-type {file.content_type} for file {file.filename}")
 
     # Validate upload_mode
     if upload_mode not in ["append", "replace"]:
@@ -104,16 +168,18 @@ async def upload_sales_for_bakery(
                 "available_columns": exc.available_columns,
             },
         ) from exc
-    except ValueError as exc:
+    except ValueError:
+        logger.exception("ValueError in bakery sales upload")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
-    except Exception as exc:
+            detail="Invalid data in upload. Please check your CSV format and try again.",
+        )
+    except Exception:
+        logger.exception("Unexpected error in bakery sales upload")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(exc),
-        ) from exc
+            detail="An error occurred processing the upload. Please try again later.",
+        )
 
     # Trigger automatic training in the background after successful upload
     # Models will retrain for all products that may have been affected

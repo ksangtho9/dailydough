@@ -27,7 +27,7 @@ export function Sidebar() {
     <aside className="w-64 border-r bg-white shadow-sm flex flex-col">
       {/* Brand */}
       <div className="px-6 py-4 border-b">
-        <h1 className="text-xl font-bold tracking-tight text-[#0f172a]">Daily Dough</h1>
+        <h1 className="text-xl font-bold tracking-tight text-[#0f172a]">Bloom</h1>
         <p className="text-xs text-slate-500">AI Bakery demand forecasting</p>
       </div>
 

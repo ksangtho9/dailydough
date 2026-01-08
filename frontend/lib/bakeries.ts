@@ -31,6 +31,12 @@ export async function createBakery(
   });
 }
 
+export async function deleteBakery(bakeryId: number): Promise<void> {
+  return apiFetch<void>(`/api/bakeries/${bakeryId}`, {
+    method: "DELETE",
+  });
+}
+
 export function emitBakeryUpdate(): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new Event(BAKERY_UPDATED_EVENT));

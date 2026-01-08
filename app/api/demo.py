@@ -1,4 +1,5 @@
 from typing import Optional
+import logging
 
 from fastapi import (
     APIRouter,
@@ -14,6 +15,9 @@ from sqlalchemy.orm import Session
 
 from app.api.auth import get_current_user
 from app.database.database import get_db
+from app.core.config import settings
+
+logger = logging.getLogger("bakezy.api.demo")
 from app.demo.seed_demo_data import DEMO_BAKERY_NAME, seed_demo_data
 from app.models import Bakery, SalesRecord
 from app.services.sales_ingestion import (
@@ -41,11 +45,12 @@ def seed_demo_endpoint(current_user=Depends(get_current_user)):
     try:
         seed_demo_data()
         return {"status": "ok", "message": "Demo data seeded."}
-    except Exception as exc:  # pragma: no cover - surfaced to client
+    except Exception:  # pragma: no cover - surfaced to client
+        logger.exception("Unexpected error in demo seed")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(exc),
-        ) from exc
+            detail="An error occurred seeding demo data. Please try again later.",
+        )
 
 
 @router.post("/import-sales", status_code=status.HTTP_200_OK)
@@ -91,16 +96,18 @@ async def import_demo_sales(
                 "available_columns": exc.available_columns,
             },
         ) from exc
-    except ValueError as exc:
+    except ValueError:
+        logger.exception("ValueError in demo import")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
-    except Exception as exc:
+            detail="Invalid data in upload. Please check your CSV format and try again.",
+        )
+    except Exception:
+        logger.exception("Unexpected error in demo import")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(exc),
-        ) from exc
+            detail="An error occurred processing the upload. Please try again later.",
+        )
 
     return {
         "status": "ok",

@@ -81,6 +81,22 @@ async def read_root() -> dict:
     return {"message": "BAKEZY API is running"}
 
 
+# Security headers middleware
+from fastapi import Request
+
+@app.middleware("http")
+async def add_security_headers(request: Request, call_next):
+    """Add security headers to all responses."""
+    response = await call_next(request)
+    response.headers["X-Content-Type-Options"] = "nosniff"
+    response.headers["X-Frame-Options"] = "DENY"
+    response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
+    # HSTS only in production/staging
+    if settings.environment in ("production", "prod", "staging"):
+        response.headers["Strict-Transport-Security"] = "max-age=31536000; includeSubDomains"
+    return response
+
+
 # Mount all API routes under /api
 app.include_router(api_router, prefix="/api")
 app.include_router(v1_api.api_router, prefix="/api/v1")

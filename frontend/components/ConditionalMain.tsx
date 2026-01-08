@@ -5,8 +5,9 @@ import { usePathname } from "next/navigation";
 export function ConditionalMain({ children }: { children: React.ReactNode }) {
   const pathname = usePathname();
   const isLoginPage = pathname === "/login";
+  const isHomePage = pathname === "/";
 
-  if (isLoginPage) {
+  if (isLoginPage || isHomePage) {
     return <>{children}</>;
   }
 

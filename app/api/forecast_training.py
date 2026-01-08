@@ -1,12 +1,15 @@
 from __future__ import annotations
 
 from typing import Optional
+import logging
 
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
 from app.api.auth import get_current_user
 from app.database.database import get_db
+
+logger = logging.getLogger("bakezy.api.forecast_training")
 from app.ml.training.train_product import train_product
 from app.ml.training.train_all_products import train_all_products
 from app.models import Product
@@ -42,11 +45,12 @@ def train_single_product_endpoint(
     try:
         result = train_product(product_id=product_id, db=db)
         return result
-    except Exception as exc:
+    except Exception:
+        logger.exception("Unexpected error in forecast training")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(exc),
-        ) from exc
+            detail="An error occurred during training. Please try again later.",
+        )
 
 
 @router.post(
@@ -60,11 +64,12 @@ def train_all_products_endpoint(
 ):
     try:
         results = train_all_products(db=db)
-    except Exception as exc:
+    except Exception:
+        logger.exception("Unexpected error in forecast training")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(exc),
-        ) from exc
+            detail="An error occurred during training. Please try again later.",
+        )
 
     failed_products = [
         r["product_id"]
@@ -86,6 +91,7 @@ def train_all_products_endpoint(
         "avg_mape": avg_mape,
         "results": results,
     }
+
 
 
 

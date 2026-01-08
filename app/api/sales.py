@@ -1,4 +1,5 @@
 from typing import List, Optional
+import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, UploadFile, status
 from sqlalchemy.orm import Session
@@ -8,12 +9,14 @@ from app.models import SalesRecord, Bakery, Product
 from app.user_schemas import SalesRecordCreate, SalesRecordOut
 from app.api.auth import get_current_user          # ✅ import from auth.py
 from app.schemas import sales_record               # ✅ our sales-series schemas
+from app.core.config import settings
 from app.services.sales_ingestion import (
     SchemaInferenceError,
     ingest_sales_csv,
 )
 from app.ml.training.train_all_products import train_all_products
 
+logger = logging.getLogger("bakezy.api.sales")
 
 router = APIRouter(
     prefix="/sales",        # combined with /api prefix from router.py → /api/sales
@@ -87,6 +90,17 @@ async def upload_sales(
         )
 
     content_bytes = await file.read()
+    
+    # Check file size limit
+    if len(content_bytes) > settings.max_upload_size_bytes:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File size ({len(content_bytes) / (1024*1024):.1f}MB) exceeds maximum of {settings.max_upload_size_mb}MB",
+        )
+    
+    # Best-effort content-type check (don't rely solely on it)
+    if file.content_type and file.content_type not in ["text/csv", "application/csv", "text/plain"]:
+        logger.warning(f"Unexpected content-type {file.content_type} for file {file.filename}")
 
     try:
         ingestion_result = ingest_sales_csv(
@@ -106,16 +120,18 @@ async def upload_sales(
                 "available_columns": exc.available_columns,
             },
         ) from exc
-    except ValueError as exc:
+    except ValueError:
+        logger.exception("ValueError in sales upload")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=str(exc),
-        ) from exc
-    except Exception as exc:
+            detail="Invalid data in upload. Please check your CSV format and try again.",
+        )
+    except Exception:
+        logger.exception("Unexpected error in sales upload")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=str(exc),
-        ) from exc
+            detail="An error occurred processing the upload. Please try again later.",
+        )
 
     # Trigger automatic training in the background after successful upload
     # Models will retrain for all products that may have been affected

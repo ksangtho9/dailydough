@@ -5,7 +5,7 @@ import { ConditionalNav } from "@/components/ConditionalNav";
 import { ConditionalMain } from "@/components/ConditionalMain";
 
 export const metadata: Metadata = {
-  title: "Daily Dough",
+  title: "Bloom",
   description: "AI demand forecasting for bakeries",
 };
 

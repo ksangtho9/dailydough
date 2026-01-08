@@ -53,7 +53,7 @@ export default function LoginPage() {
         localStorage.removeItem("session_expired");
       }
 
-      router.push("/products");
+      router.push("/dashboard");
     } catch (err: any) {
       console.error(err);
       setError(err.message || "Login failed");
@@ -74,7 +74,7 @@ export default function LoginPage() {
           borderWidth={3}
         />
         <div className="relative">
-          <h1 className="text-xl font-semibold tracking-tight text-slate-100">Daily Dough</h1>
+          <h1 className="text-xl font-semibold tracking-tight text-slate-100">Bloom</h1>
           <p className="mt-1 text-sm text-slate-300">
             Sign in to view products and forecasts.
           </p>

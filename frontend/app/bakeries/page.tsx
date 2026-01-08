@@ -4,6 +4,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   fetchBakeries,
   createBakery,
+  deleteBakery,
   emitBakeryUpdate,
   emitBakerySelectionChanged,
   BAKERY_UPDATED_EVENT,
@@ -12,6 +13,7 @@ import {
 } from "@/lib/bakeries";
 import { Button } from "@/components/ui/button";
 import { TextShimmer } from "@/components/ui/text-shimmer";
+import { Trash2 } from "lucide-react";
 
 const DEFAULT_TIMEZONE = "America/Los_Angeles";
 const STORAGE_KEY = "current_bakery_id";
@@ -28,6 +30,8 @@ export default function BakeriesPage() {
   const [formError, setFormError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [successMessage, setSuccessMessage] = useState<string | null>(null);
+  const [deletingBakeryId, setDeletingBakeryId] = useState<number | null>(null);
+  const [deleteConfirmOpen, setDeleteConfirmOpen] = useState<number | null>(null);
 
   const loadBakeries = useCallback(async () => {
     try {
@@ -142,6 +146,38 @@ export default function BakeriesPage() {
       setFormError(err?.message || "Failed to create bakery");
     } finally {
       setIsSubmitting(false);
+    }
+  }
+
+  async function handleDeleteBakery(bakeryId: number) {
+    if (deleteConfirmOpen !== bakeryId) {
+      setDeleteConfirmOpen(bakeryId);
+      return;
+    }
+
+    setDeletingBakeryId(bakeryId);
+    setDeleteConfirmOpen(null);
+
+    try {
+      await deleteBakery(bakeryId);
+      
+      // If the deleted bakery was the current one, clear it
+      if (currentBakeryId === bakeryId) {
+        setCurrentBakeryId(null);
+        if (typeof window !== "undefined") {
+          window.localStorage.removeItem(STORAGE_KEY);
+        }
+        emitBakerySelectionChanged(null);
+      }
+      
+      // Reload the list
+      await loadBakeries();
+      emitBakeryUpdate();
+    } catch (err: any) {
+      console.error(err);
+      setError(err?.message || "Failed to delete bakery");
+    } finally {
+      setDeletingBakeryId(null);
     }
   }
 
@@ -282,14 +318,48 @@ export default function BakeriesPage() {
                         {bakery.location || "No location"} • {bakery.timezone || DEFAULT_TIMEZONE}
                       </p>
                     </div>
-                    <Button
-                      size="sm"
-                      variant={currentBakeryId === bakery.id ? "default" : "outline"}
-                      onClick={() => setAsCurrent(bakery.id)}
-                      className="ml-4"
-                    >
-                      {currentBakeryId === bakery.id ? "Current" : "Set as current"}
-                    </Button>
+                    <div className="flex items-center gap-2 ml-4">
+                      <Button
+                        size="sm"
+                        variant={currentBakeryId === bakery.id ? "default" : "outline"}
+                        onClick={() => setAsCurrent(bakery.id)}
+                        className={currentBakeryId === bakery.id ? "" : "border-slate-300 text-slate-700 font-semibold hover:bg-slate-100"}
+                      >
+                        {currentBakeryId === bakery.id ? "Current" : "Set as current"}
+                      </Button>
+                      {deleteConfirmOpen === bakery.id ? (
+                        <div className="flex items-center gap-2">
+                          <span className="text-xs text-red-600 font-medium">Delete?</span>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => handleDeleteBakery(bakery.id)}
+                            disabled={deletingBakeryId === bakery.id}
+                            className="text-red-600 border-red-300 hover:bg-red-50"
+                          >
+                            {deletingBakeryId === bakery.id ? "Deleting..." : "Confirm"}
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="ghost"
+                            onClick={() => setDeleteConfirmOpen(null)}
+                            disabled={deletingBakeryId === bakery.id}
+                          >
+                            Cancel
+                          </Button>
+                        </div>
+                      ) : (
+                        <Button
+                          size="sm"
+                          variant="ghost"
+                          onClick={() => handleDeleteBakery(bakery.id)}
+                          disabled={deletingBakeryId === bakery.id}
+                          className="text-red-600 hover:text-red-700 hover:bg-red-50"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>

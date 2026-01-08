@@ -10,12 +10,22 @@ from sqlalchemy.orm import Session
 from app.database.database import get_db
 from app.models import User
 from app.user_schemas import UserCreate, UserOut, Token
+from app.core.config import settings
 
 
 # ---- CONFIG ----
-SECRET_KEY = "CHANGE_ME_TO_A_LONG_RANDOM_STRING"  # TODO: move to env later
+SECRET_KEY = settings.jwt_secret_key
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24  # 1 day
+
+# Fail fast if using default secret in production-like environments
+if SECRET_KEY == "CHANGE_ME_TO_A_LONG_RANDOM_STRING_DEV_ONLY":
+    import warnings
+    warnings.warn(
+        "JWT_SECRET_KEY not set! Using insecure default. "
+        "Set JWT_SECRET_KEY environment variable in production.",
+        UserWarning
+    )
 
 pwd_context = CryptContext(schemes=["pbkdf2_sha256"], deprecated="auto")
 

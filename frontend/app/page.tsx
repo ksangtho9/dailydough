@@ -1,17 +1,51 @@
-import Link from "next/link";
+"use client";
+
+import { useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
+import { HeroSection } from "@/components/landing/HeroSection";
+import { FeaturesGrid } from "@/components/landing/FeaturesGrid";
+import { BenefitsSection } from "@/components/landing/BenefitsSection";
+import { PricingSection } from "@/components/landing/PricingSection";
+import { ContactSection } from "@/components/landing/ContactSection";
+import { CTASection } from "@/components/landing/CTASection";
+import { LandingFooter } from "@/components/landing/LandingFooter";
 
 export default function HomePage() {
-  return (
-    <div className="space-y-4">
-      <h2 className="text-2xl font-semibold">Welcome to BAKEZY</h2>
-      <p className="text-sm text-slate-600">Start by viewing your products.</p>
+  const router = useRouter();
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
-      <Link
-        href="/products"
-        className="inline-flex rounded-lg border px-3 py-2 text-sm hover:bg-slate-100"
-      >
-        Go to Products →
-      </Link>
+  useEffect(() => {
+    // Check if user is authenticated
+    if (typeof window !== "undefined") {
+      const token = localStorage.getItem("access_token");
+      setIsAuthenticated(!!token);
+      
+      // Optional: Auto-redirect authenticated users to dashboard
+      // Uncomment if you want to redirect logged-in users
+      // if (token) {
+      //   router.push("/dashboard");
+      // }
+    }
+  }, [router]);
+
+  // Show loading state briefly to avoid flash
+  if (isAuthenticated === null) {
+    return (
+      <div className="flex min-h-screen items-center justify-center">
+        <div className="text-slate-600">Loading...</div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen flex flex-col">
+      <HeroSection />
+      <FeaturesGrid />
+      <BenefitsSection />
+      <PricingSection />
+      <ContactSection />
+      <CTASection />
+      <LandingFooter />
     </div>
   );
 }

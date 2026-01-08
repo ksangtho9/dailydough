@@ -53,7 +53,7 @@ export function GettingStartedChecklist({
     <div className="rounded-2xl border bg-white/80 shadow-sm">
       <div className="border-b px-4 py-3">
         <h3 className="text-base font-semibold text-slate-900">
-          Getting started with Daily Dough
+          Getting started with Bloom
         </h3>
         <p className="text-xs text-slate-500">
           Follow these steps to unlock accurate forecasts.

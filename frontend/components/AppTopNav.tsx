@@ -119,7 +119,7 @@ export function AppTopNav() {
             href="/dashboard"
             className="text-3xl font-bold tracking-tight text-slate-900 hover:text-amber-700"
           >
-            Daily Dough
+            Bloom
           </Link>
           <span className="text-xs font-medium text-slate-600">
             Bakery:{" "}
