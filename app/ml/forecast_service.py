@@ -1453,5 +1453,5 @@ class ForecastService:
                 product.id,
                 str(e),
             )
-
+        
         return result
