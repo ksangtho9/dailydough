@@ -15,10 +15,10 @@ import { apiFetch, adminStartRetrain, adminGetTrainingStatus, adminCancelTrainin
 import type { ForecastMetrics } from "@/lib/metrics";
 import { ForecastConfidenceBadge } from "@/components/ForecastConfidenceBadge";
 import { AdminOnly } from "@/components/AdminOnly";
-import { isAdminMode, isDevMode } from "@/lib/admin";
+import { isAdminMode, isDevMode, refreshAdminStatus } from "@/lib/admin";
 
 const STORAGE_KEY = "current_bakery_id";
-const DEV_MODE_KEY = "dashboard_dev_mode";
+const DEBUG_UI_KEY = "dashboard_debug_ui";
 
 type TabKey = "bake" | "accuracy" | "insights";
 
@@ -285,11 +285,13 @@ export default function DashboardPage() {
         setBakeryId(asNum);
       }
     }
-    // Load developer mode preference
-    const devModeStored = window.localStorage.getItem(DEV_MODE_KEY);
-    if (devModeStored === "true") {
+    // Load debug UI preference (non-security convenience toggle)
+    const debugUiStored = window.localStorage.getItem(DEBUG_UI_KEY);
+    if (debugUiStored === "true") {
       setDevMode(true);
     }
+    // Refresh admin status from API
+    refreshAdminStatus();
   }, []);
   
   // Check for existing training job on page load (e.g., after refresh)
@@ -321,7 +323,7 @@ export default function DashboardPage() {
     const newValue = !devMode;
     setDevMode(newValue);
     if (typeof window !== "undefined") {
-      window.localStorage.setItem(DEV_MODE_KEY, String(newValue));
+      window.localStorage.setItem(DEBUG_UI_KEY, String(newValue));
     }
     // Reset date selection when disabling dev mode
     if (!newValue) {

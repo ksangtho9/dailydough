@@ -4,6 +4,20 @@ const API_BASE_URL =
 
 export { API_BASE_URL };
 
+export type User = {
+  id: number;
+  email: string;
+  is_admin: boolean;
+  created_at: string;
+};
+
+/**
+ * Get current authenticated user.
+ */
+export async function getCurrentUser(): Promise<User> {
+  return apiFetch<User>("/api/auth/me");
+}
+
 function getAuthToken(): string | null {
   if (typeof window === "undefined") return null;
   return localStorage.getItem("access_token");

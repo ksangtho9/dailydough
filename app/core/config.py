@@ -18,8 +18,9 @@ class Settings(BaseSettings):
 	# Environment detection
 	environment: str = Field(default="development", alias="ENVIRONMENT")
 	
-	# Admin mode: default to False for security (must explicitly enable)
-	# Set ADMIN_MODE_ENABLED=true in .env or environment to enable
+	# Admin mode: DEPRECATED - No longer used for authorization.
+	# Authorization is now user-scoped via users.is_admin field.
+	# Kept for backward compatibility only.
 	admin_mode_enabled: bool = Field(default=False, alias="ADMIN_MODE_ENABLED")
 	
 	# JWT secret key for token signing

@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.database.database import get_db
 from app.models import DailyForecast, ModelRun, ForecastMetrics, Product, SalesRecord
+from app.api.auth import require_admin_user
 
 logger = logging.getLogger("bakezy.admin.diagnostics")
 
@@ -25,15 +26,6 @@ router = APIRouter(
     prefix="/admin/diagnostics",
     tags=["admin-diagnostics"],
 )
-
-
-def require_admin_mode():
-    """Check if admin mode is enabled."""
-    if not settings.admin_mode_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin mode is not enabled. Set ADMIN_MODE_ENABLED=true to enable."
-        )
 
 
 class ZeroForecastProduct(BaseModel):
@@ -57,13 +49,59 @@ class ZeroForecastDetectionResponse(BaseModel):
     total_products_checked: int
 
 
+def _detect_zero_forecast_product_ids(
+    db: Session,
+    min_forecast_days: int = 7,
+    near_zero_eps: float = 1e-6,
+    days_ahead: int = 14,
+) -> List[int]:
+    """
+    Helper function to detect product IDs with persistent zero forecasts.
+    Returns list of flagged product IDs.
+    """
+    today = date.today()
+    start_date = today
+    end_date = today + timedelta(days=days_ahead - 1)
+    
+    forecasts_query = (
+        db.query(
+            DailyForecast.product_id,
+            func.count(DailyForecast.id).label("forecast_count"),
+            func.sum(func.cast(DailyForecast.yhat == 0, Integer)).label("stored_zero_count"),
+            func.sum(func.cast(func.abs(DailyForecast.yhat) < near_zero_eps, Integer)).label("near_zero_count"),
+        )
+        .filter(
+            DailyForecast.date >= start_date,
+            DailyForecast.date <= end_date,
+        )
+        .group_by(DailyForecast.product_id)
+        .having(func.count(DailyForecast.id) >= min_forecast_days)
+    )
+    
+    forecast_stats = forecasts_query.all()
+    flagged_product_ids: List[int] = []
+    
+    for row in forecast_stats:
+        forecast_count = row.forecast_count
+        stored_zero_count = row.stored_zero_count or 0
+        near_zero_count = row.near_zero_count or 0
+        
+        stored_zero_pct = (stored_zero_count / forecast_count * 100) if forecast_count > 0 else 0.0
+        near_zero_pct = (near_zero_count / forecast_count * 100) if forecast_count > 0 else 0.0
+        
+        if stored_zero_pct >= 100.0 or near_zero_pct >= 100.0:
+            flagged_product_ids.append(row.product_id)
+    
+    return flagged_product_ids
+
+
 @router.get("/zero-forecasts", response_model=ZeroForecastDetectionResponse)
 def detect_zero_forecasts(
     min_forecast_days: int = Query(7, ge=1, le=30, description="Minimum forecast days to consider"),
     near_zero_eps: float = Query(1e-6, description="Epsilon for near-zero detection"),
     days_ahead: int = Query(14, ge=1, le=30, description="Number of days ahead to check"),
     db: Session = Depends(get_db),
-    _: None = Depends(require_admin_mode),
+    _admin_user=Depends(require_admin_user),
 ):
     """
     Identify products with persistent zero forecasts.
@@ -219,7 +257,7 @@ class RootCauseAnalysisResponse(BaseModel):
 def analyze_zero_forecast_root_causes(
     product_ids: Optional[List[int]] = Query(None, description="Specific product IDs to analyze (if None, uses flagged products)"),
     db: Session = Depends(get_db),
-    _: None = Depends(require_admin_mode),
+    _admin_user=Depends(require_admin_user),
 ):
     """
     Analyze root causes for products with zero forecasts.
@@ -231,10 +269,9 @@ def analyze_zero_forecast_root_causes(
     - Feature Pipeline: NaN-dominated features, lag computation failing
     - Bug: Wrong model selected, predictions overwritten
     """
-    # If no product_ids provided, get flagged products from detection endpoint
+    # If no product_ids provided, get flagged products using helper function
     if product_ids is None:
-        detection_response = detect_zero_forecasts(db=db, _=None)
-        product_ids = detection_response.flagged_product_ids
+        product_ids = _detect_zero_forecast_product_ids(db=db)
     
     if not product_ids:
         return RootCauseAnalysisResponse(products=[])
@@ -823,7 +860,7 @@ def deep_investigate_zero_forecasts(
     product_ids: Optional[List[int]] = Query(None, description="Specific product IDs to investigate"),
     bakery_id: Optional[int] = Query(None, description="Bakery ID to filter products"),
     db: Session = Depends(get_db),
-    _: None = Depends(require_admin_mode),
+    _admin_user=Depends(require_admin_user),
 ):
     """
     Deep investigation into products with zero forecasts.

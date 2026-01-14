@@ -98,6 +98,25 @@ async def get_current_user(
     return user
 
 
+async def require_admin_user(
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """
+    Dependency that requires the current user to be an admin.
+    
+    Always checks the database user record (never trusts JWT claims).
+    Raises 403 Forbidden if user is not an admin.
+    
+    Returns the User object (guaranteed to be admin).
+    """
+    if not current_user.is_admin:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Admin access required",
+        )
+    return current_user
+
+
 async def set_user_state(
     request: Request,
     current_user: User = Depends(get_current_user),

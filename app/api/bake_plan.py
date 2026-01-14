@@ -172,10 +172,13 @@ def get_bake_plan(
                 while forecast_attempts < max_attempts and forecast is None:
                     try:
                         forecast_attempts += 1
+                        # Use settings.debug_zero_forecasts for non-authenticated endpoints
+                        include_debug = settings.debug_zero_forecasts
                         forecast = get_forecast_for_product(
                             product_id=product_id,
                             days_ahead=days_needed,
                             db=db,
+                            include_debug=include_debug,
                         )
                         
                         # Validate forecast has points

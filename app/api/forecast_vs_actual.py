@@ -17,6 +17,7 @@ from app.services.daily_forecast_service import (
     get_product_daily_forecasts,
     upsert_product_daily_forecasts,
 )
+from app.core.config import settings
 from app.schemas.forecast_vs_actual import (
     ForecastVsActualPoint,
     ForecastVsActualResponse,
@@ -148,10 +149,13 @@ def get_forecast_vs_actual(
         try:
             # Calculate days_ahead for on-demand forecast
             days_ahead = (end_date - start_date).days + 1
+            # Use settings.debug_zero_forecasts for non-authenticated endpoints
+            include_debug = settings.debug_zero_forecasts
             forecast_out = get_forecast_for_product(
                 product_id=product_id,
                 days_ahead=days_ahead,
                 db=db,
+                include_debug=include_debug,
             )
             upsert_product_daily_forecasts(
                 db,

@@ -5,7 +5,8 @@ from pydantic import BaseModel
 from typing import Optional
 
 from app.database.database import get_db
-from app.api.auth import set_user_state
+from app.api.auth import get_current_user
+from app.models import User
 from app.ml.inference.forecast_service import get_forecast_for_product
 from app.schemas import sales_record
 from app.models.product import Product
@@ -36,7 +37,7 @@ def forecast_product_sales(
     product_id: int,
     forecast_request: ForecastRequest,
     db: Session = Depends(get_db),
-    current_user = Depends(set_user_state),
+    current_user: User = Depends(get_current_user),
 ):
     """
     Generate a Prophet-based forecast for a single product.
@@ -56,11 +57,15 @@ def forecast_product_sales(
         f"POST_RETRIEVAL_ENTRY: product_id={product_id}, horizon_days={horizon_days}, bakery_id={bakery_id}"
     )
 
+    # Determine if debug fields should be included
+    include_debug = current_user.is_admin or settings.debug_zero_forecasts
+    
     try:
         forecast_result = get_forecast_for_product(
             product_id=product_id,
             days_ahead=horizon_days,
             db=db,
+            include_debug=include_debug,
         )
         
         # POST_RESULT_RAW: Log from forecast_result (after get_forecast_for_product call)

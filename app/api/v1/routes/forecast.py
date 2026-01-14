@@ -3,8 +3,10 @@ from sqlalchemy.orm import Session
 import logging
 
 from app.database.database import get_db
-from app.api.auth import set_user_state
+from app.api.auth import set_user_state, get_current_user
+from app.models import User
 from app.ml.inference.forecast_service import get_forecast_for_product
+from app.core.config import settings
 from app.schemas.forecast import ProductForecastResponse, ProductForecastPoint
 from app.crud import product as crud_product
 from app.core.rate_limiter import limiter
@@ -37,10 +39,14 @@ def get_product_forecast(
     if not product:
         raise HTTPException(status_code=404, detail="Product not found")
 
+    # Determine if debug fields should be included
+    include_debug = current_user.is_admin or settings.debug_zero_forecasts
+    
     forecast = get_forecast_for_product(
         product_id=product_id,
         days_ahead=horizon,
         db=db,
+        include_debug=include_debug,
     )
     
     # Diagnostic: Log before serialization

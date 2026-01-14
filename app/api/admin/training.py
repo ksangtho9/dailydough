@@ -23,7 +23,7 @@ from app.ml.forecast_service import ForecastService
 from app.services.daily_forecast_service import upsert_product_daily_forecasts
 from app.services.admin_training_jobs import job_manager, TrainingError, CancelledError
 from app.models import ModelRun
-from app.api.auth import set_user_state
+from app.api.auth import set_user_state, require_admin_user
 from app.core.rate_limiter import limiter
 import numpy as np
 
@@ -33,15 +33,6 @@ router = APIRouter(
     prefix="/admin/training",
     tags=["admin-training"],
 )
-
-
-def require_admin_mode():
-    """Check if admin mode is enabled."""
-    if not settings.admin_mode_enabled:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Admin mode is not enabled. Set ADMIN_MODE_ENABLED=true to enable."
-        )
 
 
 class RetrainRequest(BaseModel):
@@ -429,13 +420,13 @@ async def start_retrain(
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user=Depends(set_user_state),
+    _admin_user=Depends(require_admin_user),
 ):
     """
     Start a retrain job for all products or selected products.
     
     Returns 409 Conflict if a job is already running.
     """
-    require_admin_mode()
     
     # Check if job is already running
     current_job = job_manager.get_current_job()
@@ -498,9 +489,9 @@ async def start_retrain(
 async def get_training_status(
     job_id: Optional[str] = Query(None, description="Job ID to check. If not provided, returns current/last job."),
     db: Session = Depends(get_db),
+    _admin_user=Depends(require_admin_user),
 ):
     """Get training job status."""
-    require_admin_mode()
     
     if job_id:
         job_state = job_manager.get_job(job_id)
@@ -542,9 +533,9 @@ async def get_training_status(
 async def cancel_training_job(
     job_id: Optional[str] = Query(None, description="Job ID to cancel. If not provided, cancels current job."),
     db: Session = Depends(get_db),
+    _admin_user=Depends(require_admin_user),
 ):
     """Cancel a running training job."""
-    require_admin_mode()
     
     if job_id is None:
         current_job = job_manager.get_current_job()
