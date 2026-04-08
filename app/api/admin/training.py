@@ -411,9 +411,7 @@ def run_training_job(
     "/retrain",
     response_model=RetrainResponse,
     status_code=status.HTTP_202_ACCEPTED,
-    include_in_schema=False,  # Exclude from OpenAPI schema due to SlowAPI decorator interaction issue
 )
-@limiter.limit("1/5minutes")  # Rate limit: 1 request per 5 minutes per authenticated user
 async def start_retrain(
     request: Request,
     retrain_request: RetrainRequest,

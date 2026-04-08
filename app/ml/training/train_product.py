@@ -432,7 +432,8 @@ def train_product(
             raise CancelledError("Training cancelled by user")
         
         # Feature pruning (adaptive: drop bottom 10%) - only for XGBoost
-        if model_name == "xgboost" and train_result.model.feature_cols is not None:
+        # Use train_result.model_name (actual) not model_name (requested) — guardrail may have fallen back
+        if train_result.model_name == "xgboost" and train_result.model.feature_cols is not None:
             from app.ml.feature_selection import compute_feature_importance, prune_features_adaptive
             
             # Get training data with features

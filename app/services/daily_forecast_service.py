@@ -107,13 +107,14 @@ def _upsert_product_daily_forecasts_internal(
         
         try:
             yhat = float(point.yhat)
-            # Validate yhat is a valid number (not NaN, not infinite)
-            validation_result = np.isfinite(yhat) and yhat >= 0
-            if not validation_result:
+            # Validate yhat is a valid finite number; clamp negatives to 0 so stale zeros are overwritten
+            if not np.isfinite(yhat):
                 logger.warning(
-                    f"Skipping forecast for product_id={product_id}, date={point_date} - invalid yhat value: {yhat}"
+                    f"Skipping forecast for product_id={product_id}, date={point_date} - non-finite yhat value: {yhat}"
                 )
                 continue
+            yhat = max(yhat, 0.0)
+            validation_result = True
         except (ValueError, TypeError) as e:
             logger.warning(
                 f"Skipping forecast for product_id={product_id}, date={point_date} - cannot convert yhat to float: {e}"
@@ -320,12 +321,13 @@ def _upsert_product_daily_forecasts_internal(
             
             try:
                 yhat = float(point.yhat)
-                # Validate yhat is a valid number (not NaN, not infinite)
-                if not (np.isfinite(yhat) and yhat >= 0):
+                # Clamp negatives to 0; only skip truly non-finite values (NaN/inf)
+                if not np.isfinite(yhat):
                     logger.warning(
-                        f"Skipping forecast for product_id={product_id}, date={point_date} - invalid yhat value: {yhat}"
+                        f"Skipping forecast for product_id={product_id}, date={point_date} - non-finite yhat value: {yhat}"
                     )
                     continue
+                yhat = max(yhat, 0.0)
             except (ValueError, TypeError) as e:
                 logger.warning(
                     f"Skipping forecast for product_id={product_id}, date={point_date} - cannot convert yhat to float: {e}"
@@ -394,9 +396,9 @@ def _upsert_product_daily_forecasts_internal(
                         continue  # Skip invalid forecasts
                     try:
                         yhat = float(point.yhat)
-                        if not (np.isfinite(yhat) and yhat >= 0):
-                            continue  # Skip invalid values
-                        row.yhat = yhat
+                        if not np.isfinite(yhat):
+                            continue  # Skip NaN/inf
+                        row.yhat = max(yhat, 0.0)
                     except (ValueError, TypeError):
                         continue  # Skip if conversion fails
                     

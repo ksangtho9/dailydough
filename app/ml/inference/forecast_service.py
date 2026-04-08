@@ -89,10 +89,6 @@ def get_forecast_for_product(
         product_name=result.product_name,
         horizon_days=result.horizon_days,
         points=points,
-        # Include debug fields if requested
-        debug_forecast_run_id=forecast_run_id if include_debug else None,
-        debug_source=result.source if include_debug else None,
-        debug_points_first_3=[p.yhat for p in result.points[:3]] if include_debug and result.points else None,
     )
     
     return forecast_out

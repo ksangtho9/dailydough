@@ -124,12 +124,13 @@ def train_all_products(
                                     if model_run:
                                         # Get feature_version from ModelRun
                                         feature_version = model_run.feature_version
-                                        model_name = forecast_result.model_name or model_run.selected_model_type
-                                        
+                                        # Use a local variable to avoid shadowing the outer model_name parameter
+                                        result_model_name = forecast_result.model_name or model_run.selected_model_type
+
                                         # Compute future slice stats
                                         raw_prediction_stats_future = _compute_raw_prediction_stats_future(
                                             forecast_result.raw_yhat_values,
-                                            model_name,
+                                            result_model_name,
                                             feature_version,
                                         )
                                         

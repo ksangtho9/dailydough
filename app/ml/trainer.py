@@ -385,9 +385,10 @@ class ModelTrainer:
         mean_raw_yhat = float(raw_yhat.mean()) if len(raw_yhat) > 0 else 0.0
         mean_y = float(y_train.mean()) if len(y_train) > 0 else 0.0
         
-        # Robust trigger: ALL conditions must be true
-        if (training_zero_pct < 30 and 
-            yhat_zero_pct > 60 and 
+        # Trigger based on prediction quality alone — training sparsity should not protect a bad model.
+        # Previously required training_zero_pct < 30, which meant sparse-data products (>30% zeros
+        # in training) could never trigger the guardrail even when producing mostly-zero predictions.
+        if (yhat_zero_pct > 60 and
             (raw_neg_pct > 50 or (mean_y > 0 and mean_raw_yhat < 0.2 * mean_y))):
             return True, {
                 "training_zero_pct": training_zero_pct,

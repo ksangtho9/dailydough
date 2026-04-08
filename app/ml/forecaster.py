@@ -118,23 +118,37 @@ class ProductForecaster:
         
         raw_yhat = forecast_df["yhat"].values
         stats = self._compute_raw_predictions_stats(raw_yhat)
-        
-        # Viability criteria: fail if >50% negative OR mean < 0
+
         raw_neg_pct = stats.get("raw_neg_pct", 0.0)
         mean_raw_yhat = stats.get("mean_raw_yhat", 0.0)
-        
-        is_viable = raw_neg_pct <= 50.0 and mean_raw_yhat >= 0.0
-        
+
+        # Also check clamped zero rate — catches the case where a few large positive
+        # predictions keep the mean positive, but the majority of days are negative
+        # (getting clamped to 0). These products look "ok" by mean/neg_pct but the
+        # stored forecast is mostly zeros.
+        clamped_yhat = np.maximum(raw_yhat, 0.0)
+        clamped_zero_pct = float((clamped_yhat == 0.0).sum() / len(clamped_yhat) * 100)
+
+        # Viability criteria: fail if >50% negative OR mean < 0 OR >60% clamped zeros
+        is_viable = raw_neg_pct <= 50.0 and mean_raw_yhat >= 0.0 and clamped_zero_pct <= 60.0
+
+        fail_reason = None
+        if not is_viable:
+            if raw_neg_pct > 50.0:
+                fail_reason = f"raw_neg_pct={raw_neg_pct:.1f}% > 50%"
+            elif mean_raw_yhat < 0.0:
+                fail_reason = f"mean_raw_yhat={mean_raw_yhat:.2f} < 0"
+            else:
+                fail_reason = f"clamped_zero_pct={clamped_zero_pct:.1f}% > 60%"
+
         diagnostics = {
             "raw_neg_pct": raw_neg_pct,
             "mean_raw_yhat": mean_raw_yhat,
             "min_raw_yhat": stats.get("min_raw_yhat"),
             "max_raw_yhat": stats.get("max_raw_yhat"),
+            "clamped_zero_pct": clamped_zero_pct,
             "is_viable": is_viable,
-            "reason": None if is_viable else (
-                f"raw_neg_pct={raw_neg_pct:.1f}% > 50%" if raw_neg_pct > 50.0
-                else f"mean_raw_yhat={mean_raw_yhat:.2f} < 0"
-            ),
+            "reason": fail_reason,
         }
         
         if not is_viable:
@@ -566,11 +580,18 @@ class ProductForecaster:
                             f"Prophet diagnostics: {prophet_diagnostics}"
                         )
                     else:
-                        # All fallbacks failed - log error but still return Prophet (better than nothing)
+                        # All fallbacks failed — returning clamped Prophet zeros is worse than no forecast.
+                        # Return empty so the caller can surface "no forecast available" instead of misleading zeros.
                         logger.error(
                             f"PROPHET_FALLBACK: product_id={ts.product_id}, "
-                            f"All fallbacks failed, using Prophet predictions despite viability failure. "
+                            f"All fallbacks failed after Prophet viability failure. Returning empty forecast. "
                             f"Prophet diagnostics: {prophet_diagnostics}"
+                        )
+                        return ForecastResult(
+                            product_id=ts.product_id,
+                            model_name="prophet",
+                            horizon_days=horizon_days,
+                            forecast_df=pd.DataFrame(),
                         )
                 
                 # Step 4: Log raw predictions before clamping (gated) - only for Prophet
