@@ -7,14 +7,13 @@ from __future__ import annotations
 import logging
 import time
 from functools import wraps
-from typing import Callable, TypeVar, ParamSpec
+from typing import Callable, TypeVar
 
 from sqlalchemy import exc as sa_exc
 import sqlite3
 
 logger = logging.getLogger("bakezy.db_retry")
 
-P = ParamSpec("P")
 R = TypeVar("R")
 
 
@@ -53,9 +52,9 @@ def retry_db_operation(
     Returns:
         Decorated function that retries on database locked errors
     """
-    def decorator(func: Callable[P, R]) -> Callable[P, R]:
+    def decorator(func: Callable[..., R]) -> Callable[..., R]:
         @wraps(func)
-        def wrapper(*args: P.args, **kwargs: P.kwargs) -> R:
+        def wrapper(*args, **kwargs) -> R:
             delay = initial_delay
             last_exception = None
             

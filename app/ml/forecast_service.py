@@ -551,7 +551,7 @@ class ForecastService:
         
         # Fix 3: Verify delivery is not in cleaned_ts.df before training
         from app.core.config import settings
-        if settings.debug_zero_forecasts or (product_id is not None and product_id in settings.debug_forecast_product_ids):
+        if settings.debug_zero_forecasts:
             if "delivery" in cleaned_ts.df.columns:
                 logger.error(
                     f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
@@ -636,7 +636,7 @@ class ForecastService:
         
         # Iteratively generate regressors for each future date
         from app.core.config import settings
-        should_log_iterative = settings.debug_zero_forecasts or (product_id is not None and product_id in settings.debug_forecast_product_ids)
+        should_log_iterative = settings.debug_zero_forecasts
         
         if should_log_iterative:
             logger.info(
@@ -930,7 +930,7 @@ class ForecastService:
         
         # D) Add validation logging (Fix 4: comprehensive diagnostics)
         from app.core.config import settings
-        if settings.debug_zero_forecasts or (product_id is not None and product_id in settings.debug_forecast_product_ids):
+        if settings.debug_zero_forecasts:
             sample_indices = [0, 1, 2] + [len(future_df) - 3, len(future_df) - 2, len(future_df) - 1]
             sample_indices = [i for i in sample_indices if 0 <= i < len(future_df)]
             
@@ -1020,7 +1020,7 @@ class ForecastService:
         
         # Final delivery check: Ensure cleaned_ts.df doesn't contain delivery before forecast
         from app.core.config import settings
-        if settings.debug_zero_forecasts or (product_id is not None and product_id in settings.debug_forecast_product_ids):
+        if settings.debug_zero_forecasts:
             if "delivery" in cleaned_ts.df.columns:
                 logger.error(
                     f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
@@ -1061,7 +1061,7 @@ class ForecastService:
         
         # Phase 2: Log model/hyperparams used in forecasting (gated by debug_zero_forecasts)
         from app.core.config import settings
-        if settings.debug_zero_forecasts or (product_id is not None and product_id in settings.debug_forecast_product_ids):
+        if settings.debug_zero_forecasts:
             final_model = forecast_result.model_name
             model_run_id = model_run.id if model_run else None
             trained_at = model_run.created_at.isoformat() if model_run and model_run.created_at else None
@@ -1089,7 +1089,7 @@ class ForecastService:
         
         # Fix 4: Check if forecast_df is empty or has invalid yhat values
         from app.core.config import settings
-        if settings.debug_zero_forecasts or (product_id is not None and product_id in settings.debug_forecast_product_ids):
+        if settings.debug_zero_forecasts:
             if df.empty:
                 logger.error(
                     f"ZERO_FORECAST_INVESTIGATION: product_id={product_id}, "
@@ -1142,42 +1142,6 @@ class ForecastService:
         if not df.empty and "yhat" in df.columns:
             raw_yhat_values = df["yhat"].values.copy()
 
-        # #region agent log
-        try:
-            import json
-            import time
-            from datetime import date as date_type
-            last_train_date = cleaned_ts.df["ds"].max().date() if not cleaned_ts.df.empty else None
-            today = date_type.today()
-            forecast_date_range = f"{df['ds'].min().date() if not df.empty else 'none'} to {df['ds'].max().date() if not df.empty else 'none'}"
-            sample_yhat_values = df["yhat"].head(5).tolist() if not df.empty and "yhat" in df.columns else []
-            zero_forecast_count = (df["yhat"] == 0.0).sum() if not df.empty and "yhat" in df.columns else 0
-            total_forecast_count = len(df) if not df.empty else 0
-            log_entry = {
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "I",
-                "location": "forecast_service.py:589",
-                "message": "Forecast generated - checking values",
-                "data": {
-                    "product_id": product_id,
-                    "last_train_date": last_train_date.isoformat() if last_train_date else None,
-                    "today": today.isoformat(),
-                    "horizon_days": horizon_days,
-                    "forecast_date_range": forecast_date_range,
-                    "total_forecast_count": total_forecast_count,
-                    "zero_forecast_count": int(zero_forecast_count),
-                    "sample_yhat_values": sample_yhat_values,
-                    "forecast_df_columns": list(df.columns) if not df.empty else []
-                },
-                "timestamp": int(time.time() * 1000)
-            }
-            with open(r"c:\Users\forfl\Documents\dailydough-1\.cursor\debug.log", "a", encoding="utf-8") as f:
-                f.write(json.dumps(log_entry) + "\n")
-        except Exception:
-            pass
-        # #endregion
-
         # 4) Predict spikes for forecast period
         # Use historical data with spike information for prediction
         historical_with_spikes = cleaned_ts.df.copy()
@@ -1220,30 +1184,6 @@ class ForecastService:
                     if pd.notna(yhat_numeric):
                         yhat_before_clamp = float(yhat_numeric)
                         yhat = max(0.0, yhat_before_clamp)  # Clamp non-negative
-                        # #region agent log
-                        if yhat == 0.0 and yhat_before_clamp < 0:
-                            try:
-                                import json
-                                import time
-                                log_entry = {
-                                    "sessionId": "debug-session",
-                                    "runId": "run1",
-                                    "hypothesisId": "K",
-                                    "location": "forecast_service.py:656",
-                                    "message": "Zero forecast from negative prediction",
-                                    "data": {
-                                        "product_id": product_id,
-                                        "date": date_str,
-                                        "yhat_before_clamp": yhat_before_clamp,
-                                        "yhat_after_clamp": yhat
-                                    },
-                                    "timestamp": int(time.time() * 1000)
-                                }
-                                with open(r"c:\Users\forfl\Documents\dailydough-1\.cursor\debug.log", "a", encoding="utf-8") as f:
-                                    f.write(json.dumps(log_entry) + "\n")
-                            except Exception:
-                                pass
-                        # #endregion
                     else:
                         yhat = None  # Invalid conversion
                 else:

@@ -190,30 +190,6 @@ def train_all_products(
                                 )
                                 result["forecast_precomputation_failed"] = True
                                 result["forecast_error"] = str(e)
-                                # #region agent log
-                                try:
-                                    import json
-                                    import time
-                                    log_entry = {
-                                        "sessionId": "debug-session",
-                                        "runId": "run1",
-                                        "hypothesisId": "H",
-                                        "location": "train_all_products.py:52",
-                                        "message": "Forecast precomputation failed after retries",
-                                        "data": {
-                                            "product_id": product.id,
-                                            "product_name": product.name,
-                                            "error": str(e),
-                                            "error_type": type(e).__name__,
-                                            "attempts": forecast_attempts
-                                        },
-                                        "timestamp": int(time.time() * 1000)
-                                    }
-                                    with open(r"c:\Users\forfl\Documents\dailydough-1\.cursor\debug.log", "a", encoding="utf-8") as f:
-                                        f.write(json.dumps(log_entry) + "\n")
-                                except Exception:
-                                    pass
-                                # #endregion
                             else:
                                 # Retry - log warning but continue
                                 logger.warning(
@@ -221,31 +197,6 @@ def train_all_products(
                                     f"failed for product_id={product.id}, product_name={product.name}: {e}. Retrying...",
                                     exc_info=True
                                 )
-                                # #region agent log
-                                try:
-                                    import json
-                                    import time
-                                    log_entry = {
-                                        "sessionId": "debug-session",
-                                        "runId": "run1",
-                                        "hypothesisId": "H",
-                                        "location": "train_all_products.py:52",
-                                        "message": "Forecast precomputation attempt failed, retrying",
-                                        "data": {
-                                            "product_id": product.id,
-                                            "product_name": product.name,
-                                            "error": str(e),
-                                            "error_type": type(e).__name__,
-                                            "attempt": forecast_attempts,
-                                            "max_attempts": max_forecast_attempts
-                                        },
-                                        "timestamp": int(time.time() * 1000)
-                                    }
-                                    with open(r"c:\Users\forfl\Documents\dailydough-1\.cursor\debug.log", "a", encoding="utf-8") as f:
-                                        f.write(json.dumps(log_entry) + "\n")
-                                except Exception:
-                                    pass
-                                # #endregion
                 else:
                     logger.warning(
                         f"Skipping forecast precomputation for product_id={product.id}, product_name={product.name} "

@@ -23,6 +23,7 @@ def _upsert_product_daily_forecasts_internal(
     bakery_id: int,
     product_id: int,
     forecast: ProductForecastOut,
+    overwrite: bool = False,
 ) -> None:
     """
     Internal function that performs the actual database operations.
@@ -68,33 +69,6 @@ def _upsert_product_daily_forecasts_internal(
         )
     
     for point_date, point in points_by_date.items():
-        # #region agent log
-        try:
-            import json
-            import time
-            from datetime import date as date_type
-            today = date_type.today()
-            log_entry = {
-                "sessionId": "debug-session",
-                "runId": "run1",
-                "hypothesisId": "H",
-                "location": "daily_forecast_service.py:51",
-                "message": "Processing forecast point for storage",
-                "data": {
-                    "product_id": product_id,
-                    "point_date": point_date.isoformat() if hasattr(point_date, 'isoformat') else str(point_date),
-                    "today": today.isoformat(),
-                    "is_future_date": point_date >= today if hasattr(point_date, '__ge__') else None,
-                    "yhat": point.yhat
-                },
-                "timestamp": int(time.time() * 1000)
-            }
-            with open(r"c:\Users\forfl\Documents\dailydough-1\.cursor\debug.log", "a", encoding="utf-8") as f:
-                f.write(json.dumps(log_entry) + "\n")
-        except Exception:
-            pass
-        # #endregion
-        
         # Step 6: Log raw yhat before storage (gated)
         raw_yhat_before_storage = point.yhat
         
@@ -159,13 +133,15 @@ def _upsert_product_daily_forecasts_internal(
                 yhat_upper=yhat_upper,
             )
             db.add(row)
-            # Ensure subsequent points for the same date (if any) update
-            # this row instead of attempting a second INSERT.
             existing_by_date[point_date] = row
-        else:
+        elif overwrite:
             row.yhat = yhat
             row.yhat_lower = yhat_lower
             row.yhat_upper = yhat_upper
+        else:
+            # Preserve the original forecast — overwriting would corrupt evaluation
+            # accuracy since re-training after uploading actuals changes the model.
+            continue
             
             # Step 6: Verify stored value matches input (gated, after update)
             if should_log:
@@ -364,10 +340,12 @@ def _upsert_product_daily_forecasts_internal(
                 )
                 db.add(row)
                 existing_by_date[point_date] = row
-            else:
+            elif overwrite:
                 row.yhat = yhat
                 row.yhat_lower = yhat_lower
                 row.yhat_upper = yhat_upper
+            else:
+                continue
         
         # Try flush again - if it still fails with IntegrityError, 
         # another concurrent request inserted the same row, so just update it
@@ -446,19 +424,17 @@ def upsert_product_daily_forecasts(
     *,
     product: Product,
     forecast: ProductForecastOut,
+    overwrite: bool = False,
 ) -> None:
     """
-    Upsert daily forecast rows for a single product based on a ProductForecastOut.
+    Write daily forecast rows for a single product.
 
-    - Only future dates (>= today) are written.
-    - Existing rows for (bakery_id, product_id, date) are updated in-place.
-    - Automatically retries on "database is locked" errors with exponential backoff.
-    
-    Note: Extracts product_id and bakery_id before any database operations to avoid
-    accessing ORM objects after potential rollback.
+    By default (overwrite=False) existing rows are preserved — this ensures a
+    forecast generated before actuals are uploaded is never silently mutated by a
+    later retrain that now has those actuals in its training set.
+
+    Pass overwrite=True only when explicitly retraining so the cache refreshes.
     """
-    # Extract IDs before any database operations to avoid accessing ORM objects
-    # after rollback in case of errors
     bakery_id = product.bakery_id
     product_id = product.id
 
@@ -468,6 +444,7 @@ def upsert_product_daily_forecasts(
             bakery_id=bakery_id,
             product_id=product_id,
             forecast=forecast,
+            overwrite=overwrite,
         )
     except sa_exc.IntegrityError:
         # IntegrityError should be handled internally, but if it propagates,

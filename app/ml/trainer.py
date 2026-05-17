@@ -47,12 +47,7 @@ class ModelTrainer:
         self.feature_engineer = feature_engineer or FeatureEngineer()
     
     def _should_log_deep_diagnostics(self, product_id: Optional[int]) -> bool:
-        """Check if deep diagnostic logging should be enabled for this product."""
-        if settings.debug_zero_forecasts:
-            return True
-        if product_id is not None and product_id in settings.debug_forecast_product_ids:
-            return True
-        return False
+        return settings.debug_zero_forecasts
     
     def _compute_feature_version(self, feature_cols: list[str]) -> str:
         """Compute a version identifier for feature engineering based on feature columns."""
@@ -666,42 +661,14 @@ class ModelTrainer:
             if model_run:
                 model_run_exists = True
                 last_trained_at = model_run.created_at
-                # #region agent log
-                try:
-                    import json
-                    now_utc = datetime.now(timezone.utc)
-                    created_at = model_run.created_at
-                    now_aware = now_utc.tzinfo is not None
-                    created_aware = created_at.tzinfo is not None if created_at else None
-                    with open(r"c:\Users\forfl\Documents\dailydough-1\.cursor\debug.log", "a", encoding="utf-8") as f:
-                        f.write(json.dumps({"id":f"log_{int(time.time()*1000)}","timestamp":int(time.time()*1000),"location":"trainer.py:665","message":"ModelRun datetime check","data":{"product_id":product_id,"now_utc_type":type(now_utc).__name__,"now_aware":now_aware,"created_at_type":type(created_at).__name__,"created_aware":created_aware,"created_at_repr":str(created_at) if created_at else None},"sessionId":"debug-session","runId":"run1","hypothesisId":"A"}) + "\n")
-                except Exception:
-                    pass
-                # #endregion
                 # Check if stale (>7 days old)
                 # Handle timezone-aware vs naive datetime mismatch
                 now_utc = datetime.now(timezone.utc)
                 created_at = model_run.created_at
                 # If created_at is naive, assume it's UTC and make it aware
                 if created_at.tzinfo is None:
-                    # #region agent log
-                    try:
-                        import json
-                        with open(r"c:\Users\forfl\Documents\dailydough-1\.cursor\debug.log", "a", encoding="utf-8") as f:
-                            f.write(json.dumps({"id":f"log_{int(time.time()*1000)}","timestamp":int(time.time()*1000),"location":"trainer.py:675","message":"Converting naive datetime to UTC","data":{"product_id":product_id,"created_at_before":str(created_at)},"sessionId":"debug-session","runId":"run1","hypothesisId":"B"}) + "\n")
-                    except Exception:
-                        pass
-                    # #endregion
                     created_at = created_at.replace(tzinfo=timezone.utc)
                 days_since_training = (now_utc - created_at).days
-                # #region agent log
-                try:
-                    import json
-                    with open(r"c:\Users\forfl\Documents\dailydough-1\.cursor\debug.log", "a", encoding="utf-8") as f:
-                        f.write(json.dumps({"id":f"log_{int(time.time()*1000)}","timestamp":int(time.time()*1000),"location":"trainer.py:680","message":"Days since training calculated","data":{"product_id":product_id,"days_since_training":days_since_training,"created_at_after":str(created_at)},"sessionId":"debug-session","runId":"run1","hypothesisId":"C"}) + "\n")
-                except Exception:
-                    pass
-                # #endregion
                 if days_since_training > settings.hyperparam_reuse_days:
                     if self._should_log_deep_diagnostics(product_id):
                         logger.warning(
@@ -832,8 +799,8 @@ class ModelTrainer:
             # Optimize hyperparameters if requested (with reduced settings in auto mode)
             if optimize_with_wape:
                 # Use reduced settings for retraining (auto mode)
-                n_splits = settings.cv_splits_retrain if optimize_hyperparameters == "auto" else 3
-                max_iter = settings.prophet_opt_max_iter_retrain if optimize_hyperparameters == "auto" else None
+                n_splits = 2 if optimize_hyperparameters == "auto" else 3
+                max_iter = 4 if optimize_hyperparameters == "auto" else None
                 
                 opt_result = optimize_prophet_hyperparameters(
                     ts=CleanedTimeSeries(product_id=ts.product_id, df=df, shelf_life_days=ts.shelf_life_days),
@@ -922,8 +889,8 @@ class ModelTrainer:
             # Optimize hyperparameters if requested (with reduced settings in auto mode)
             if optimize_with_wape:
                 # Use reduced settings for retraining (auto mode)
-                n_splits = settings.cv_splits_retrain if optimize_hyperparameters == "auto" else 3
-                max_iter = settings.xgb_opt_max_iter_retrain if optimize_hyperparameters == "auto" else 27
+                n_splits = 2 if optimize_hyperparameters == "auto" else 3
+                max_iter = 9 if optimize_hyperparameters == "auto" else 27
                 
                 opt_result = optimize_xgboost_hyperparameters(
                     ts=CleanedTimeSeries(product_id=ts.product_id, df=df, shelf_life_days=ts.shelf_life_days),
@@ -1104,8 +1071,8 @@ class ModelTrainer:
             # Train Prophet
             if optimize_with_wape:
                 # Use reduced settings for retraining (auto mode)
-                n_splits = settings.cv_splits_retrain if optimize_hyperparameters == "auto" else 3
-                max_iter = settings.prophet_opt_max_iter_retrain if optimize_hyperparameters == "auto" else None
+                n_splits = 2 if optimize_hyperparameters == "auto" else 3
+                max_iter = 4 if optimize_hyperparameters == "auto" else None
                 
                 prophet_opt_result = optimize_prophet_hyperparameters(
                     ts=CleanedTimeSeries(product_id=ts.product_id, df=df, shelf_life_days=ts.shelf_life_days),
@@ -1145,8 +1112,8 @@ class ModelTrainer:
             # Train XGBoost
             if optimize_with_wape:
                 # Use reduced settings for retraining (auto mode)
-                n_splits = settings.cv_splits_retrain if optimize_hyperparameters == "auto" else 3
-                max_iter = settings.xgb_opt_max_iter_retrain if optimize_hyperparameters == "auto" else 27
+                n_splits = 2 if optimize_hyperparameters == "auto" else 3
+                max_iter = 9 if optimize_hyperparameters == "auto" else 27
                 
                 xgb_opt_result = optimize_xgboost_hyperparameters(
                     ts=CleanedTimeSeries(product_id=ts.product_id, df=df, shelf_life_days=ts.shelf_life_days),

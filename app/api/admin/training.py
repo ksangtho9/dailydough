@@ -16,7 +16,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.database.database import get_db, SessionLocal
-from app.models import Product
+from app.models import Product, DailyForecast
 from app.ml.training.train_product import train_product, _compute_raw_prediction_stats_future
 from app.ml.inference.forecast_service import get_forecast_for_product
 from app.ml.forecast_service import ForecastService
@@ -33,6 +33,18 @@ router = APIRouter(
     prefix="/admin/training",
     tags=["admin-training"],
 )
+
+
+class ClearCacheResponse(BaseModel):
+    cleared: int
+
+
+@router.post("/clear-forecast-cache", response_model=ClearCacheResponse)
+def clear_forecast_cache(_admin_user=Depends(require_admin_user)):
+    count = len(ForecastService._forecast_cache)
+    ForecastService._forecast_cache.clear()
+    logger.info("Forecast cache cleared: %d entries removed", count)
+    return ClearCacheResponse(cleared=count)
 
 
 class RetrainRequest(BaseModel):
@@ -123,6 +135,15 @@ def run_training_job(
             logger.info(f"Training job {job_id}: No products found, completing immediately")
             job_manager.complete_job(job_id, status="completed")
             return
+
+        # Clear cached forecasts for these products so retraining produces fresh values.
+        deleted = (
+            db.query(DailyForecast)
+            .filter(DailyForecast.product_id.in_(resolved_product_ids))
+            .delete(synchronize_session=False)
+        )
+        db.commit()
+        logger.info(f"Training job {job_id}: Cleared {deleted} cached forecast rows before retraining")
         
         total = len(resolved_product_ids)
         product_ids = resolved_product_ids  # Use resolved list for training loop
@@ -202,7 +223,7 @@ def run_training_job(
                             forecast_result = forecast_service.generate_prophet_forecast_for_product(
                                 db=db,
                                 product_id=product_id,
-                                horizon_days=60,
+                                horizon_days=400,
                             )
                             
                             if forecast_result and forecast_result.points:
@@ -241,6 +262,7 @@ def run_training_job(
                                     db,
                                     product=product,
                                     forecast=forecast_out,
+                                    overwrite=True,
                                 )
                                 
                                 # Phase 1b: Compute and store future slice raw prediction stats

@@ -1,3 +1,4 @@
+from __future__ import annotations
 from pydantic import BaseModel
 from datetime import date
 
@@ -29,7 +30,7 @@ class ProductSalesPoint(BaseModel):
     quantity: float
 
     class Config:
-        orm_mode = True
+        from_attributes = True
 
 
 class ProductSalesSeries(BaseModel):

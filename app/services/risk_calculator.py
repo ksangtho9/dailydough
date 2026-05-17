@@ -1,3 +1,4 @@
+from __future__ import annotations
 """
 Risk calculator for bakeplan waste and stockout risk metrics.
 

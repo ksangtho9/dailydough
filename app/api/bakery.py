@@ -1,3 +1,4 @@
+from __future__ import annotations
 from typing import Optional
 from datetime import date
 import logging
@@ -6,8 +7,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from app.database.database import get_db
-from app.models import Bakery, SalesRecord, Product, ForecastMetrics, DailyForecast
+from app.models import Bakery, SalesRecord, Product, ForecastMetrics, DailyForecast, User
 from app.user_schemas import BakeryCreate, BakeryOut
+from app.api.auth import get_current_user
 from app.core.config import settings
 from app.services.sales_ingestion import (
     SchemaInferenceError,
@@ -27,11 +29,13 @@ router = APIRouter(
 def create_bakery(
     bakery_in: BakeryCreate,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
     bakery = Bakery(
         name=bakery_in.name,
         location=bakery_in.location,
         timezone=bakery_in.timezone or "UTC",
+        user_id=current_user.id,
     )
     db.add(bakery)
     try:
@@ -49,30 +53,22 @@ def create_bakery(
 
 
 @router.get("/", response_model=list[BakeryOut])
-def list_bakeries(db: Session = Depends(get_db)):
-    return db.query(Bakery).all()
+def list_bakeries(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    return db.query(Bakery).filter(Bakery.user_id == current_user.id).all()
 
 
 @router.delete("/{bakery_id}", status_code=status.HTTP_200_OK)
 def delete_bakery(
     bakery_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """
-    Delete a bakery and all associated data.
-    
-    This will cascade delete:
-    - Products (and their ForecastMetrics, ModelRuns, WalkForwardResults)
-    - SalesRecords
-    - Events
-    - Promotions
-    - WeatherData
-    
-    Also manually deletes:
-    - DailyForecast records (no cascade relationship)
-    """
-    # Verify bakery exists
-    bakery = db.query(Bakery).filter(Bakery.id == bakery_id).first()
+    bakery = db.query(Bakery).filter(
+        Bakery.id == bakery_id, Bakery.user_id == current_user.id
+    ).first()
     if not bakery:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -110,13 +106,11 @@ async def upload_sales_for_bakery(
     upload_mode: Optional[str] = Form("append", description="Upload mode: 'append' or 'replace'"),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """
-    Upload sales CSV for a specific bakery. The bakery_id from the URL will be
-    used as the context bakery for rows that don't have bakery_id in the CSV.
-    """
-    # Verify bakery exists
-    bakery = db.query(Bakery).filter(Bakery.id == bakery_id).first()
+    bakery = db.query(Bakery).filter(
+        Bakery.id == bakery_id, Bakery.user_id == current_user.id
+    ).first()
     if not bakery:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -205,15 +199,11 @@ def delete_sales_for_bakery(
     date_to: Optional[date] = Query(None, description="Delete records up to this date (inclusive)"),
     product_id: Optional[int] = Query(None, description="Delete records for this product only"),
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """
-    Delete sales records for a bakery. Supports optional filters:
-    - date_from/date_to: Delete records within date range
-    - product_id: Delete records for a specific product
-    - If no filters provided, deletes all sales for the bakery
-    """
-    # Verify bakery exists
-    bakery = db.query(Bakery).filter(Bakery.id == bakery_id).first()
+    bakery = db.query(Bakery).filter(
+        Bakery.id == bakery_id, Bakery.user_id == current_user.id
+    ).first()
     if not bakery:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -273,14 +263,11 @@ def delete_sales_for_bakery(
 def delete_forecast_metrics_for_bakery(
     bakery_id: int,
     db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
 ):
-    """
-    Delete all ForecastMetrics for all products in a bakery.
-    This effectively resets the model state for the bakery, allowing fresh training
-    when new data is uploaded. Useful when starting fresh or after major data changes.
-    """
-    # Verify bakery exists
-    bakery = db.query(Bakery).filter(Bakery.id == bakery_id).first()
+    bakery = db.query(Bakery).filter(
+        Bakery.id == bakery_id, Bakery.user_id == current_user.id
+    ).first()
     if not bakery:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

@@ -55,7 +55,7 @@ def seed_demo_endpoint(current_user=Depends(get_current_user)):
 
 @router.post("/import-sales", status_code=status.HTTP_200_OK)
 async def import_demo_sales(
-    mode: str = Query("append", regex="^(append|replace)$"),
+    mode: str = Query("append", pattern="^(append|replace)$"),
     file: UploadFile = File(...),
     column_mapping: Optional[str] = Form(None),
     current_user=Depends(get_current_user),

@@ -16,6 +16,7 @@ let cachedAdminStatus: boolean | null = null;
  */
 export function isDevMode(): boolean {
   if (typeof window === "undefined") return false;
+  if (!isAdminMode()) return false;
   const debugUi = localStorage.getItem(DEBUG_UI_KEY);
   return debugUi === "true";
 }
@@ -38,9 +39,11 @@ export async function refreshAdminStatus(): Promise<boolean> {
     const { getCurrentUser } = await import("./api");
     const user = await getCurrentUser();
     cachedAdminStatus = user.is_admin;
+    if (!user.is_admin) {
+      localStorage.removeItem(DEBUG_UI_KEY);
+    }
     return user.is_admin;
   } catch (error) {
-    // If API call fails (e.g., not authenticated), assume not admin
     cachedAdminStatus = false;
     return false;
   }

@@ -1,27 +1,19 @@
 "use client";
 
-import { isAdminMode } from "@/lib/admin";
+import { useState, useEffect } from "react";
+import { refreshAdminStatus, isAdminMode } from "@/lib/admin";
 
 interface AdminOnlyProps {
   children: React.ReactNode;
 }
 
-/**
- * AdminOnly component - renders children only if admin mode is enabled.
- * 
- * Usage:
- *   <AdminOnly>
- *     <button>Admin Button</button>
- *   </AdminOnly>
- */
 export function AdminOnly({ children }: AdminOnlyProps) {
-  if (!isAdminMode()) {
-    return null;
-  }
+  const [isAdmin, setIsAdmin] = useState(isAdminMode());
 
+  useEffect(() => {
+    refreshAdminStatus().then(setIsAdmin);
+  }, []);
+
+  if (!isAdmin) return null;
   return <>{children}</>;
 }
-
-
-
-

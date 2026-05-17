@@ -25,16 +25,7 @@ type Bakery = {
   id: number;
   name: string;
 };
-type ForecastPoint = {
-  ds: string;
-  yhat: number;
-  yhat_lower: number;
-  yhat_upper: number;
-};
-
-type RecommendationsMap = Record<number, number | null>;
-
-type SortBy = "id" | "sku" | "p50";
+type SortBy = "id" | "sku";
 type SortDir = "asc" | "desc";
 
 const BAKERY_STORAGE_KEY = "current_bakery_id";
@@ -48,10 +39,6 @@ export default function ProductsPage() {
 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-
-  const [recommendations, setRecommendations] =
-    useState<RecommendationsMap>({});
-  const [recsLoading, setRecsLoading] = useState(false);
 
   // Default sort: by SKU so it matches the order from your data spreadsheet.
   const [sortBy, setSortBy] = useState<SortBy>("sku");
@@ -109,24 +96,6 @@ export default function ProductsPage() {
         console.error("[ProductsPage] Failed to log shelf life summary", logErr);
       }
 
-      if (productData.length > 0) {
-        // Fetch recommendations in the background so the table renders quickly.
-        // The shimmer UI will show while per-product forecasts are loading.
-        setRecsLoading(true);
-        fetchRecommendations(productData)
-          .then((recs) => {
-            setRecommendations(recs);
-          })
-          .catch((err) => {
-            console.error("Failed to load recommendations", err);
-            // Keep any existing recommendations; rows will just show "—".
-          })
-          .finally(() => {
-            setRecsLoading(false);
-          });
-      } else {
-        setRecommendations({});
-      }
     } catch (err: any) {
       console.error(err);
       setError(err.message || "Failed to load products");
@@ -204,7 +173,6 @@ export default function ProductsPage() {
     }
 
     if (sortBy === "sku") {
-      // Sort by SKU alphabetically, null/empty values go to the end
       const aSku = a.sku || "";
       const bSku = b.sku || "";
       if (!aSku && !bSku) return 0;
@@ -214,16 +182,7 @@ export default function ProductsPage() {
       return sortDir === "asc" ? diff : -diff;
     }
 
-    const aP50 = recommendations[a.id] ?? null;
-    const bP50 = recommendations[b.id] ?? null;
-
-    // Place null/undefined at the end regardless of direction
-    if (aP50 == null && bP50 == null) return 0;
-    if (aP50 == null) return 1;
-    if (bP50 == null) return -1;
-
-    const diff = aP50 - bP50;
-    return sortDir === "asc" ? diff : -diff;
+    return 0;
   });
 
   function toggleSort(key: SortBy) {
@@ -302,10 +261,6 @@ export default function ProductsPage() {
 
           {/* Tiny legend + bulk actions */}
           <div className="flex flex-col items-end gap-1">
-            <p className="text-[11px] text-slate-500">
-              Tomorrow&apos;s bake uses P50 from your forecast.
-            </p>
-
             {filteredProducts.length > 0 && selectedBakeryId !== "all" && (
               <button
                 type="button"
@@ -387,13 +342,6 @@ export default function ProductsPage() {
                   <th className="px-4 py-2 text-left">Bakery</th>
                   <th className="px-4 py-2 text-left">Shelf life</th>
                   <th className="px-4 py-2 text-left">Confidence</th>
-                  <th
-                    className="px-4 py-2 text-right cursor-pointer select-none"
-                    onClick={() => toggleSort("p50")}
-                  >
-                    Tomorrow&apos;s bake (P50)
-                    {renderSortIndicator("p50")}
-                  </th>
                 </tr>
               </thead>
 
@@ -465,7 +413,6 @@ export default function ProductsPage() {
 
                 {/* Show products */}
                 {sortedProducts.map((p, idx) => {
-                  const rec = recommendations[p.id];
                   const bakeryName =
                     bakeries.find((b) => b.id === p.bakery_id)?.name || "—";
 
@@ -521,24 +468,6 @@ export default function ProductsPage() {
                         />
                       </td>
 
-                      <td className="px-4 py-2 align-middle text-right text-sm">
-                        {recsLoading && rec === undefined && (
-                          <TextShimmer className="text-xs text-slate-400" duration={1.5}>
-                            Generating forecast...
-                          </TextShimmer>
-                        )}
-                        {!recsLoading && rec === undefined && (
-                          <span className="text-xs text-slate-400">—</span>
-                        )}
-                        {rec !== undefined && rec !== null && (
-                          <span className="font-semibold text-slate-900">
-                            {Math.round(rec)}
-                          </span>
-                        )}
-                        {rec !== undefined && rec === null && (
-                          <span className="text-xs text-slate-400">—</span>
-                        )}
-                      </td>
                     </tr>
                   );
                 })}
@@ -551,48 +480,6 @@ export default function ProductsPage() {
   );
 }
 
-// Helper: for each product, call forecast endpoint and take first yhat
-async function fetchRecommendations(
-  products: Product[]
-): Promise<RecommendationsMap> {
-  const recs: RecommendationsMap = {};
-
-  await Promise.all(
-    products.map(async (p) => {
-      try {
-        const data = await apiFetch<ForecastPoint[]>(
-          `/api/forecast/product/${p.id}`,
-          {
-            method: "POST",
-            body: JSON.stringify({ days: 1 }), // backend can ignore/override
-          }
-        );
-
-        if (Array.isArray(data) && data.length > 0) {
-          recs[p.id] = data[0].yhat;
-        } else {
-          recs[p.id] = null;
-        }
-      } catch (err) {
-        // Handle expected errors silently (no sales data, product not found)
-        const errorMessage = err instanceof Error ? err.message : String(err);
-        const isExpectedError =
-          errorMessage.includes("No sales data") ||
-          errorMessage.includes("Product not found") ||
-          errorMessage.includes("404") ||
-          (errorMessage.includes("400") && errorMessage.includes("sales data"));
-
-        if (!isExpectedError) {
-          // Only log unexpected errors
-          console.error("Failed to load forecast for product", p.id, err);
-        }
-        recs[p.id] = null;
-      }
-    })
-  );
-
-  return recs;
-}
 
 
 

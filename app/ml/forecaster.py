@@ -44,12 +44,7 @@ class ProductForecaster:
         self.feature_engineer = FeatureEngineer()
     
     def _should_log_deep_diagnostics(self, product_id: Optional[int]) -> bool:
-        """Check if deep diagnostic logging should be enabled for this product."""
-        if settings.debug_zero_forecasts:
-            return True
-        if product_id is not None and product_id in settings.debug_forecast_product_ids:
-            return True
-        return False
+        return settings.debug_zero_forecasts
     
     def _compute_raw_predictions_stats(
         self, 

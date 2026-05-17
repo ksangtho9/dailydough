@@ -227,12 +227,10 @@ def calculate_post_training_accuracy(
         # sales data that exists. We'll look for any overlapping dates.
         try:
             # Use settings.debug_zero_forecasts for non-authenticated endpoints
-            include_debug = settings.debug_zero_forecasts
             forecast = get_forecast_for_product(
                 product_id=product_id,
-                days_ahead=60,  # Get enough days to potentially overlap with recent sales
+                days_ahead=60,
                 db=db,
-                include_debug=include_debug,
             )
         except Exception:
             return None, None

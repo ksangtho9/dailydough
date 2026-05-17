@@ -1,4 +1,4 @@
-from datetime import datetime, UTC
+from datetime import datetime, timezone
 
 from sqlalchemy import Column, Integer, String, DateTime, Boolean
 
@@ -14,6 +14,6 @@ class User(Base):
     is_admin = Column(Boolean, nullable=False, default=False)
     created_at = Column(
         DateTime(timezone=True),
-        default=lambda: datetime.now(UTC),
+        default=lambda: datetime.now(timezone.utc),
         nullable=False,
     )

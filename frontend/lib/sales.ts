@@ -9,12 +9,16 @@ export interface SalesRecord {
 }
 
 export async function fetchSalesRecords(
-  bakeryId?: number
+  bakeryId?: number,
+  startDate?: string,
+  endDate?: string,
 ): Promise<SalesRecord[]> {
-  const url = bakeryId
-    ? `/api/sales/?bakery_id=${bakeryId}`
-    : "/api/sales/";
-  return apiFetch<SalesRecord[]>(url);
+  const params = new URLSearchParams();
+  if (bakeryId) params.set("bakery_id", String(bakeryId));
+  if (startDate) params.set("start_date", startDate);
+  if (endDate) params.set("end_date", endDate);
+  const qs = params.toString();
+  return apiFetch<SalesRecord[]>(qs ? `/api/sales/?${qs}` : "/api/sales/");
 }
 
 

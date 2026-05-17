@@ -727,22 +727,12 @@ export default function DashboardPage() {
       const low = Math.max(0, Math.round(normal * 0.9));
       const high = Math.round(normal * 1.1);
       
-      // Use API-provided risk metrics (convert from 0-1 probability to percentage)
-      const waste = item.waste_risk_prob != null 
-        ? item.waste_risk_prob * 100 
-        : null;
-      const risk = item.stockout_risk_prob != null 
-        ? item.stockout_risk_prob * 100 
-        : null;
-      
       return {
         ...item,
         low,
         normal,
         high,
         recommended: normal,
-        waste,
-        risk,
       };
     });
 
@@ -922,6 +912,7 @@ export default function DashboardPage() {
                 </h2>
               </div>
               <div className="flex flex-wrap items-center gap-2">
+                <AdminOnly>
                 <button
                   type="button"
                   onClick={toggleDevMode}
@@ -934,6 +925,7 @@ export default function DashboardPage() {
                 >
                   🧪 Dev Mode
                 </button>
+                </AdminOnly>
                 <AdminOnly>
                   <button
                     type="button"
@@ -1024,8 +1016,6 @@ export default function DashboardPage() {
                       <th className="px-3 py-2 text-right">Normal</th>
                       <th className="px-3 py-2 text-right">High</th>
                       <th className="px-3 py-2 text-right">Recommended</th>
-                      <th className="px-3 py-2 text-right">Est. waste</th>
-                      <th className="px-3 py-2 text-right">Stockout risk</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -1055,12 +1045,6 @@ export default function DashboardPage() {
                         </td>
                         <td className="px-3 py-2 text-right font-semibold text-amber-700">
                           {row.recommended}
-                        </td>
-                        <td className="px-3 py-2 text-right text-slate-600">
-                          {row.waste != null ? row.waste.toFixed(0) + "%" : "—"}
-                        </td>
-                        <td className="px-3 py-2 text-right text-slate-600">
-                          {row.risk != null ? row.risk.toFixed(0) + "%" : "—"}
                         </td>
                       </tr>
                     ))}

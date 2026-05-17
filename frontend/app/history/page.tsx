@@ -57,7 +57,7 @@ export default function HistoryPage() {
   const [salesRecords, setSalesRecords] = useState<SalesRecordWithProduct[]>([]);
   const [products, setProducts] = useState<Product[]>([]);
   const [selectedBakeryId, setSelectedBakeryId] = useState<string | null>(null);
-  const [dateRange, setDateRange] = useState<DateRange>("30d");
+  const [dateRange, setDateRange] = useState<DateRange>("all");
   const [productSearch, setProductSearch] = useState<string>("");
   const [viewMode, setViewMode] = useState<ViewMode>("individual");
   const [currentPage, setCurrentPage] = useState<number>(1);
@@ -89,10 +89,13 @@ export default function HistoryPage() {
       setSelectedBakeryId(bakeryId);
       const bakeryIdNum = parseInt(bakeryId, 10);
 
+      const cutoff = getCutoffDate(dateRange);
+      const startDateStr = cutoff ? cutoff.toISOString().split("T")[0] : undefined;
+
       // Fetch products and sales records in parallel
       const [productsData, salesData] = await Promise.all([
         apiFetch<Product[]>("/api/products/"),
-        fetchSalesRecords(bakeryIdNum),
+        fetchSalesRecords(bakeryIdNum, startDateStr),
       ]);
 
       setProducts(productsData);
@@ -121,7 +124,7 @@ export default function HistoryPage() {
     } finally {
       setLoading(false);
     }
-  }, [router]);
+  }, [router, dateRange]);
 
   useEffect(() => {
     loadData();
@@ -188,24 +191,14 @@ export default function HistoryPage() {
     return diffDays;
   };
 
-  // Filter sales records based on selected date range
-  const cutoffDate = getCutoffDate(dateRange);
-  const dateFilteredRecords = cutoffDate
-    ? salesRecords.filter((record) => {
-        const recordDate = new Date(record.date);
-        recordDate.setHours(0, 0, 0, 0);
-        return recordDate >= cutoffDate;
-      })
-    : salesRecords;
-
-  // Filter by product search
+  // Filter by product search (date filtering now done server-side)
   const filteredRecords = useMemo(() => {
-    if (!productSearch.trim()) return dateFilteredRecords;
+    if (!productSearch.trim()) return salesRecords;
     const searchLower = productSearch.toLowerCase().trim();
-    return dateFilteredRecords.filter((record) =>
+    return salesRecords.filter((record) =>
       record.product_name.toLowerCase().includes(searchLower)
     );
-  }, [dateFilteredRecords, productSearch]);
+  }, [salesRecords, productSearch]);
 
   // Calculate summary metrics
   const summaryMetrics = useMemo(() => {
@@ -414,7 +407,7 @@ export default function HistoryPage() {
           <h1 className="text-2xl font-semibold text-slate-900">History</h1>
           <p className="mt-1 text-sm text-slate-600">
             {productSearch
-              ? `Showing ${filteredRecords.length} of ${dateFilteredRecords.length} filtered records`
+              ? `Showing ${filteredRecords.length} of ${salesRecords.length} filtered records`
               : `Showing ${filteredRecords.length} of ${salesRecords.length} records`}
           </p>
         </div>

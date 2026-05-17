@@ -17,7 +17,7 @@ except ImportError:  # pragma: no cover
 @dataclass
 class ProphetConfig:
     """Hyperparameters for Prophet."""
-    daily_seasonality: bool = True
+    daily_seasonality: bool = False  # meaningless for daily-granularity data
     weekly_seasonality: bool = True
     yearly_seasonality: bool = False
     seasonality_mode: str = "additive"  # or "multiplicative"
@@ -88,19 +88,16 @@ class ProphetSalesModel:
 
         # Track which regressors we've added
         self.regressors = []
-        
+
         # Helper function to safely add regressor (ensures numeric type)
         def safe_add_regressor(feature_name: str, series: pd.Series) -> bool:
             """Add regressor to Prophet model, ensuring it's numeric."""
             try:
-                # Convert to numeric, coercing errors to NaN
                 numeric_series = pd.to_numeric(series, errors='coerce')
-                # Fill NaN with 0
                 numeric_series = numeric_series.fillna(0.0)
-                # Update the dataframe
                 df[feature_name] = numeric_series
-                # Check if we have valid data
-                if numeric_series.notna().any() and (numeric_series != 0).any():
+                # Only add if it has non-trivial variance (constant columns hurt more than help)
+                if numeric_series.notna().any() and (numeric_series != 0).any() and numeric_series.nunique() > 1:
                     m.add_regressor(feature_name)
                     self.regressors.append(feature_name)
                     return True
@@ -118,78 +115,15 @@ class ProphetSalesModel:
         else:
             self.has_delivery_regressor = False
 
-        # Add lag features as regressors
-        lag_features = ["lag_1", "lag_7", "lag_14", "lag_30"]
-        for feature in lag_features:
-            if feature in df.columns:
-                series = df[feature]
-                safe_add_regressor(feature, series)
+        # Prophet is a trend+seasonality model. Lag/rolling regressors are nearly perfectly
+        # collinear with the trend component, causing coefficient explosion (matmul overflow)
+        # and mostly-negative predictions that clamp to zero.
+        # Use Prophet with zero regressors — just trend + weekly/yearly seasonality.
+        # XGBoost handles lag/rolling features correctly and serves as the fallback.
 
-        # Add rolling statistics as regressors
-        rolling_features = ["rolling_mean_7", "rolling_mean_30", "rolling_std_7", "rolling_std_30"]
-        for feature in rolling_features:
-            if feature in df.columns:
-                series = df[feature]
-                safe_add_regressor(feature, series)
-
-        # Add calendar features as regressors (numeric ones)
-        calendar_features = [
-            "month", "quarter", "day_of_month", "is_month_start", "is_month_end",
-            "days_until_weekend", "days_since_weekend", "is_payday",
-            "week_of_year", "day_of_year", "is_spring", "is_summer", "is_fall", "is_winter"
-        ]
-        for feature in calendar_features:
-            if feature in df.columns:
-                series = df[feature]
-                safe_add_regressor(feature, series)
-
-        # Add holiday/event features
-        holiday_features = ["is_holiday", "days_before_holiday", "days_after_holiday", "holiday_proximity"]
-        for feature in holiday_features:
-            if feature in df.columns:
-                series = df[feature]
-                safe_add_regressor(feature, series)
-
-        # Add weather features
-        weather_features = ["temperature", "precipitation", "is_rainy", "is_sunny"]
-        for feature in weather_features:
-            if feature in df.columns:
-                series = df[feature]
-                safe_add_regressor(feature, series)
-
-        # Add promotion/event features
-        promo_features = ["is_promotion", "promotion_multiplier", "is_event", "event_multiplier"]
-        for feature in promo_features:
-            if feature in df.columns:
-                series = df[feature]
-                safe_add_regressor(feature, series)
-
-        # Add spike-related features
-        spike_features = [
-            "is_spike",  # Historical spike flag
-            "spike_probability",  # Predicted spike probability
-            "spike_severity",  # Historical spike severity
-            "days_since_last_spike",
-            "spike_momentum",
-            "spike_seasonality",
-            "spike_promotion_proximity",  # New feature
-        ]
-        for feature in spike_features:
-            if feature in df.columns:
-                series = df[feature]
-                safe_add_regressor(feature, series)
-
-        # Add product features (if they vary, though typically they're constant)
-        product_features = ["shelf_life_days", "price", "cost_price_ratio"]
-        for feature in product_features:
-            if feature in df.columns:
-                series = df[feature]
-                # Only add if it varies
-                numeric_series = pd.to_numeric(series, errors='coerce').fillna(0.0)
-                if numeric_series.notna().any() and numeric_series.nunique() > 1:
-                    df[feature] = numeric_series
-                    m.add_regressor(feature)
-                    self.regressors.append(feature)
+        # Only add is_holiday when there is real variation (not all zeros)
+        if "is_holiday" in df.columns:
+            safe_add_regressor("is_holiday", df["is_holiday"])
 
         # Before fitting, ensure all columns are numeric
         # Never forward-fill y - only impute regressor features if required
@@ -545,7 +479,7 @@ class ProphetSalesModel:
         
         # Step 5: Model-specific checks (Prophet) - gated logging
         # Ensure logging is triggered for flagged products
-        should_log = settings.debug_zero_forecasts or (product_id is not None and product_id in settings.debug_forecast_product_ids)
+        should_log = settings.debug_zero_forecasts
         if should_log:
             # Log growth type and hyperparameters
             growth_type = getattr(self.model, 'growth', 'linear')
