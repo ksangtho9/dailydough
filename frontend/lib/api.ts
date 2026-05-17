@@ -1,14 +1,15 @@
 // frontend/lib/api.ts
+import { getAccessToken } from "./supabase";
+
 const API_BASE_URL =
   process.env.NEXT_PUBLIC_API_BASE_URL || "http://127.0.0.1:8000";
 
 export { API_BASE_URL };
 
 export type User = {
-  id: number;
-  email: string;
+  id: string;  // Supabase UUID
+  email: string | null;
   is_admin: boolean;
-  created_at: string;
 };
 
 /**
@@ -18,17 +19,12 @@ export async function getCurrentUser(): Promise<User> {
   return apiFetch<User>("/api/auth/me");
 }
 
-function getAuthToken(): string | null {
-  if (typeof window === "undefined") return null;
-  return localStorage.getItem("access_token");
-}
-
 export async function apiFetch<T>(
   path: string,
   options: RequestInit = {}
 ): Promise<T> {
   const url = `${API_BASE_URL}${path}`;
-  const token = getAuthToken();
+  const token = await getAccessToken();
 
   const headers: HeadersInit = {
     "Content-Type": "application/json",
@@ -44,11 +40,10 @@ export async function apiFetch<T>(
     headers,
   });
 
-  // 🔥 Handle expired/invalid auth
   if (res.status === 401) {
     if (typeof window !== "undefined") {
-      // clear token + mark that session expired
-      localStorage.removeItem("access_token");
+      const { supabase } = await import("./supabase");
+      await supabase.auth.signOut();
       localStorage.setItem("session_expired", "1");
       window.location.href = "/login";
     }

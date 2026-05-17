@@ -1,4 +1,4 @@
-from .user import User
+from .profile import Profile
 from .bakery import Bakery
 from .product import Product
 from .sales_record import SalesRecord
@@ -11,7 +11,7 @@ from .walk_forward_result import WalkForwardResult
 from .model_run import ModelRun
 
 __all__ = [
-    "User",
+    "Profile",
     "Bakery",
     "Product",
     "SalesRecord",

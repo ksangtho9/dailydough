@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
 from app.database.database import get_db
-from app.models import Bakery, SalesRecord, Product, ForecastMetrics, DailyForecast, User
+from app.models import Bakery, SalesRecord, Product, ForecastMetrics, DailyForecast, Profile
 from app.user_schemas import BakeryCreate, BakeryOut
 from app.api.auth import get_current_user
 from app.core.config import settings
@@ -29,7 +29,7 @@ router = APIRouter(
 def create_bakery(
     bakery_in: BakeryCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: Profile = Depends(get_current_user),
 ):
     bakery = Bakery(
         name=bakery_in.name,
@@ -55,7 +55,7 @@ def create_bakery(
 @router.get("/", response_model=list[BakeryOut])
 def list_bakeries(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: Profile = Depends(get_current_user),
 ):
     return db.query(Bakery).filter(Bakery.user_id == current_user.id).all()
 
@@ -64,7 +64,7 @@ def list_bakeries(
 def delete_bakery(
     bakery_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: Profile = Depends(get_current_user),
 ):
     bakery = db.query(Bakery).filter(
         Bakery.id == bakery_id, Bakery.user_id == current_user.id
@@ -106,7 +106,7 @@ async def upload_sales_for_bakery(
     upload_mode: Optional[str] = Form("append", description="Upload mode: 'append' or 'replace'"),
     background_tasks: BackgroundTasks = BackgroundTasks(),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: Profile = Depends(get_current_user),
 ):
     bakery = db.query(Bakery).filter(
         Bakery.id == bakery_id, Bakery.user_id == current_user.id
@@ -199,7 +199,7 @@ def delete_sales_for_bakery(
     date_to: Optional[date] = Query(None, description="Delete records up to this date (inclusive)"),
     product_id: Optional[int] = Query(None, description="Delete records for this product only"),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: Profile = Depends(get_current_user),
 ):
     bakery = db.query(Bakery).filter(
         Bakery.id == bakery_id, Bakery.user_id == current_user.id
@@ -263,7 +263,7 @@ def delete_sales_for_bakery(
 def delete_forecast_metrics_for_bakery(
     bakery_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: Profile = Depends(get_current_user),
 ):
     bakery = db.query(Bakery).filter(
         Bakery.id == bakery_id, Bakery.user_id == current_user.id

@@ -5,20 +5,21 @@ from typing import Optional
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
-DEFAULT_DEV_JWT = "CHANGE_ME_TO_A_LONG_RANDOM_STRING_DEV_ONLY"
-
-
 class Settings(BaseSettings):
     # Note: .env file is optional for local development. Production must use environment variables.
     # .env is gitignored and should not be committed.
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
 
     app_name: str = "BAKEZY API"
-    database_url: str = "sqlite:///./bakezy.db"
+    database_url: str = Field(default="", alias="DATABASE_URL")
 
     environment: str = Field(default="development", alias="ENVIRONMENT")
 
-    jwt_secret_key: str = Field(default=DEFAULT_DEV_JWT, alias="JWT_SECRET_KEY")
+    # Supabase Auth — JWT secret for verifying Supabase-issued tokens
+    supabase_jwt_secret: str = Field(default="", alias="SUPABASE_JWT_SECRET")
+    supabase_url: str = Field(default="", alias="SUPABASE_URL")
+    supabase_anon_key: str = Field(default="", alias="SUPABASE_ANON_KEY")
+    supabase_service_role_key: str = Field(default="", alias="SUPABASE_SERVICE_ROLE_KEY")
 
     cors_origins: list[str] = Field(
         default_factory=lambda: ["http://localhost:3000", "http://127.0.0.1:3000"],
@@ -74,8 +75,8 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _fail_fast_prod_jwt(self):
-        if self.environment in ("production", "prod", "staging") and self.jwt_secret_key == DEFAULT_DEV_JWT:
-            raise ValueError("JWT_SECRET_KEY must be set in production.")
+        if self.environment in ("production", "prod", "staging") and not self.supabase_jwt_secret:
+            raise ValueError("SUPABASE_JWT_SECRET must be set in production.")
         return self
 
     @model_validator(mode="after")

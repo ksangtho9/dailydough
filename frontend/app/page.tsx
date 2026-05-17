@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 import { HeroSection } from "@/components/landing/HeroSection";
 import { FeaturesGrid } from "@/components/landing/FeaturesGrid";
 import { BenefitsSection } from "@/components/landing/BenefitsSection";
@@ -15,18 +16,10 @@ export default function HomePage() {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean | null>(null);
 
   useEffect(() => {
-    // Check if user is authenticated
-    if (typeof window !== "undefined") {
-      const token = localStorage.getItem("access_token");
-      setIsAuthenticated(!!token);
-      
-      // Optional: Auto-redirect authenticated users to dashboard
-      // Uncomment if you want to redirect logged-in users
-      // if (token) {
-      //   router.push("/dashboard");
-      // }
-    }
-  }, [router]);
+    supabase.auth.getSession().then(({ data: { session } }) => {
+      setIsAuthenticated(!!session);
+    });
+  }, []);
 
   // Show loading state briefly to avoid flash
   if (isAuthenticated === null) {

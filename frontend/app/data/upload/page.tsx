@@ -11,6 +11,7 @@ import {
 } from "react";
 import { Trash2, AlertTriangle } from "lucide-react";
 import { API_BASE_URL } from "@/lib/api";
+import { getAccessToken } from "@/lib/supabase";
 import { BAKERY_SELECTION_CHANGED_EVENT } from "@/lib/bakeries";
 
 const REQUIRED_ROLES = ["date", "product_id", "product_name", "quantity"] as const;
@@ -164,13 +165,10 @@ export default function DataUploadPage() {
     setDragActive(false);
   };
 
-  const authHeaders = useCallback((): HeadersInit | undefined => {
-    if (typeof window === "undefined") return undefined;
-    const token = window.localStorage.getItem("access_token");
+  const authHeaders = useCallback(async (): Promise<HeadersInit | undefined> => {
+    const token = await getAccessToken();
     if (!token) return undefined;
-    return {
-      Authorization: `Bearer ${token}`,
-    };
+    return { Authorization: `Bearer ${token}` };
   }, []);
 
   const submitUpload = useCallback(
@@ -207,7 +205,7 @@ export default function DataUploadPage() {
           {
             method: "POST",
             body: form,
-            headers: authHeaders(),
+            headers: await authHeaders(),
           },
         );
 
@@ -273,7 +271,7 @@ export default function DataUploadPage() {
         `${API_BASE_URL}/api/bakeries/${bakeryId}/sales`,
         {
           method: "DELETE",
-          headers: authHeaders(),
+          headers: await authHeaders(),
         },
       );
 
@@ -319,7 +317,7 @@ export default function DataUploadPage() {
         `${API_BASE_URL}/api/bakeries/${bakeryId}/sales?${params.toString()}`,
         {
           method: "DELETE",
-          headers: authHeaders(),
+          headers: await authHeaders(),
         },
       );
 

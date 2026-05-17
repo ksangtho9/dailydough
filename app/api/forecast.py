@@ -6,7 +6,7 @@ from typing import Optional
 
 from app.database.database import get_db
 from app.api.auth import get_current_user
-from app.models import User
+from app.models import Profile
 from app.ml.inference.forecast_service import get_forecast_for_product
 from app.schemas import sales_record
 from app.models.product import Product
@@ -37,7 +37,7 @@ def forecast_product_sales(
     product_id: int,
     forecast_request: ForecastRequest,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: Profile = Depends(get_current_user),
 ):
     horizon_days = forecast_request.days or 14
 

@@ -4,6 +4,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Search, ChevronDown, ChevronRight } from "lucide-react";
 import { apiFetch } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import { fetchSalesRecords, type SalesRecord } from "@/lib/sales";
 import { BAKERY_SELECTION_CHANGED_EVENT } from "@/lib/bakeries";
 import { TextShimmer } from "@/components/ui/text-shimmer";
@@ -72,8 +73,8 @@ export default function HistoryPage() {
 
       if (typeof window === "undefined") return;
 
-      const token = localStorage.getItem("access_token");
-      if (!token) {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
         router.push("/login");
         return;
       }

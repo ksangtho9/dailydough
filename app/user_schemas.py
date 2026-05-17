@@ -1,37 +1,17 @@
 from __future__ import annotations
 from datetime import datetime, date
 
-from pydantic import BaseModel, EmailStr, ConfigDict, constr
+from pydantic import BaseModel, ConfigDict
 
 from app.schemas.forecast import ForecastMetricsSchema
 
 
-# ========== User schemas ==========
-
-class UserBase(BaseModel):
-    email: EmailStr
-
-
-class UserCreate(UserBase):
-    password: constr(min_length=8, max_length=72)
-
-
 class UserOut(BaseModel):
-    id: int
-    email: EmailStr
+    id: str  # Supabase auth.users UUID
+    email: str | None = None
     is_admin: bool
-    created_at: datetime
 
     model_config = ConfigDict(from_attributes=True)
-
-
-class Token(BaseModel):
-    access_token: str
-    token_type: str = "bearer"
-
-
-class TokenData(BaseModel):
-    email: str | None = None
 
 
 # ========== Bakery schemas ==========

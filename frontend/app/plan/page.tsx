@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import {
   BAKERY_UPDATED_EVENT,
   BAKERY_SELECTION_CHANGED_EVENT,
@@ -84,20 +85,21 @@ export default function BakePlanPage() {
 
   // On mount: auth check, load bakeries/products, restore bakery filter
   useEffect(() => {
-    if (typeof window === "undefined") return;
+    async function init() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push("/login");
+        return;
+      }
 
-    const token = localStorage.getItem("access_token");
-    if (!token) {
-      router.push("/login");
-      return;
+      const storedBakeryId = localStorage.getItem(BAKERY_STORAGE_KEY);
+      if (storedBakeryId) {
+        setSelectedBakeryId(storedBakeryId);
+      }
+
+      loadBasics();
     }
-
-    const storedBakeryId = localStorage.getItem(BAKERY_STORAGE_KEY);
-    if (storedBakeryId) {
-      setSelectedBakeryId(storedBakeryId);
-    }
-
-    loadBasics();
+    init();
   }, [router, loadBasics]);
 
   // Keep selected bakery in sync with global selection changes

@@ -2,18 +2,17 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
-import { API_BASE_URL } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import { GlowingEffect } from "@/components/ui/glowing-effect";
 
 export default function LoginPage() {
   const router = useRouter();
-  const [username, setUsername] = useState(""); // email
+  const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null); // 👈 new
+  const [info, setInfo] = useState<string | null>(null);
 
-  // 👇 check if we were logged out due to expiry
   useEffect(() => {
     if (typeof window === "undefined") return;
     const flag = window.localStorage.getItem("session_expired");
@@ -30,27 +29,13 @@ export default function LoginPage() {
     setInfo(null);
 
     try {
-      const body = new URLSearchParams();
-      body.append("username", username);
-      body.append("password", password);
-
-      const res = await fetch(`${API_BASE_URL}/api/auth/token`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/x-www-form-urlencoded",
-        },
-        body,
+      const { error: authError } = await supabase.auth.signInWithPassword({
+        email: username,
+        password,
       });
 
-      if (!res.ok) {
-        const text = await res.text();
-        throw new Error(`Login failed: ${text}`);
-      }
-
-      const data = await res.json(); // { access_token, token_type }
-      if (typeof window !== "undefined") {
-        localStorage.setItem("access_token", data.access_token);
-        localStorage.removeItem("session_expired");
+      if (authError) {
+        throw new Error(authError.message);
       }
 
       router.push("/dashboard");
@@ -94,10 +79,10 @@ export default function LoginPage() {
           <form onSubmit={handleSubmit} className="mt-6 space-y-4">
             <div>
               <label className="block text-xs font-medium text-slate-200">
-                Username / Email
+                Email
               </label>
               <input
-                type="text"
+                type="email"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
                 className="mt-1 w-full rounded-lg border border-slate-600 bg-slate-700 px-3 py-2 text-sm text-white placeholder:text-slate-400 outline-none focus:border-amber-500 focus:ring-2 focus:ring-amber-500/20"
@@ -133,4 +118,3 @@ export default function LoginPage() {
     </div>
   );
 }
-

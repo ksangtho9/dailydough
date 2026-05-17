@@ -3,6 +3,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
+import { supabase } from "@/lib/supabase";
 import { apiFetch, updateProduct, deleteProduct } from "@/lib/api";
 import { TextShimmer } from "@/components/ui/text-shimmer";
 import {
@@ -97,15 +98,13 @@ export default function ProductDetailPage() {
 
   useEffect(() => {
     if (!productId) return;
-    if (typeof window === "undefined") return;
-
-    const token = localStorage.getItem("access_token");
-    if (!token) {
-      router.push("/login");
-      return;
-    }
 
     async function loadData() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push("/login");
+        return;
+      }
       try {
         setLoading(true);
         setError(null);

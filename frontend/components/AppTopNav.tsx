@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { supabase } from "@/lib/supabase";
 import {
   Package,
   Clock,
@@ -103,11 +104,11 @@ export function AppTopNav() {
     return found ? found.name : "Select a bakery";
   }, [bakeries, selectedBakeryId]);
 
-  const handleLogout = useCallback(() => {
+  const handleLogout = useCallback(async () => {
     if (typeof window !== "undefined") {
-      localStorage.removeItem("access_token");
       localStorage.removeItem(STORAGE_KEY);
     }
+    await supabase.auth.signOut();
     router.push("/login");
   }, [router]);
 

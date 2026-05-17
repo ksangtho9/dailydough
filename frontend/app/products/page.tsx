@@ -4,6 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { apiFetch, deleteAllProducts } from "@/lib/api";
+import { supabase } from "@/lib/supabase";
 import {
   BAKERY_UPDATED_EVENT,
   BAKERY_SELECTION_CHANGED_EVENT,
@@ -105,19 +106,18 @@ export default function ProductsPage() {
   }, [selectedBakeryId]);
 
   useEffect(() => {
-    if (typeof window === "undefined") return;
-
-    const token = localStorage.getItem("access_token");
-    if (!token) {
-      router.push("/login");
-      return;
+    async function init() {
+      const { data: { session } } = await supabase.auth.getSession();
+      if (!session) {
+        router.push("/login");
+        return;
+      }
+      const storedBakeryId = localStorage.getItem(BAKERY_STORAGE_KEY);
+      if (storedBakeryId) {
+        setSelectedBakeryId(storedBakeryId);
+      }
     }
-
-    const storedBakeryId = localStorage.getItem(BAKERY_STORAGE_KEY);
-    if (storedBakeryId) {
-      setSelectedBakeryId(storedBakeryId);
-    }
-    // Don't call loadProductsAndRecs here - let the selectedBakeryId effect handle it
+    init();
   }, [router]);
 
   useEffect(() => {
@@ -150,10 +150,6 @@ export default function ProductsPage() {
 
   // Load products when component mounts or selected bakery changes
   useEffect(() => {
-    if (typeof window === "undefined") return;
-    const token = localStorage.getItem("access_token");
-    if (!token) return; // Don't load if not authenticated
-    
     loadProductsAndRecs();
   }, [selectedBakeryId, loadProductsAndRecs]);
 

@@ -1,14 +1,13 @@
 "use client";
 
 import { useRouter } from "next/navigation";
+import { supabase } from "@/lib/supabase";
 
 export function LogoutButton() {
   const router = useRouter();
 
-  function handleLogout() {
-    if (typeof window !== "undefined") {
-      localStorage.removeItem("access_token");
-    }
+  async function handleLogout() {
+    await supabase.auth.signOut();
     router.push("/login");
   }
 
