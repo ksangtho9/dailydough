@@ -2,8 +2,7 @@ import type { NextConfig } from "next";
 import path from "path";
 
 const nextConfig: NextConfig = {
-  /* config options here */
-  reactCompiler: true,
+  reactCompiler: process.env.NODE_ENV === "production",
   // Explicitly disable Pages Router to prevent Next.js from checking for it
   // This is an App Router-only project
   experimental: {

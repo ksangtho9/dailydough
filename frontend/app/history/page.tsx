@@ -22,6 +22,14 @@ type SalesRecordWithProduct = SalesRecord & {
   product_name: string;
 };
 
+type SalesStats = {
+  total_quantity: number;
+  days_with_sales: number;
+  average_per_day: number;
+  unique_products: number;
+  top_products: Array<{ name: string; total: number }>;
+};
+
 type DateRange = "7d" | "30d" | "90d" | "6m" | "all";
 type ViewMode = "individual" | "byDate" | "byProduct";
 
@@ -63,6 +71,7 @@ export default function HistoryPage() {
   const [viewMode, setViewMode] = useState<ViewMode>("individual");
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(new Set());
+  const [stats, setStats] = useState<SalesStats | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -93,13 +102,18 @@ export default function HistoryPage() {
       const cutoff = getCutoffDate(dateRange);
       const startDateStr = cutoff ? cutoff.toISOString().split("T")[0] : undefined;
 
-      // Fetch products and sales records in parallel
-      const [productsData, salesData] = await Promise.all([
+      const statsParams = new URLSearchParams({ bakery_id: String(bakeryIdNum) });
+      if (startDateStr) statsParams.set("start_date", startDateStr);
+
+      // Fetch products, sales records, and stats in parallel
+      const [productsData, salesData, statsData] = await Promise.all([
         apiFetch<Product[]>("/api/products/"),
-        fetchSalesRecords(bakeryIdNum, startDateStr),
+        fetchSalesRecords(bakeryIdNum, startDateStr, undefined, 500),
+        apiFetch<SalesStats>(`/api/sales/stats?${statsParams.toString()}`),
       ]);
 
       setProducts(productsData);
+      setStats(statsData);
 
       // Map product names to sales records
       const productMap = new Map(
@@ -201,56 +215,6 @@ export default function HistoryPage() {
     );
   }, [salesRecords, productSearch]);
 
-  // Calculate summary metrics
-  const summaryMetrics = useMemo(() => {
-    if (filteredRecords.length === 0) {
-      return {
-        totalSales: 0,
-        averagePerDay: 0,
-        uniqueProducts: 0,
-        topProducts: [] as Array<{ name: string; total: number }>,
-      };
-    }
-
-    const totalSales = filteredRecords.reduce(
-      (sum, record) => sum + Number(record.quantity_sold),
-      0
-    );
-
-    // Get unique dates
-    const uniqueDates = new Set(
-      filteredRecords.map((r) => r.date.split("T")[0])
-    );
-    const daysCount = uniqueDates.size;
-    const averagePerDay = daysCount > 0 ? totalSales / daysCount : 0;
-
-    // Get unique products
-    const uniqueProducts = new Set(
-      filteredRecords.map((r) => r.product_name)
-    ).size;
-
-    // Calculate top products
-    const productTotals = new Map<string, number>();
-    filteredRecords.forEach((record) => {
-      const current = productTotals.get(record.product_name) || 0;
-      productTotals.set(
-        record.product_name,
-        current + Number(record.quantity_sold)
-      );
-    });
-
-    const topProducts = Array.from(productTotals.entries())
-      .map(([name, total]) => ({ name, total }))
-      .sort((a, b) => b.total - a.total)
-      .slice(0, 3);
-
-    return {
-      totalSales,
-      averagePerDay,
-      uniqueProducts,
-      topProducts,
-    };
-  }, [filteredRecords]);
 
   // Group records based on view mode
   const groupedRecords = useMemo(() => {
@@ -388,18 +352,6 @@ export default function HistoryPage() {
     );
   }
 
-  if (salesRecords.length === 0) {
-    return (
-      <div className="space-y-4">
-        <h1 className="text-2xl font-semibold text-slate-900">History</h1>
-        <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-          <p className="text-sm text-slate-600">
-            No sales records found. Upload sales data to see history here.
-          </p>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="space-y-6">
@@ -408,8 +360,10 @@ export default function HistoryPage() {
           <h1 className="text-2xl font-semibold text-slate-900">History</h1>
           <p className="mt-1 text-sm text-slate-600">
             {productSearch
-              ? `Showing ${filteredRecords.length} of ${salesRecords.length} filtered records`
-              : `Showing ${filteredRecords.length} of ${salesRecords.length} records`}
+              ? `Showing ${filteredRecords.length} of ${salesRecords.length} records`
+              : stats && stats.days_with_sales > 0 && salesRecords.length === 500
+              ? `Showing latest 500 records — totals above reflect all data`
+              : `${salesRecords.length.toLocaleString()} record${salesRecords.length !== 1 ? "s" : ""}`}
           </p>
         </div>
 
@@ -433,14 +387,14 @@ export default function HistoryPage() {
       </div>
 
       {/* Summary Cards */}
-      {filteredRecords.length > 0 && (
+      {stats && stats.total_quantity > 0 && (
         <section className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
           <div className="rounded-xl border border-slate-200 bg-white p-6 shadow-sm">
             <p className="text-xs font-semibold uppercase tracking-wide text-slate-600">
               Total Sales
             </p>
             <p className="mt-2 text-2xl font-bold text-slate-900">
-              {summaryMetrics.totalSales.toLocaleString(undefined, {
+              {stats.total_quantity.toLocaleString(undefined, {
                 maximumFractionDigits: 0,
               })}
             </p>
@@ -452,7 +406,7 @@ export default function HistoryPage() {
               Average per Day
             </p>
             <p className="mt-2 text-2xl font-bold text-slate-900">
-              {summaryMetrics.averagePerDay.toLocaleString(undefined, {
+              {stats.average_per_day.toLocaleString(undefined, {
                 maximumFractionDigits: 1,
               })}
             </p>
@@ -464,7 +418,7 @@ export default function HistoryPage() {
               Unique Products
             </p>
             <p className="mt-2 text-2xl font-bold text-slate-900">
-              {summaryMetrics.uniqueProducts}
+              {stats.unique_products}
             </p>
             <p className="mt-1 text-xs text-slate-500">Different products</p>
           </div>
@@ -474,11 +428,11 @@ export default function HistoryPage() {
               Top Product
             </p>
             <p className="mt-2 text-lg font-semibold text-slate-900 line-clamp-1">
-              {summaryMetrics.topProducts[0]?.name || "—"}
+              {stats.top_products[0]?.name || "—"}
             </p>
             <p className="mt-1 text-xs text-slate-500">
-              {summaryMetrics.topProducts[0]
-                ? `${summaryMetrics.topProducts[0].total.toLocaleString()} units`
+              {stats.top_products[0]
+                ? `${stats.top_products[0].total.toLocaleString()} units`
                 : "No data"}
             </p>
           </div>
@@ -620,8 +574,11 @@ export default function HistoryPage() {
       {filteredRecords.length === 0 ? (
         <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <p className="text-sm text-slate-600">
-            No sales records found for the selected filters. Try adjusting your
-            search or date range.
+            {salesRecords.length === 0 && dateRange === "all"
+              ? "No sales records found. Upload sales data to see history here."
+              : salesRecords.length === 0
+              ? "No sales records found for this date range. Try selecting \"All time\" above."
+              : "No records match your search. Try adjusting the product filter."}
           </p>
         </div>
       ) : (

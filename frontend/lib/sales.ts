@@ -12,13 +12,14 @@ export async function fetchSalesRecords(
   bakeryId?: number,
   startDate?: string,
   endDate?: string,
+  limit = 5000,
 ): Promise<SalesRecord[]> {
   const params = new URLSearchParams();
   if (bakeryId) params.set("bakery_id", String(bakeryId));
   if (startDate) params.set("start_date", startDate);
   if (endDate) params.set("end_date", endDate);
-  const qs = params.toString();
-  return apiFetch<SalesRecord[]>(qs ? `/api/sales/?${qs}` : "/api/sales/");
+  params.set("limit", String(limit));
+  return apiFetch<SalesRecord[]>(`/api/sales/?${params.toString()}`);
 }
 
 

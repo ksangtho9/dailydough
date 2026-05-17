@@ -413,21 +413,39 @@ def get_dashboard_summary(
         .all()
     )
 
+    # Determine the latest training date across all products in this bakery.
+    # We only flag high-risk / report accuracy once new sales data exists after
+    # training — otherwise the MAPE from the training fit would show up
+    # immediately even with no post-training observations.
+    latest_trained_at = max(
+        (m.last_trained_at for m in metrics_rows if m.last_trained_at is not None),
+        default=None,
+    )
+    latest_training_date = latest_trained_at.date() if latest_trained_at else None
+
+    has_post_training_data = False
+    if latest_training_date is not None:
+        post_count = (
+            db.query(func.count(SalesRecord.id))
+            .filter(
+                SalesRecord.bakery_id == bakery_id,
+                SalesRecord.date > latest_training_date,
+            )
+            .scalar()
+            or 0
+        )
+        has_post_training_data = post_count > 0
+
     post_training_mape_values = []
     high_risk_count = 0
 
-    # OPTIMIZATION: Use MAPE directly from ForecastMetrics instead of recalculating
-    # Recalculating would call get_forecast_for_product for each product, which is
-    # extremely slow and causes connection pool exhaustion.
-    for metrics_row in metrics_rows:
-        # Use the MAPE from ForecastMetrics directly (already in percentage form)
-        mape_value = metrics_row.mape
-        
-        if mape_value is not None:
-            post_training_mape_values.append(mape_value)
-            # High risk: MAPE > 25%
-            if mape_value > 25.0:
-                high_risk_count += 1
+    if has_post_training_data:
+        for metrics_row in metrics_rows:
+            mape_value = metrics_row.mape
+            if mape_value is not None:
+                post_training_mape_values.append(mape_value)
+                if mape_value > 25.0:
+                    high_risk_count += 1
 
     # Calculate average post-training MAPE (already in percentage form)
     forecast_accuracy_pct = (
