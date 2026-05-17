@@ -5,7 +5,7 @@ import uuid
 from datetime import date, timedelta
 from typing import List
 
-from fastapi import APIRouter, Depends, HTTPException, Query
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from sqlalchemy import exc as sa_exc
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,7 @@ from app.services.daily_forecast_service import upsert_product_daily_forecasts
 from app.services.risk_calculator import calculate_risk_metrics
 from app.core.config import settings
 from app.schemas.bake_plan import BakePlanItem, BakePlanResponse
+from app.core.rate_limiter import limiter
 
 logger = logging.getLogger("bakezy.bake_plan")
 
@@ -26,7 +27,9 @@ router = APIRouter(tags=["bake-plan"])
     "/bakeries/{bakery_id}/bake-plan",
     response_model=BakePlanResponse,
 )
+@limiter.limit("30/minute")
 def get_bake_plan(
+    request: Request,
     bakery_id: int,
     target_date: date | None = Query(
         default=None,

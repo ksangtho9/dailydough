@@ -6,7 +6,7 @@ import logging
 
 import numpy as np
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, Request
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
@@ -16,6 +16,7 @@ from app.ml.metrics import calculate_wape
 from app.models import Bakery, Product, ForecastMetrics, SalesRecord, DailyForecast
 from app.schemas.dashboard_summary import DashboardSummaryResponse
 from app.core.config import settings
+from app.core.rate_limiter import limiter
 
 logger = logging.getLogger(__name__)
 
@@ -284,9 +285,11 @@ def calculate_post_training_accuracy(
     "/bakeries/{bakery_id}/dashboard-summary",
     response_model=DashboardSummaryResponse,
 )
+@limiter.limit("60/minute")
 def get_dashboard_summary(
+    request: Request,
     bakery_id: int,
-    as_of_date: Optional[date] = None,  # Optional date for dev mode / testing
+    as_of_date: Optional[date] = None,
     db: Session = Depends(get_db),
 ):
     bakery = db.query(Bakery).filter(Bakery.id == bakery_id).one_or_none()

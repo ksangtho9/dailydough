@@ -3,7 +3,7 @@ from typing import List, Optional
 import logging
 
 from datetime import date
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from pydantic import BaseModel
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -14,6 +14,7 @@ from app.user_schemas import SalesRecordOut
 from app.api.auth import get_current_user
 from app.schemas import sales_record
 from app.core.config import settings
+from app.core.rate_limiter import limiter
 
 logger = logging.getLogger("bakezy.api.sales")
 
@@ -40,7 +41,9 @@ class SalesStats(BaseModel):
 
 
 @router.get("/stats", response_model=SalesStats)
+@limiter.limit("60/minute")
 def get_sales_stats(
+    request: Request,
     bakery_id: int,
     start_date: date | None = Query(None),
     db: Session = Depends(get_db),
@@ -73,7 +76,9 @@ def get_sales_stats(
 
 
 @router.get("/", response_model=List[SalesRecordOut])
+@limiter.limit("60/minute")
 def list_sales(
+    request: Request,
     bakery_id: int | None = None,
     product_id: int | None = None,
     start_date: date | None = Query(None),

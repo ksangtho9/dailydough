@@ -3,10 +3,11 @@ from __future__ import annotations
 from typing import Optional
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from sqlalchemy.orm import Session
 
 from app.api.auth import get_current_user
+from app.core.rate_limiter import limiter
 from app.database.database import get_db
 
 logger = logging.getLogger("bakezy.api.forecast_training")
@@ -26,7 +27,9 @@ router = APIRouter(tags=["forecast-training"])
     response_model=ProductTrainingResult,
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("5/minute")
 def train_single_product_endpoint(
+    request: Request,
     product_id: int,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
@@ -58,7 +61,9 @@ def train_single_product_endpoint(
     response_model=TrainAllProductsResult,
     status_code=status.HTTP_200_OK,
 )
+@limiter.limit("2/minute")
 def train_all_products_endpoint(
+    request: Request,
     current_user=Depends(get_current_user),
     db: Session = Depends(get_db),
 ):

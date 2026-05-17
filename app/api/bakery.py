@@ -2,7 +2,7 @@ from __future__ import annotations
 from typing import Optional
 from datetime import date
 import logging
-from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, Form, HTTPException, Query, Request, UploadFile, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 
@@ -16,6 +16,7 @@ from app.services.sales_ingestion import (
     ingest_sales_csv,
 )
 from app.ml.training.train_all_products import train_all_products
+from app.core.rate_limiter import limiter
 
 logger = logging.getLogger("bakezy.api.bakery")
 
@@ -99,7 +100,9 @@ def delete_bakery(
 
 
 @router.post("/{bakery_id}/sales/upload", status_code=status.HTTP_201_CREATED)
+@limiter.limit("5/minute")
 async def upload_sales_for_bakery(
+    request: Request,
     bakery_id: int,
     file: UploadFile = File(...),
     column_mapping: Optional[str] = Form(None),
