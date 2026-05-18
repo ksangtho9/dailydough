@@ -7,9 +7,10 @@ import { LandingNav } from "@/components/landing/LandingNav";
 export function ConditionalNav() {
   const pathname = usePathname();
   const isLoginPage = pathname === "/login";
+  const isSignupPage = pathname === "/signup" || pathname.startsWith("/auth/");
   const isHomePage = pathname === "/";
 
-  if (isLoginPage) {
+  if (isLoginPage || isSignupPage) {
     return null;
   }
 

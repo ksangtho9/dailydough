@@ -1,12 +1,14 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { supabase } from "@/lib/supabase";
 import { GlowingEffect } from "@/components/ui/glowing-effect";
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [loading, setLoading] = useState(false);
@@ -20,7 +22,10 @@ export default function LoginPage() {
       setInfo("Your session expired. Please sign in again.");
       window.localStorage.removeItem("session_expired");
     }
-  }, []);
+    if (searchParams.get("error") === "confirmation_failed") {
+      setError("Email confirmation failed. Please try signing up again.");
+    }
+  }, [searchParams]);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -113,6 +118,13 @@ export default function LoginPage() {
               {loading ? "Signing in..." : "Sign in"}
             </button>
           </form>
+
+          <p className="mt-4 text-center text-xs text-slate-400">
+            Don&apos;t have an account?{" "}
+            <Link href="/signup" className="text-amber-400 hover:text-amber-300">
+              Sign up →
+            </Link>
+          </p>
         </div>
       </div>
     </div>

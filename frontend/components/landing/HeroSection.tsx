@@ -39,7 +39,7 @@ export function HeroSection() {
           
           <div className="flex flex-col items-center justify-center gap-4 sm:flex-row">
             <Link
-              href="/login"
+              href="/signup"
               className="group inline-flex items-center gap-2 rounded-full bg-amber-600 px-8 py-4 text-base font-semibold text-white shadow-lg hover:bg-amber-700 transition-all hover:shadow-xl"
             >
               Get Started
